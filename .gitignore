@@ -2,7 +2,22 @@
 /.cache/
 composer.lock
 .phpunit.result.cache
-.claude/
+
+# Agent tooling and local-only documents
+/.agents/
+/.claude/
+/.gsd/
+/.junie/
+/.mcp.json
+/.bg-shell/
 /docs/
 /AGENTS.md
 /CLAUDE.md
+/skills-lock.json
+
+# Editors and OS
+/.idea/
+/.vscode/
+.DS_Store
+Thumbs.db
+*.swp
