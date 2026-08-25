@@ -1,0 +1,11 @@
+parameters:
+    level: max
+    paths:
+        - src
+        - config
+        - database
+        - tests/Fixtures
+    configDirectories:
+        - %currentWorkingDirectory%/config
+    checkOctaneCompatibility: true
+    checkModelProperties: true

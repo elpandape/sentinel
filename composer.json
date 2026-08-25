@@ -1,0 +1,77 @@
+{
+    "name": "elpandape/sentinel",
+    "description": "Ledger-first audit & integrity engine for Laravel — full snapshots, structured diffs, relationship auditing, execution context and a tamper-evident hash chain.",
+    "keywords": [
+        "laravel",
+        "audit",
+        "auditing",
+        "audit-trail",
+        "ledger",
+        "accountability",
+        "integrity",
+        "compliance",
+        "traceability",
+        "sentinel"
+    ],
+    "license": "MIT",
+    "homepage": "https://github.com/elpandape/sentinel",
+    "support": {
+        "issues": "https://github.com/elpandape/sentinel/issues",
+        "source": "https://github.com/elpandape/sentinel"
+    },
+    "authors": [
+        {
+            "name": "Carlos Mayorga",
+            "email": "cmayorgahilario@elpanda.pe",
+            "homepage": "https://carlosmayorga.me/",
+            "role": "Author and maintainer"
+        }
+    ],
+    "require": {
+        "php": "^8.4",
+        "illuminate/contracts": "^13.0",
+        "illuminate/database": "^13.0",
+        "illuminate/support": "^13.0"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.9",
+        "laravel/pint": "^1.14",
+        "orchestra/testbench": "^11.0",
+        "pestphp/pest": "^5.0",
+        "pestphp/pest-plugin-phpstan": "^5.0",
+        "pestphp/pest-plugin-rector": "^5.0",
+        "pestphp/pest-plugin-type-coverage": "^5.0",
+        "phpstan/extension-installer": "^1.4",
+        "rector/rector": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "ElPandaPe\\Sentinel\\": "src/",
+            "ElPandaPe\\Sentinel\\Database\\Factories\\": "database/factories/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "ElPandaPe\\Sentinel\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "ElPandaPe\\Sentinel\\SentinelServiceProvider"
+            ],
+            "aliases": {
+                "Sentinel": "ElPandaPe\\Sentinel\\Facades\\Sentinel"
+            }
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "phpstan/extension-installer": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

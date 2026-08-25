@@ -1,0 +1,33 @@
+name: mutation-nightly
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: dom, curl, libxml, mbstring, zip, pdo, sqlite3
+          coverage: pcov
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction
+
+      - name: Mutation testing
+        # Mirrors `make mutation`: pest does not accumulate repeated --path flags.
+        run: |
+          for path in src/Support src/Context; do
+            echo "== $path"
+            php -d pcov.directory=$GITHUB_WORKSPACE -d 'pcov.exclude=~/(vendor|tests)/~' -d memory_limit=2G \
+              vendor/bin/pest --mutate --covered-only --path=$path
+          done
