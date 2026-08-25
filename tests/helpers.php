@@ -28,11 +28,11 @@ function sentinelConfig(array $overrides = []): Config
 /**
  * @return list<string>
  */
-function phpFilesOffending(string $pattern): array
+function phpFilesOffending(string $pattern, ?string $directory = null): array
 {
     $offenders = [];
 
-    foreach (phpFiles() as $file) {
+    foreach (phpFiles($directory) as $file) {
         $contents = file_get_contents($file);
 
         if ($contents !== false && preg_match($pattern, $contents) === 1) {
@@ -46,11 +46,13 @@ function phpFilesOffending(string $pattern): array
 /**
  * @return list<string>
  */
-function phpFiles(): array
+function phpFiles(?string $directory = null): array
 {
     $files = [];
 
-    foreach ([dirname(__DIR__).'/src', __DIR__] as $directory) {
+    $directories = $directory === null ? [dirname(__DIR__).'/src', __DIR__] : [$directory];
+
+    foreach ($directories as $directory) {
         /** @var SplFileInfo $file */
         foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory)) as $file) {
             if ($file->isFile() && $file->getExtension() === 'php') {

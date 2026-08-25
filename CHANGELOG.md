@@ -19,3 +19,5 @@ All notable changes to `elpandape/sentinel` are documented here.
   and `withContext()`.
 - Enums `AuditEvent`, `Severity`, `Source` and `Mode`.
 - English and Spanish translation namespaces wired and publishable.
+- Architecture tests enforcing strict types, final classes, no mutable static state, no leftover
+  debugging calls, and the project's comment conventions.

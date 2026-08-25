@@ -20,6 +20,18 @@ arch('exceptions live in the Exceptions namespace')
     ->expect('ElPandaPe\Sentinel\Exceptions')
     ->toImplement(Throwable::class);
 
+arch('classes are final')
+    ->expect('ElPandaPe\Sentinel')
+    ->classes()
+    ->toBeFinal();
+
+it('holds no mutable static state in the source', function (): void {
+    expect(phpFilesOffending(
+        '#^[ \t]*(?:public |protected |private )?static (?!function|fn\b|::)#m',
+        dirname(__DIR__).'/src',
+    ))->toBeEmpty();
+});
+
 it('leaves no doc block stranded above another', function (): void {
     expect(phpFilesOffending('#\*/\s*\n\s*/\*\*#'))->toBeEmpty();
 });
