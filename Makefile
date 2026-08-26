@@ -46,7 +46,7 @@ shell: ## Shell inside the container
 	$(PHP) sh
 
 # pest --mutate does not accumulate repeated --path flags: one pass per path.
-MUTATION_PATHS = src/Support src/Context
+MUTATION_PATHS = src/Support src/Context src/Integrity src/Ledger src/Models src/SentinelServiceProvider.php
 
 mutation: ## Mutation testing over the core, one pass per path
 	@for path in $(MUTATION_PATHS); do \

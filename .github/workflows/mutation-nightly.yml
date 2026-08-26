@@ -25,9 +25,13 @@ jobs:
 
       - name: Mutation testing
         # Mirrors `make mutation`: pest does not accumulate repeated --path flags.
+        # Integrity sits higher than the rest: a mutant surviving there is a verification that lies.
         run: |
-          for path in src/Support src/Context; do
-            echo "== $path"
+          set -- "src/Integrity:95" "src/Ledger:90" "src/Support:0" "src/Context:0" "src/Models:0" "src/SentinelServiceProvider.php:0"
+          for entry in "$@"; do
+            path="${entry%%:*}"
+            min="${entry##*:}"
+            echo "== $path (min $min)"
             php -d pcov.directory=$GITHUB_WORKSPACE -d 'pcov.exclude=~/(vendor|tests)/~' -d memory_limit=2G \
-              vendor/bin/pest --mutate --covered-only --path=$path
+              vendor/bin/pest --mutate --covered-only --path=$path --min=$min
           done
