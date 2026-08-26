@@ -6,6 +6,7 @@ namespace ElPandaPe\Sentinel;
 
 use ElPandaPe\Sentinel\Context\ExecutionContext;
 use ElPandaPe\Sentinel\Support\Config;
+use ElPandaPe\Sentinel\Support\PublishedMigration;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
@@ -29,6 +30,10 @@ final class SentinelServiceProvider extends ServiceProvider
     {
         $this->loadTranslationsFrom(__DIR__.'/../resources/lang', 'sentinel');
 
+        if (! $this->publishedMigration()->exists()) {
+            $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        }
+
         if ($this->app->runningInConsole()) {
             $this->publishes([
                 __DIR__.'/../config/sentinel.php' => $this->app->configPath('sentinel.php'),
@@ -37,6 +42,18 @@ final class SentinelServiceProvider extends ServiceProvider
             $this->publishes([
                 __DIR__.'/../resources/lang' => $this->app->langPath('vendor/sentinel'),
             ], 'sentinel-lang');
+
+            $this->publishesMigrations([
+                __DIR__.'/../database/migrations' => $this->app->databasePath('migrations'),
+            ], 'sentinel-migrations');
         }
+    }
+
+    private function publishedMigration(): PublishedMigration
+    {
+        return new PublishedMigration(
+            $this->app->databasePath('migrations'),
+            'create_sentinel_audits_table',
+        );
     }
 }

@@ -8,6 +8,7 @@ use ElPandaPe\Sentinel\Sentinel;
 use ElPandaPe\Sentinel\SentinelServiceProvider;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Contracts\Translation\Loader;
+use Illuminate\Database\Migrations\Migrator;
 use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\ServiceProvider;
 
@@ -45,10 +46,20 @@ it('registers the translation namespace in both languages', function (): void {
         ->and($loader->namespaces()['sentinel'].'/es')->toBeDirectory();
 });
 
-it('publishes the configuration and the translations', function (): void {
-    expect(ServiceProvider::publishableGroups())->toContain('sentinel-config', 'sentinel-lang')
+it('publishes the configuration, the translations and the migration', function (): void {
+    expect(ServiceProvider::publishableGroups())->toContain('sentinel-config', 'sentinel-lang', 'sentinel-migrations')
         ->and(ServiceProvider::pathsToPublish(SentinelServiceProvider::class, 'sentinel-config'))->not->toBeEmpty()
-        ->and(ServiceProvider::pathsToPublish(SentinelServiceProvider::class, 'sentinel-lang'))->not->toBeEmpty();
+        ->and(ServiceProvider::pathsToPublish(SentinelServiceProvider::class, 'sentinel-lang'))->not->toBeEmpty()
+        ->and(ServiceProvider::pathsToPublish(SentinelServiceProvider::class, 'sentinel-migrations'))->not->toBeEmpty();
+});
+
+it('loads the package migration when the application published none', function (): void {
+    /** @var Migrator $migrator */
+    $migrator = app('migrator');
+
+    $paths = array_map(static fn (string $path): string => (string) realpath($path), $migrator->paths());
+
+    expect($paths)->toContain(dirname(__DIR__, 2).'/database/migrations');
 });
 
 it('records by default and stops when paused', function (): void {

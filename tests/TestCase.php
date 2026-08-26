@@ -16,4 +16,9 @@ abstract class TestCase extends Orchestra
     {
         return [SentinelServiceProvider::class];
     }
+
+    protected function defineDatabaseMigrations(): void
+    {
+        $this->artisan('migrate:fresh')->run();
+    }
 }

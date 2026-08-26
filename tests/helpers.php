@@ -6,6 +6,8 @@ namespace ElPandaPe\Sentinel\Tests;
 
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use SplFileInfo;
@@ -62,4 +64,44 @@ function phpFiles(?string $directory = null): array
     }
 
     return $files;
+}
+
+function auditsTable(): string
+{
+    /** @var Config $config */
+    $config = app(Config::class);
+
+    return $config->table('audits');
+}
+
+/**
+ * @param  array<string, mixed>  $overrides
+ * @return array<string, mixed>
+ */
+function auditRow(array $overrides = []): array
+{
+    return [
+        'id' => Str::ulid()->toString(),
+        'stream' => 'global',
+        'sequence' => 1,
+        'audit_type' => 'model',
+        'event' => 'created',
+        'severity' => 'info',
+        'source' => 'system',
+        'context' => '[]',
+        'payload_version' => 1,
+        'algorithm' => 'sha256',
+        'hash' => str_repeat('a', 64),
+        'occurred_at' => '2026-08-26 10:00:00.000000',
+        'created_at' => '2026-08-26 10:00:00.000000',
+        ...$overrides,
+    ];
+}
+
+/**
+ * @param  array<string, mixed>  $overrides
+ */
+function insertAudit(array $overrides = []): void
+{
+    DB::table(auditsTable())->insert(auditRow($overrides));
 }
