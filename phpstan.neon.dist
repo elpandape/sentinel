@@ -5,6 +5,9 @@ parameters:
         - config
         - database
         - tests/Fixtures
+        - tests/Testing
+    scanFiles:
+        - tests/helpers.php
     configDirectories:
         - %currentWorkingDirectory%/config
     checkOctaneCompatibility: true
