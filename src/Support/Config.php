@@ -93,6 +93,15 @@ final readonly class Config
         return $this->boolean('integrity.enabled');
     }
 
+    public function integrityAlgorithm(): string
+    {
+        $algorithm = $this->string('integrity.algorithm');
+
+        return in_array($algorithm, hash_algos(), true)
+            ? $algorithm
+            : throw ConfigurationException::unknown('integrity.algorithm', $algorithm, implode(', ', hash_algos()));
+    }
+
     public function complianceEnabled(): bool
     {
         return $this->boolean('compliance');

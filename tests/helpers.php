@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Tests;
 
+use ElPandaPe\Sentinel\Integrity\Hasher;
+use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Schema\Blueprint;
@@ -138,4 +140,9 @@ function withSortedKeys(array $value): array
     }
 
     return $value;
+}
+
+function hasher(): Hasher
+{
+    return new Hasher(new JsonCanonicalizer);
 }

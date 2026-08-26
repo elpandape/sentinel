@@ -108,3 +108,12 @@ it('rejects a model override whose class does not exist', function (): void {
 it('rejects a model override that does not extend the default', function (): void {
     sentinelConfig(['models.audit' => Config::class])->model('audit', Model::class);
 })->throws(ConfigurationException::class, 'or a subclass of it');
+
+it('reads the configured hash algorithm', function (): void {
+    expect(sentinelConfig()->integrityAlgorithm())->toBe('sha256');
+});
+
+it('rejects a hash algorithm the runtime does not provide', function (): void {
+    expect(fn (): string => sentinelConfig(['integrity.algorithm' => 'nonesuch'])->integrityAlgorithm())
+        ->toThrow(ConfigurationException::class, 'nonesuch');
+});
