@@ -2,6 +2,45 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## [0.3.0] - 2026-08-26
+
+### Added
+
+- `Ledger\DatabaseLedger`: writes an entry into its stream inside one transaction, assigning
+  `sequence` and `version` at write time and never in the capture. Serializes writers per engine (an
+  advisory lock on PostgreSQL, a row lock on MySQL and SQLite) and retries a bounded number of times
+  against `unique(stream, sequence)`, the final arbiter when a stream starts out empty.
+- `Ledger\NullLedger`: computes the exact same chain without touching storage, driven by the same
+  contract suite as `DatabaseLedger`, so the two drivers cannot drift apart.
+- `Integrity\JsonCanonicalizer`: RFC 8785 canonical JSON — members ordered by UTF-16 code unit and
+  numbers written the way ECMAScript does, so a hash depends only on a payload's content, never on a
+  `php.ini` directive.
+- `Integrity\CanonicalPayload`: the twenty-seven columns of `payload_version = 1`, frozen in one
+  constant.
+- `Integrity\Hasher`: the chain link — a prefix of `payload_version`, `stream`, `sequence` and
+  `previous_hash` hashed together with the canonical payload, always computed from the model so
+  writing and verifying walk the same code.
+- `Integrity\Stream`: names the chain an entry belongs to — `global`, `tenant:{id}`, `type:{alias}`,
+  a closure or a `Contracts\StreamResolver` — and refuses a name the `stream` column cannot hold
+  instead of truncating it.
+- `Integrity\Verifier` and `Integrity\VerificationResult`: verify one entry, a whole stream or a
+  bounded range, and report which of three breaks it found (`Enums\IntegrityBreak`): a row that no
+  longer reproduces its own hash, a link that no longer points at the entry before it, or a hole in
+  the sequence. A break is announced through `Events\IntegrityVerificationFailed`, never thrown.
+- `Sentinel::verifyIntegrity()` and `Models\Audit::verifyIntegrity()`, the two entry points into
+  verification.
+- Immutability guards on `Models\Audit`: `save()`, `update()`, `delete()` and `destroy()` all throw
+  `Exceptions\ImmutableAuditException` once an entry has been written.
+- `Ledger\DatabaseStream` and `Ledger\ArrayStream`: keyset paging over `(stream, sequence)` so a long
+  chain verifies without being loaded into memory, with a bounded `range()` on both.
+- First translated strings of the package, for the integrity verification event, in English and
+  Spanish.
+
+### Changed
+
+- `Contracts\LedgerStream` gains `range(int $from, ?int $to = null): static` — a breaking change
+  within the 0.x cycle, needed for verification to bound a walk instead of reading a whole chain.
+
 ## v0.2.0 — Schema, `Audit` and contracts (2026-08-26)
 
 ### Added

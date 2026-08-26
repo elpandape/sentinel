@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.2.0-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.3.0-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -20,7 +20,7 @@ the state was before, what it is now — and whether the record itself can be pr
 
 ```json
 "repositories": [{ "type": "vcs", "url": "https://github.com/elpandape/sentinel" }],
-"require": { "elpandape/sentinel": "v0.2.0" }
+"require": { "elpandape/sentinel": "v0.3.0" }
 ```
 
 ```bash
@@ -33,12 +33,13 @@ php artisan vendor:publish --tag=sentinel-config
 |---|---|
 | `v0.1.0` | Configuration, execution context, facade, enums, quality toolchain |
 | `v0.2.0` | `sentinel_audits` schema, `Audit` model, `AuditData`, package contracts, factory |
+| `v0.3.0` | `DatabaseLedger`, `NullLedger`, the hash chain, verification, immutability guards |
 
 Everything else is on the roadmap: model auditing, snapshots and diffs, relationship auditing,
-business transactions, custom events, state transitions, restore, the integrity chain, retention and
-compliance, performance modes, ledger drivers and distributed tracing.
+business transactions, custom events, state transitions, restore, advanced verification
+(checkpoints and signatures), retention and compliance, performance modes and distributed tracing.
 
-Nothing writes an audit yet — `v0.2.0` ships the shape, not the writer.
+`v0.3.0` is the version that starts writing: every entry a `Ledger` records is chained as it lands.
 
 ## Quick start
 
@@ -105,6 +106,85 @@ Replace the model with your own subclass:
     'audit' => App\Models\Audit::class,
 ],
 ```
+
+## Integrity chain
+
+Chaining is unconditional: every entry a `Ledger` writes links to the one before it in its stream,
+regardless of configuration. `integrity.enabled` does not govern this — it will govern only the
+advanced verification that ships later (checkpoints and signatures), which does not exist yet.
+
+Each entry's `hash` covers a prefix and the canonical payload:
+
+```
+hash = algorithm(payload_version + SEP + stream + SEP + sequence + SEP + (previous_hash ?? '') + SEP + canonical)
+```
+
+`SEP` is the ASCII unit separator (`\x1f`), so the parts of the prefix cannot concatenate into one
+another. `algorithm` is read from the row itself — `sha256` by default — never from the current
+configuration, so a row keeps verifying under the algorithm it was written with even if the
+configured default changes later. `canonical` is the RFC 8785 canonical JSON of the twenty-seven
+columns frozen in `Integrity\CanonicalPayload::COLUMNS`. Writing and verifying both call
+`Integrity\Hasher::hash()`, so they walk the exact same code.
+
+`stream` is part of that prefix, which is why a stream is never renamed in place: changing the
+stream strategy while a chain already holds data does not rewrite the old rows under the new name,
+it starts a second chain under it — the history ends up split across two independent chains instead
+of continuing as one.
+
+Verify a whole chain, or a bounded slice of it:
+
+```php
+use ElPandaPe\Sentinel\Facades\Sentinel;
+
+$result = Sentinel::verifyIntegrity('global', from: 1, to: 500);
+
+if (! $result->isIntact()) {
+    // $result->reason, $result->sequence and $result->auditId locate the break
+}
+```
+
+Or a single entry, from the model itself:
+
+```php
+use ElPandaPe\Sentinel\Models\Audit;
+
+$audit = Audit::query()->firstOrFail();
+
+$audit->verifyIntegrity(); // bool
+```
+
+A verification failure never throws. It dispatches `Events\IntegrityVerificationFailed` and reports
+through `Integrity\VerificationResult`, for one of three reasons (`Enums\IntegrityBreak`):
+
+| Reason | Means |
+|---|---|
+| `hash_mismatch` | The row no longer reproduces its own hash — its content changed. |
+| `link_mismatch` | Its `previous_hash` no longer matches the entry before it — the order changed. |
+| `sequence_gap` | A `sequence` is missing from the stream — an entry is gone. |
+
+An entry is immutable through every path the model exposes: `save()`, `update()`, `delete()` and
+`destroy()` all throw `Exceptions\ImmutableAuditException` once the row exists. That guard runs on
+Eloquent's model events, so it only sees a change that goes through the model — an `update()` issued
+through the query builder (`Audit::query()->where(...)->update([...])`) never fires those events and
+does not pass through it.
+
+## Ledger drivers
+
+`Contracts\Ledger` ships two drivers, chosen by `ledger.default`:
+
+```php
+// config/sentinel.php
+'ledger' => [
+    'default' => env('SENTINEL_LEDGER', 'database'), // 'database' or 'null'
+],
+```
+
+- `Ledger\DatabaseLedger` writes to `sentinel_audits`: it serializes the stream, reads its tail,
+  builds the link and inserts, retrying if a concurrent writer claims the same `(stream, sequence)`
+  first.
+- `Ledger\NullLedger` computes the exact same chain but keeps it only on the instance that runs it —
+  nothing reaches storage. It runs the same contract suite as `DatabaseLedger`, so the two drivers
+  cannot drift apart.
 
 > The `Ledger` contract is **unstable until `v0.8.0`**. It is declared now so every driver has one
 > shape to answer to, and it gets tensioned against a non-SQL backend before the freeze.
