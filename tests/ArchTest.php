@@ -21,4 +21,10 @@ arch('exceptions live in the Exceptions namespace')
 arch('classes are final')
     ->expect('ElPandaPe\Sentinel')
     ->classes()
-    ->toBeFinal();
+    ->toBeFinal()
+    ->ignoring('ElPandaPe\Sentinel\Models');
+
+arch('models stay open so the configuration can replace them')
+    ->expect('ElPandaPe\Sentinel\Models')
+    ->classes()
+    ->not->toBeFinal();

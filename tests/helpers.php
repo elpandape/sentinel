@@ -6,7 +6,9 @@ namespace ElPandaPe\Sentinel\Tests;
 
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -104,4 +106,36 @@ function auditRow(array $overrides = []): array
 function insertAudit(array $overrides = []): void
 {
     DB::table(auditsTable())->insert(auditRow($overrides));
+}
+
+function createFixtureTables(): void
+{
+    Schema::create('fixture_int_subjects', static function (Blueprint $table): void {
+        $table->id();
+    });
+
+    Schema::create('fixture_uuid_subjects', static function (Blueprint $table): void {
+        $table->uuid('id')->primary();
+    });
+
+    Schema::create('fixture_ulid_subjects', static function (Blueprint $table): void {
+        $table->ulid('id')->primary();
+    });
+}
+
+/**
+ * @param  array<array-key, mixed>  $value
+ * @return array<array-key, mixed>
+ */
+function withSortedKeys(array $value): array
+{
+    ksort($value);
+
+    foreach ($value as $key => $item) {
+        if (is_array($item)) {
+            $value[$key] = withSortedKeys($item);
+        }
+    }
+
+    return $value;
 }

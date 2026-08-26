@@ -20,5 +20,7 @@ abstract class TestCase extends Orchestra
     protected function defineDatabaseMigrations(): void
     {
         $this->artisan('migrate:fresh')->run();
+
+        createFixtureTables();
     }
 }
