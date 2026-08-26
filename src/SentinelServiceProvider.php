@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel;
 
 use ElPandaPe\Sentinel\Context\ExecutionContext;
+use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Support\PublishedMigration;
 use Illuminate\Contracts\Config\Repository;
@@ -20,6 +21,12 @@ final class SentinelServiceProvider extends ServiceProvider
         $this->app->singleton(Config::class, static fn (Application $app): Config => new Config(
             $app->make(Repository::class),
         ));
+
+        $this->app->bind(Audit::class, static function (Application $app): Audit {
+            $model = $app->make(Config::class)->model('audit', Audit::class);
+
+            return new $model;
+        });
 
         // Scoped: execution context and recording state belong to one request or job, not to the worker.
         $this->app->scoped(ExecutionContext::class);

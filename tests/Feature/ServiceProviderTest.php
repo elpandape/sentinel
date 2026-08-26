@@ -4,13 +4,19 @@ declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Context\ExecutionContext;
 use ElPandaPe\Sentinel\Facades\Sentinel as SentinelFacade;
+use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Sentinel;
 use ElPandaPe\Sentinel\SentinelServiceProvider;
 use ElPandaPe\Sentinel\Support\Config;
+use ElPandaPe\Sentinel\Tests\Fixtures\CustomAudit;
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Translation\Loader;
 use Illuminate\Database\Migrations\Migrator;
+use Illuminate\Foundation\Application;
+use Illuminate\Support\Facades\Facade;
 use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\ServiceProvider;
+use Orchestra\Testbench\Foundation\Application as TestbenchApplication;
 
 it('merges the package configuration', function (): void {
     expect(config('sentinel.tables.prefix'))->toBe('sentinel_')
@@ -60,6 +66,52 @@ it('loads the package migration when the application published none', function (
     $paths = array_map(static fn (string $path): string => (string) realpath($path), $migrator->paths());
 
     expect($paths)->toContain(dirname(__DIR__, 2).'/database/migrations');
+});
+
+it('resolves the package audit model when nothing overrides it', function (): void {
+    expect(app(Audit::class))->toBeInstanceOf(Audit::class)
+        ->and(app(Audit::class))->not->toBeInstanceOf(CustomAudit::class);
+});
+
+it('resolves the audit model the configuration names', function (): void {
+    config()->set('sentinel.models.audit', CustomAudit::class);
+
+    expect(app(Audit::class))->toBeInstanceOf(CustomAudit::class);
+});
+
+it('skips the package migration when the application published a copy', function (): void {
+    $directory = sys_get_temp_dir().'/sentinel-'.uniqid();
+    mkdir($directory.'/migrations', recursive: true);
+    touch($directory.'/migrations/2030_01_01_000000_create_sentinel_audits_table.php');
+
+    $host = app();
+
+    $isolated = TestbenchApplication::create(
+        resolvingCallback: static fn (Application $app): mixed => $app->useDatabasePath($directory),
+    );
+
+    new SentinelServiceProvider($isolated)->boot();
+
+    $paths = array_map(
+        static fn (string $path): string => (string) realpath($path),
+        $isolated->make('migrator')->paths(),
+    );
+
+    $isolated->flush();
+    Facade::clearResolvedInstances();
+    Facade::setFacadeApplication($host);
+    Container::setInstance($host);
+
+    unlink($directory.'/migrations/2030_01_01_000000_create_sentinel_audits_table.php');
+    rmdir($directory.'/migrations');
+    rmdir($directory);
+
+    expect($paths)->not->toContain(dirname(__DIR__, 2).'/database/migrations');
+});
+
+it('ships the migration under the name the guard looks for', function (): void {
+    expect(glob(dirname(__DIR__, 2).'/database/migrations/*_create_sentinel_audits_table.php'))
+        ->toHaveCount(1);
 });
 
 it('records by default and stops when paused', function (): void {
