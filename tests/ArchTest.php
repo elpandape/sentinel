@@ -18,6 +18,10 @@ arch('exceptions live in the Exceptions namespace')
     ->expect('ElPandaPe\Sentinel\Exceptions')
     ->toImplement(Throwable::class);
 
+arch('contracts are interfaces and live in their namespace')
+    ->expect('ElPandaPe\Sentinel\Contracts')
+    ->toBeInterfaces();
+
 arch('classes are final')
     ->expect('ElPandaPe\Sentinel')
     ->classes()
