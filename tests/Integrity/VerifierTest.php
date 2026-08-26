@@ -70,7 +70,11 @@ it('catches an entry that claims to open a chain it does not open', function ():
     $audit = Audit::query()->where('sequence', 1)->firstOrFail();
     DB::table(auditsTable())->where('sequence', 1)->update(['hash' => hasher()->hash($audit)]);
 
-    expect(verifier()->verifyStream('global')->reason)->toBe(IntegrityBreak::LinkMismatch);
+    $result = verifier()->verifyStream('global');
+
+    expect($result->reason)->toBe(IntegrityBreak::LinkMismatch)
+        ->and($result->sequence)->toBe(1)
+        ->and($result->checked)->toBe(0);
 });
 
 it('catches a hole in the sequence', function (): void {

@@ -68,6 +68,10 @@ it('lets the entry carry its own stream', function (): void {
     expect(stream()->resolve(auditData(['stream' => 'explicit'])))->toBe('explicit');
 });
 
+it('accepts a name that fills the column to the last character', function (): void {
+    expect(stream()->resolve(auditData(['stream' => str_repeat('a', 64)])))->toBe(str_repeat('a', 64));
+});
+
 it('never truncates a name that does not fit the column', function (): void {
     expect(fn (): string => stream()->resolve(auditData(['stream' => str_repeat('a', 65)])))
         ->toThrow(ConfigurationException::class, '64');

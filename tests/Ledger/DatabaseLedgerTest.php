@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Exceptions\LedgerException;
 use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
 use ElPandaPe\Sentinel\Models\Audit;
@@ -76,7 +78,13 @@ it('counts a version per subject and leaves it null without one', function (): v
 });
 
 it('carries every field of the capture into the entry', function (): void {
-    $audit = $this->ledger->write(auditData([
+    $capture = [
+        'subject_type' => 'user',
+        'subject_id' => '7',
+        'actor_type' => 'admin',
+        'actor_id' => '1',
+        'impersonator_type' => 'support',
+        'impersonator_id' => '2',
         'tenant_id' => 'acme',
         'transaction_id' => '01JTRANSACTION000000000001',
         'request_id' => 'req-1',
@@ -87,26 +95,48 @@ it('carries every field of the capture into the entry', function (): void {
         'after' => ['name' => 'new'],
         'changes' => ['name' => ['old', 'new']],
         'metadata' => ['a' => 1],
+        'encryption' => ['fields' => ['name'], 'key_id' => 'default'],
         'criteria' => ['id' => 1],
         'affected_rows' => 7,
         'source_audit_id' => '01JSOURCE00000000000000001',
         'capture_id' => '01JCAPTURE0000000000000001',
-    ]));
+    ];
+
+    $audit = $this->ledger->write(auditData($capture));
 
     $stored = Audit::query()->firstOrFail();
 
-    expect($stored->tenant_id)->toBe('acme')
-        ->and($stored->context)->toBe(['ip' => '127.0.0.1'])
-        ->and($stored->before)->toBe(['name' => 'old'])
-        ->and($stored->after)->toBe(['name' => 'new'])
-        ->and($stored->changes)->toBe(['name' => ['old', 'new']])
-        ->and($stored->metadata)->toBe(['a' => 1])
-        ->and($stored->criteria)->toBe(['id' => 1])
-        ->and($stored->affected_rows)->toBe(7)
-        ->and($stored->capture_id)->toBe('01JCAPTURE0000000000000001')
+    foreach ($capture as $column => $value) {
+        expect($stored->getAttribute($column))->toBe($value);
+    }
+
+    expect($stored->audit_type)->toBe('model')
+        ->and($stored->event)->toBe('created')
+        ->and($stored->severity)->toBe(Severity::Info)
+        ->and($stored->source)->toBe(Source::System)
         ->and($stored->created_at)->not->toBeNull()
         ->and($stored->occurred_at->format('Y-m-d H:i:s.u'))->toBe('2026-08-26 10:00:00.000000')
         ->and($audit->id)->toBe($stored->id);
+});
+
+it('hashes what it carried, so a field the builder dropped would not verify', function (): void {
+    $audit = $this->ledger->write(auditData([
+        'actor_type' => 'admin',
+        'actor_id' => '1',
+        'impersonator_type' => 'support',
+        'impersonator_id' => '2',
+        'transaction_id' => '01JTRANSACTION000000000001',
+        'request_id' => 'req-1',
+        'trace_id' => 'trace-1',
+        'span_id' => 'span-1',
+        'encryption' => ['fields' => ['name']],
+        'source_audit_id' => '01JSOURCE00000000000000001',
+    ]));
+
+    $stripped = Audit::query()->firstOrFail();
+    $stripped->trace_id = null;
+
+    expect(hasher()->hash($stripped))->not->toBe($audit->hash);
 });
 
 it('stamps when it was written apart from when it happened', function (): void {
