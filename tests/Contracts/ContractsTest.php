@@ -8,6 +8,7 @@ use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Contracts\LedgerStream;
 use ElPandaPe\Sentinel\Contracts\Resolver;
 use ElPandaPe\Sentinel\Contracts\Signer;
+use ElPandaPe\Sentinel\Contracts\StreamResolver;
 use ElPandaPe\Sentinel\Contracts\Transformer;
 use ElPandaPe\Sentinel\Tests\Fixtures\AuditableSubject;
 
@@ -18,9 +19,13 @@ it('declares the ledger surface the rest of the roadmap programs against', funct
         ->toEqualCanonicalizing(['write', 'writeMany', 'find', 'query', 'stream']);
 });
 
-it('declares a stream that can be walked in order', function (): void {
-    expect(get_class_methods(LedgerStream::class))->toContain('name', 'getIterator')
+it('declares a stream that can be walked in order and bounded by range', function (): void {
+    expect(get_class_methods(LedgerStream::class))->toContain('name', 'range', 'getIterator')
         ->and(is_subclass_of(LedgerStream::class, Traversable::class))->toBeTrue();
+});
+
+it('declares a stream resolver that names the chain an entry belongs to', function (): void {
+    expect(get_class_methods(StreamResolver::class))->toBe(['resolve']);
 });
 
 it('declares the field policies an auditable model answers for', function (): void {

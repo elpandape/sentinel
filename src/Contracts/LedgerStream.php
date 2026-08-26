@@ -15,6 +15,8 @@ interface LedgerStream extends IteratorAggregate
 {
     public function name(): string;
 
+    public function range(int $from, ?int $to = null): static;
+
     /**
      * @return Traversable<int, Audit>
      */
