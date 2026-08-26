@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel;
 
 use ElPandaPe\Sentinel\Context\ExecutionContext;
+use ElPandaPe\Sentinel\Contracts\Canonicalizer;
+use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Support\PublishedMigration;
@@ -21,6 +23,8 @@ final class SentinelServiceProvider extends ServiceProvider
         $this->app->singleton(Config::class, static fn (Application $app): Config => new Config(
             $app->make(Repository::class),
         ));
+
+        $this->app->singleton(Canonicalizer::class, JsonCanonicalizer::class);
 
         $this->app->bind(Audit::class, static function (Application $app): Audit {
             $model = $app->make(Config::class)->model('audit', Audit::class);
