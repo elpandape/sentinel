@@ -93,6 +93,10 @@ php artisan migrate
 Publishing is optional: the package loads its own migration unless it finds a published copy, so the
 migration never runs twice.
 
+`--tag=sentinel-factories` publishes `AuditFactory` as a **reference copy**: it keeps the package
+namespace, so your application autoloads the packaged one either way. The supported way to change
+what the factory builds is `models.audit`, below.
+
 Replace the model with your own subclass:
 
 ```php
