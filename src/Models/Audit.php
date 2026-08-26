@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Models;
 
 use Carbon\CarbonImmutable;
+use ElPandaPe\Sentinel\Database\Factories\AuditFactory;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Database\Eloquent\Attributes\CollectedBy;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
@@ -62,6 +64,9 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 #[CollectedBy(AuditCollection::class)]
 class Audit extends Model
 {
+    /** @use HasFactory<AuditFactory> */
+    use HasFactory;
+
     use HasUlids;
 
     public const UPDATED_AT = null;
@@ -137,6 +142,11 @@ class Audit extends Model
             'occurred_at' => 'immutable_datetime',
             'created_at' => 'immutable_datetime',
         ];
+    }
+
+    protected static function newFactory(): AuditFactory
+    {
+        return AuditFactory::new();
     }
 
     private function config(): Config

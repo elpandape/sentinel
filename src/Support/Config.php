@@ -35,8 +35,10 @@ final readonly class Config
     }
 
     /**
-     * @param  class-string  $default
-     * @return class-string
+     * @template TModel of object
+     *
+     * @param  class-string<TModel>  $default
+     * @return class-string<TModel>
      */
     public function model(string $name, string $default): string
     {
