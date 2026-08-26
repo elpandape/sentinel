@@ -28,23 +28,31 @@ it('creates the audits table with its forty columns', function (): void {
         ]);
 });
 
-it('creates the eleven non primary indexes', function (): void {
-    $indexes = array_values(array_filter(
-        Schema::getIndexes(auditsTable()),
-        static fn (array $index): bool => $index['primary'] === false,
-    ));
+it('creates the eleven non primary indexes over the exact columns, in order', function (): void {
+    $indexes = array_map(
+        static fn (array $index): string => ($index['unique'] ? 'unique' : 'index').'('.implode(', ', $index['columns']).')',
+        array_values(array_filter(
+            Schema::getIndexes(auditsTable()),
+            static fn (array $index): bool => $index['primary'] === false,
+        )),
+    );
 
-    expect($indexes)->toHaveCount(11);
-});
+    sort($indexes);
 
-it('keeps the chain constraint unique', function (): void {
-    $unique = array_values(array_filter(
-        Schema::getIndexes(auditsTable()),
-        static fn (array $index): bool => $index['columns'] === ['stream', 'sequence'],
-    ));
-
-    expect($unique)->toHaveCount(1)
-        ->and($unique[0]['unique'])->toBeTrue();
+    expect($indexes)->toHaveCount(11)
+        ->and($indexes)->toBe([
+            'index(actor_type, actor_id, id)',
+            'index(audit_type, created_at)',
+            'index(event)',
+            'index(request_id)',
+            'index(severity, created_at)',
+            'index(subject_type, subject_id, id)',
+            'index(tenant_id, created_at)',
+            'index(trace_id)',
+            'index(transaction_id)',
+            'unique(capture_id)',
+            'unique(stream, sequence)',
+        ]);
 });
 
 it('resolves the json type from the engine grammar', function (): void {
