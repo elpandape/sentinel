@@ -117,3 +117,7 @@ it('rejects a hash algorithm the runtime does not provide', function (): void {
     expect(fn (): string => sentinelConfig(['integrity.algorithm' => 'nonesuch'])->integrityAlgorithm())
         ->toThrow(ConfigurationException::class, 'nonesuch');
 });
+
+it('reads the configured stream strategy', function (): void {
+    expect(sentinelConfig()->streamStrategy())->toBe('global');
+});

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Support;
 
+use Closure;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
 use ElPandaPe\Sentinel\Enums\Mode;
 use ElPandaPe\Sentinel\Enums\Severity;
@@ -100,6 +101,15 @@ final readonly class Config
         return in_array($algorithm, hash_algos(), true)
             ? $algorithm
             : throw ConfigurationException::unknown('integrity.algorithm', $algorithm, implode(', ', hash_algos()));
+    }
+
+    public function streamStrategy(): string|Closure
+    {
+        $value = $this->value('integrity.stream');
+
+        return is_string($value) || $value instanceof Closure
+            ? $value
+            : throw ConfigurationException::expected('integrity.stream', 'a string or a closure', get_debug_type($value));
     }
 
     public function complianceEnabled(): bool

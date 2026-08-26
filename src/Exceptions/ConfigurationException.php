@@ -27,4 +27,17 @@ final class ConfigurationException extends InvalidArgumentException
     {
         return new self("Sentinel configuration key [sentinel.{$key}] must be {$expected} or a subclass of it, [{$value}] given.");
     }
+
+    public static function streamTooLong(string $name): self
+    {
+        return new self(sprintf(
+            'Sentinel resolved the stream name [%s], longer than the 64 characters the column holds. A stream name is part of the hash prefix, so it is never truncated.',
+            substr($name, 0, 80),
+        ));
+    }
+
+    public static function streamEmpty(): self
+    {
+        return new self('Sentinel resolved an empty stream name; every entry belongs to a named chain.');
+    }
 }

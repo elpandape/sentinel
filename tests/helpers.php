@@ -4,8 +4,13 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Tests;
 
+use DateTimeImmutable;
+use ElPandaPe\Sentinel\Data\AuditData;
+use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Integrity\Hasher;
 use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
+use ElPandaPe\Sentinel\Integrity\Stream;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Schema\Blueprint;
@@ -145,4 +150,27 @@ function withSortedKeys(array $value): array
 function hasher(): Hasher
 {
     return new Hasher(new JsonCanonicalizer);
+}
+
+/**
+ * @param  array<string, mixed>  $overrides
+ */
+function auditData(array $overrides = []): AuditData
+{
+    return new AuditData(...[
+        'audit_type' => 'model',
+        'event' => 'created',
+        'severity' => Severity::Info,
+        'source' => Source::System,
+        'occurred_at' => new DateTimeImmutable('2026-08-26 10:00:00.000000'),
+        ...$overrides,
+    ]);
+}
+
+/**
+ * @param  array<string, mixed>  $overrides
+ */
+function stream(array $overrides = []): Stream
+{
+    return new Stream(sentinelConfig($overrides), app());
 }
