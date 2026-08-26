@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use ElPandaPe\Sentinel\Database\Factories\AuditFactory;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
+use ElPandaPe\Sentinel\Exceptions\ImmutableAuditException;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Database\Eloquent\Attributes\CollectedBy;
@@ -117,6 +118,17 @@ class Audit extends Model
     public function getGuarded(): array
     {
         return [];
+    }
+
+    protected static function booted(): void
+    {
+        static::updating(static function (Audit $audit): void {
+            throw ImmutableAuditException::update($audit->id);
+        });
+
+        static::deleting(static function (Audit $audit): void {
+            throw ImmutableAuditException::delete($audit->id);
+        });
     }
 
     /**

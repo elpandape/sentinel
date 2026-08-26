@@ -52,16 +52,15 @@ it('casts severity and source to their enums', function (): void {
 });
 
 it('round trips every json column without loss, whatever order the engine keeps the keys in', function (array $value): void {
-    $audit = Audit::query()->create(collect(auditRow())->except('id')->all());
-
-    $audit->context = $value;
-    $audit->before = $value;
-    $audit->after = $value;
-    $audit->changes = $value;
-    $audit->metadata = $value;
-    $audit->encryption = $value;
-    $audit->criteria = $value;
-    $audit->save();
+    Audit::query()->create(collect(auditRow())->except('id')->merge([
+        'context' => $value,
+        'before' => $value,
+        'after' => $value,
+        'changes' => $value,
+        'metadata' => $value,
+        'encryption' => $value,
+        'criteria' => $value,
+    ])->all());
 
     $fresh = Audit::query()->firstOrFail();
 
@@ -148,11 +147,10 @@ it('keeps microsecond precision on occurred_at', function (): void {
     expect(Audit::query()->firstOrFail()->occurred_at->format('u'))->toBe('123456');
 });
 
-it('writes microseconds back when it saves', function (): void {
-    $audit = Audit::query()->create(collect(auditRow())->except('id')->all());
-
-    $audit->occurred_at = CarbonImmutable::parse('2026-08-26 10:00:00.654321');
-    $audit->save();
+it('writes microseconds back when it is written', function (): void {
+    $audit = Audit::query()->create(collect(auditRow())->except('id')->merge([
+        'occurred_at' => CarbonImmutable::parse('2026-08-26 10:00:00.654321'),
+    ])->all());
 
     expect(DB::table(auditsTable())->where('id', $audit->id)->value('occurred_at'))
         ->toContain('.654321');
