@@ -2,6 +2,40 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.2.0 — Schema, `Audit` and contracts (2026-08-26)
+
+### Added
+
+- `sentinel_audits` migration: forty columns and eleven indexes, with the JSON and microsecond date
+  types resolved by the engine grammar — `jsonb` on PostgreSQL 16, `json` on MySQL 9, text on
+  SQLite; `datetime(6)` on MySQL and `timestamp(6)` on PostgreSQL. Publishable with
+  `--tag=sentinel-migrations` and loaded automatically when no published copy exists.
+- `Models\Audit`: ULID key, morphs for subject, actor and impersonator, JSON and enum casts, no
+  `updated_at`, and table, connection and model class all resolved from the configuration.
+- `Data\AuditData`: the mutable representation of an entry before it has an identity.
+- `Contracts\Ledger`, `LedgerStream`, `Auditable`, `Resolver`, `Transformer`, `Signer` and
+  `Canonicalizer`, plus the `Query\AuditQuery` and `Support\AuditCollection` their signatures
+  require.
+- `Database\Factories\AuditFactory`, publishable with `--tag=sentinel-factories`.
+- `Support\Config::model()`: typed resolution of the `models.*` overrides.
+- `composer validate --strict` and `composer audit` as gates in `make ci` and the quality workflow.
+
+### Upgrade notes
+
+This version introduces the first migration of the package.
+
+```bash
+composer update elpandape/sentinel
+php artisan migrate
+```
+
+Publishing the migration is optional. If you publish it
+(`php artisan vendor:publish --tag=sentinel-migrations`), the package stops loading its own copy, so
+the migration never runs twice. Nothing writes to the table yet: entries start being written in
+`v0.3.0`.
+
+The `Ledger` contract is unstable until `v0.8.0` and may change between minor versions.
+
 ## v0.1.0 — Skeleton (2026-08-25)
 
 ### Added
