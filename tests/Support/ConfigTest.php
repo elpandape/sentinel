@@ -6,6 +6,9 @@ use ElPandaPe\Sentinel\Enums\AuditEvent;
 use ElPandaPe\Sentinel\Enums\Mode;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
+use ElPandaPe\Sentinel\Support\Config;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Auth\User;
 
 use function ElPandaPe\Sentinel\Tests\sentinelConfig;
 
@@ -81,3 +84,27 @@ it('rejects an unknown severity override', function (): void {
 it('rejects a retention policy that is not a string', function (): void {
     sentinelConfig(['retention' => ['auth' => 90]])->retention();
 })->throws(ConfigurationException::class, 'must be a map of string to string, int given');
+
+it('falls back to the default model when the override is null', function (): void {
+    expect(sentinelConfig(['models.audit' => null])->model('audit', Model::class))->toBe(Model::class);
+});
+
+it('falls back to the default model when the section has no entry', function (): void {
+    expect(sentinelConfig(['models' => []])->model('audit', Model::class))->toBe(Model::class);
+});
+
+it('returns the model override the configuration names', function (): void {
+    expect(sentinelConfig(['models.audit' => User::class])->model('audit', Model::class))->toBe(User::class);
+});
+
+it('rejects a model override that is not a string', function (): void {
+    sentinelConfig(['models.audit' => 42])->model('audit', Model::class);
+})->throws(ConfigurationException::class, 'models.audit] must be a class-string or null, int given');
+
+it('rejects a model override whose class does not exist', function (): void {
+    sentinelConfig(['models.audit' => 'App\\Nope'])->model('audit', Model::class);
+})->throws(ConfigurationException::class, '[App\\Nope] given');
+
+it('rejects a model override that does not extend the default', function (): void {
+    sentinelConfig(['models.audit' => Config::class])->model('audit', Model::class);
+})->throws(ConfigurationException::class, 'or a subclass of it');

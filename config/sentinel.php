@@ -54,9 +54,12 @@ return [
     ],
 
     /*
-     * Model overrides. Null means the package default.
+     * Model overrides. Null means the package default; any subclass of it
+     * replaces the model the container resolves.
      */
-    'models' => [],
+    'models' => [
+        'audit' => null,
+    ],
 
     /*
      * Context resolvers, keyed by what they resolve. Null means the package

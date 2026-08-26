@@ -34,6 +34,29 @@ final readonly class Config
         return $this->nullableString('database.connection');
     }
 
+    /**
+     * @param  class-string  $default
+     * @return class-string
+     */
+    public function model(string $name, string $default): string
+    {
+        $value = $this->repository->get("sentinel.models.{$name}");
+
+        if ($value === null) {
+            return $default;
+        }
+
+        if (! is_string($value)) {
+            throw ConfigurationException::expected("models.{$name}", 'a class-string or null', get_debug_type($value));
+        }
+
+        if (! class_exists($value) || ! is_a($value, $default, true)) {
+            throw ConfigurationException::invalidClass("models.{$name}", $value, $default);
+        }
+
+        return $value;
+    }
+
     public function ledger(): string
     {
         return $this->string('ledger.default');

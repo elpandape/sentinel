@@ -22,4 +22,9 @@ final class ConfigurationException extends InvalidArgumentException
     {
         return new self("Sentinel configuration key [sentinel.{$key}] has unknown value [{$value}]. Accepted: {$accepted}.");
     }
+
+    public static function invalidClass(string $key, string $value, string $expected): self
+    {
+        return new self("Sentinel configuration key [sentinel.{$key}] must be {$expected} or a subclass of it, [{$value}] given.");
+    }
 }
