@@ -6,6 +6,8 @@ namespace ElPandaPe\Sentinel;
 
 use Closure;
 use ElPandaPe\Sentinel\Context\ExecutionContext;
+use ElPandaPe\Sentinel\Integrity\VerificationResult;
+use ElPandaPe\Sentinel\Integrity\Verifier;
 use ElPandaPe\Sentinel\Support\Config;
 
 final class Sentinel
@@ -15,7 +17,13 @@ final class Sentinel
     public function __construct(
         private readonly Config $config,
         private readonly ExecutionContext $context,
+        private readonly Verifier $verifier,
     ) {}
+
+    public function verifyIntegrity(string $stream, ?int $from = null, ?int $to = null): VerificationResult
+    {
+        return $this->verifier->verifyStream($stream, $from, $to);
+    }
 
     public function config(): Config
     {

@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static void resume()
  * @method static mixed withoutAuditing(\Closure $callback)
  * @method static mixed withContext(array<string, mixed> $context, \Closure $callback)
+ * @method static \ElPandaPe\Sentinel\Integrity\VerificationResult verifyIntegrity(string $stream, ?int $from = null, ?int $to = null)
  *
  * @see \ElPandaPe\Sentinel\Sentinel
  */
