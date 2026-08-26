@@ -1,0 +1,2 @@
+providers:
+  - ElPandaPe\Sentinel\SentinelServiceProvider
