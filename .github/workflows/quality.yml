@@ -40,3 +40,8 @@ jobs:
 
       - name: 100% type coverage
         run: php -d zend.assertions=1 -d memory_limit=1G vendor/bin/pest --type-coverage --min=100
+
+      - name: Composer manifest and advisories
+        run: |
+          composer validate --strict
+          composer audit

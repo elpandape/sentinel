@@ -1,7 +1,7 @@
 DC = docker compose
 PHP = $(DC) run --rm php
 
-.PHONY: build install update test coverage types stan lint lint-fix rector rector-fix mutation ci shell test-dbs
+.PHONY: build install update test coverage types stan lint lint-fix rector rector-fix mutation validate ci shell test-dbs
 
 build: ## Build the dev image
 	$(DC) build php
@@ -12,8 +12,8 @@ install: ## composer install
 update: ## composer update
 	$(PHP) composer update
 
-test: ## Run the test suite
-	$(PHP) vendor/bin/pest --parallel
+test: ## Run the test suite (make test ARGS="tests/Support/ConfigTest.php")
+	$(PHP) vendor/bin/pest --parallel $(ARGS)
 
 coverage: ## Tests + 100% coverage gate
 	$(PHP) php -d memory_limit=1G -d pcov.directory=/app -d 'pcov.exclude=~/(vendor|tests|\.cache)/~' vendor/bin/pest --ci --coverage --min=100
@@ -36,7 +36,11 @@ rector: ## Rector dry-run
 rector-fix: ## Rector apply
 	$(PHP) vendor/bin/rector process
 
-ci: lint stan rector coverage types ## Everything CI runs
+validate: ## composer manifest and advisory checks
+	$(PHP) composer validate --strict
+	$(PHP) composer audit
+
+ci: lint stan rector coverage types validate ## Everything CI runs
 
 shell: ## Shell inside the container
 	$(PHP) sh
