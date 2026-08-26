@@ -9,6 +9,7 @@ use ElPandaPe\Sentinel\Database\Factories\AuditFactory;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Exceptions\ImmutableAuditException;
+use ElPandaPe\Sentinel\Integrity\Verifier;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Database\Eloquent\Attributes\CollectedBy;
@@ -94,6 +95,14 @@ class Audit extends Model
     public function impersonator(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    public function verifyIntegrity(): bool
+    {
+        /** @var Verifier $verifier */
+        $verifier = app(Verifier::class);
+
+        return $verifier->verifyEntry($this);
     }
 
     public function getTable(): string

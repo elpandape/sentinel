@@ -11,6 +11,7 @@ use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Integrity\Hasher;
 use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
 use ElPandaPe\Sentinel\Integrity\Stream;
+use ElPandaPe\Sentinel\Integrity\Verifier;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Schema\Blueprint;
@@ -173,4 +174,31 @@ function auditData(array $overrides = []): AuditData
 function stream(array $overrides = []): Stream
 {
     return new Stream(sentinelConfig($overrides), app());
+}
+
+function verifier(): Verifier
+{
+    /** @var Verifier $verifier */
+    $verifier = app(Verifier::class);
+
+    return $verifier;
+}
+
+/**
+ * @param  array<array-key, mixed>  $lines
+ * @return list<string>
+ */
+function translationKeys(array $lines, string $prefix = ''): array
+{
+    $keys = [];
+
+    foreach ($lines as $key => $value) {
+        $keys = is_array($value)
+            ? [...$keys, ...translationKeys($value, $prefix.$key.'.')]
+            : [...$keys, $prefix.$key];
+    }
+
+    sort($keys);
+
+    return $keys;
 }

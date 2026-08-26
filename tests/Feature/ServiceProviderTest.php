@@ -3,7 +3,13 @@
 declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Context\ExecutionContext;
+use ElPandaPe\Sentinel\Contracts\Canonicalizer;
+use ElPandaPe\Sentinel\Contracts\Ledger;
+use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
 use ElPandaPe\Sentinel\Facades\Sentinel as SentinelFacade;
+use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
+use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
+use ElPandaPe\Sentinel\Ledger\NullLedger;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Sentinel;
 use ElPandaPe\Sentinel\SentinelServiceProvider;
@@ -160,4 +166,33 @@ it('scopes extra context through the facade', function (): void {
 
     expect($inside)->toBe('Approved by finance')
         ->and(SentinelFacade::context()->all())->toBeEmpty();
+});
+
+it('resolves the canonicalizer the package ships', function (): void {
+    expect(app(Canonicalizer::class))->toBeInstanceOf(JsonCanonicalizer::class);
+});
+
+it('resolves the ledger the configuration names', function (string $driver, string $expected): void {
+    config()->set('sentinel.ledger.default', $driver);
+    app()->forgetScopedInstances();
+
+    expect(app(Ledger::class))->toBeInstanceOf($expected);
+})->with([
+    ['database', DatabaseLedger::class],
+    ['null', NullLedger::class],
+]);
+
+it('refuses to resolve a ledger driver it does not know', function (): void {
+    config()->set('sentinel.ledger.default', 'nonesuch');
+    app()->forgetScopedInstances();
+
+    expect(fn (): Ledger => app(Ledger::class))
+        ->toThrow(ConfigurationException::class, 'ledger.default');
+});
+
+it('keeps the ledger scoped so a worker does not carry one request into the next', function (): void {
+    $first = app(Ledger::class);
+    app()->forgetScopedInstances();
+
+    expect(app(Ledger::class))->not->toBe($first);
 });

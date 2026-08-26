@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use function ElPandaPe\Sentinel\Tests\phpFilesOffending;
+use function ElPandaPe\Sentinel\Tests\translationKeys;
 
 it('holds no mutable static state in the source', function (): void {
     expect(phpFilesOffending(
@@ -17,4 +18,12 @@ it('leaves no doc block stranded above another', function (): void {
 
 it('cites no tool-generated identifier in a comment', function (): void {
     expect(phpFilesOffending('#(?://|\*)[^\n]*\b[0-9a-f]{12,}\b#'))->toBeEmpty();
+});
+
+it('keeps the two language files carrying the same keys', function (): void {
+    $en = require dirname(__DIR__).'/resources/lang/en/sentinel.php';
+    $es = require dirname(__DIR__).'/resources/lang/es/sentinel.php';
+
+    expect(translationKeys($es))->toBe(translationKeys($en))
+        ->and(translationKeys($en))->not->toBeEmpty();
 });

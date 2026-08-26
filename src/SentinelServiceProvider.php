@@ -6,7 +6,11 @@ namespace ElPandaPe\Sentinel;
 
 use ElPandaPe\Sentinel\Context\ExecutionContext;
 use ElPandaPe\Sentinel\Contracts\Canonicalizer;
+use ElPandaPe\Sentinel\Contracts\Ledger;
+use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
 use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
+use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
+use ElPandaPe\Sentinel\Ledger\NullLedger;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Support\PublishedMigration;
@@ -30,6 +34,17 @@ final class SentinelServiceProvider extends ServiceProvider
             $model = $app->make(Config::class)->model('audit', Audit::class);
 
             return new $model;
+        });
+
+        // Scoped like the manager: a NullLedger keeps its chain on the instance.
+        $this->app->scoped(Ledger::class, static function (Application $app): Ledger {
+            $driver = $app->make(Config::class)->ledger();
+
+            return match ($driver) {
+                'database' => $app->make(DatabaseLedger::class),
+                'null' => $app->make(NullLedger::class),
+                default => throw ConfigurationException::unknown('ledger.default', $driver, 'database, null'),
+            };
         });
 
         // Scoped: execution context and recording state belong to one request or job, not to the worker.
