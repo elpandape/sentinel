@@ -2,7 +2,7 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
-## [0.3.0] - 2026-08-26
+## v0.3.0 — Ledger, sequence and the integrity core (2026-08-26)
 
 ### Added
 
