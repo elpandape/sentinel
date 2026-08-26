@@ -1,0 +1,90 @@
+<?php
+
+declare(strict_types=1);
+
+namespace ElPandaPe\Sentinel\Tests\Fixtures;
+
+/**
+ * Frozen entries of payload_version 1, each with the canonical string it produces and the
+ * hash of that string. Every future version that touches the canonical payload is measured
+ * against these: while they reproduce, payload_version 1 still means what it meant.
+ */
+final class GoldenLedger
+{
+    /**
+     * @return array<string, array{array<string, mixed>, string, string}>
+     */
+    public static function entries(): array
+    {
+        return [
+            'an entry that opens a chain' => [
+                [
+                    'id' => '01JGOLDEN000000000000000A1',
+                    'stream' => 'global',
+                    'sequence' => 1,
+                    'audit_type' => 'model',
+                    'event' => 'created',
+                    'severity' => 'info',
+                    'source' => 'system',
+                    'context' => [],
+                    'payload_version' => 1,
+                    'algorithm' => 'sha256',
+                    'previous_hash' => null,
+                    'occurred_at' => '2026-08-26 10:00:00.000000',
+                ],
+                '{"actor_id":null,"actor_type":null,"affected_rows":null,"after":null,"audit_type":"model","before":null,"changes":null,"context":[],"criteria":null,"encryption":null,"event":"created","id":"01JGOLDEN000000000000000A1","impersonator_id":null,"impersonator_type":null,"metadata":null,"occurred_at":"2026-08-26 10:00:00.000000","request_id":null,"severity":"info","source":"system","source_audit_id":null,"span_id":null,"subject_id":null,"subject_type":null,"tenant_id":null,"trace_id":null,"transaction_id":null,"version":null}',
+                '752d2a1b0ededff42112fde4b1429d2d5e11ffe85ff664a41fe0e9730d5adbfe',
+            ],
+            'an entry with every json column populated' => [
+                [
+                    'id' => '01JGOLDEN000000000000000B2',
+                    'stream' => 'tenant:acme',
+                    'sequence' => 42,
+                    'audit_type' => 'model',
+                    'event' => 'updated',
+                    'severity' => 'warning',
+                    'source' => 'http',
+                    'subject_type' => 'user',
+                    'subject_id' => '7',
+                    'actor_type' => 'user',
+                    'actor_id' => '1',
+                    'tenant_id' => 'acme',
+                    'version' => 3,
+                    'context' => ['ip' => '203.0.113.7', 'locale' => 'es'],
+                    'before' => ['name' => 'José', 'score' => 0.1],
+                    'after' => ['name' => '海', 'score' => 9007199254740993],
+                    'changes' => ['name' => ['José', '海']],
+                    'metadata' => ['tags' => ['b', 'a'], 'nested' => ['z' => 1, 'a' => 2]],
+                    'encryption' => ['fields' => ['name'], 'key_id' => 'default'],
+                    'criteria' => ['where' => ['id' => 7]],
+                    'affected_rows' => 1,
+                    'source_audit_id' => '01JGOLDEN000000000000000A1',
+                    'payload_version' => 1,
+                    'algorithm' => 'sha256',
+                    'previous_hash' => 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+                    'occurred_at' => '2026-08-26 10:00:00.123456',
+                ],
+                '{"actor_id":"1","actor_type":"user","affected_rows":1,"after":{"name":"海","score":9007199254740993},"audit_type":"model","before":{"name":"José","score":0.1},"changes":{"name":["José","海"]},"context":{"ip":"203.0.113.7","locale":"es"},"criteria":{"where":{"id":7}},"encryption":{"fields":["name"],"key_id":"default"},"event":"updated","id":"01JGOLDEN000000000000000B2","impersonator_id":null,"impersonator_type":null,"metadata":{"nested":{"a":2,"z":1},"tags":["b","a"]},"occurred_at":"2026-08-26 10:00:00.123456","request_id":null,"severity":"warning","source":"http","source_audit_id":"01JGOLDEN000000000000000A1","span_id":null,"subject_id":"7","subject_type":"user","tenant_id":"acme","trace_id":null,"transaction_id":null,"version":3}',
+                'df0064e2bb4ed13d0cfe07fe7ad66acfaaf5801b79f13adc1f5efa59c61c947c',
+            ],
+            'an entry that continues a chain' => [
+                [
+                    'id' => '01JGOLDEN000000000000000C3',
+                    'stream' => 'global',
+                    'sequence' => 2,
+                    'audit_type' => 'command',
+                    'event' => 'custom',
+                    'severity' => 'critical',
+                    'source' => 'cli',
+                    'context' => ['command' => 'sentinel:verify'],
+                    'payload_version' => 1,
+                    'algorithm' => 'sha256',
+                    'previous_hash' => 'da39a3ee5e6b4b0d3255bfef95601890afd80709da39a3ee5e6b4b0d32550000',
+                    'occurred_at' => '2026-08-26 23:59:59.999999',
+                ],
+                '{"actor_id":null,"actor_type":null,"affected_rows":null,"after":null,"audit_type":"command","before":null,"changes":null,"context":{"command":"sentinel:verify"},"criteria":null,"encryption":null,"event":"custom","id":"01JGOLDEN000000000000000C3","impersonator_id":null,"impersonator_type":null,"metadata":null,"occurred_at":"2026-08-26 23:59:59.999999","request_id":null,"severity":"critical","source":"cli","source_audit_id":null,"span_id":null,"subject_id":null,"subject_type":null,"tenant_id":null,"trace_id":null,"transaction_id":null,"version":null}',
+                'b86189bf5d9578a7db1fee3742eb90ae6682560e3bc5a713167e1e826874c24d',
+            ],
+        ];
+    }
+}

@@ -14,6 +14,7 @@ use ElPandaPe\Sentinel\Integrity\Stream;
 use ElPandaPe\Sentinel\Integrity\Verifier;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -201,4 +202,54 @@ function translationKeys(array $lines, string $prefix = ''): array
     sort($keys);
 
     return $keys;
+}
+
+/**
+ * A second connection to the same database, so a test can race the ledger for real.
+ * An in-memory SQLite database cannot have one: a second connection is a second database.
+ */
+function rivalConnection(): ?string
+{
+    /** @var Repository $repository */
+    $repository = app(Repository::class);
+
+    $default = $repository->get('database.default');
+    $config = is_string($default) ? $repository->get("database.connections.{$default}") : null;
+
+    if (! is_array($config) || ($config['database'] ?? null) === ':memory:') {
+        return null;
+    }
+
+    $repository->set('database.connections.sentinel_rival', $config);
+
+    return 'sentinel_rival';
+}
+
+function lockTimeout(): string
+{
+    return DB::connection()->getDriverName() === 'pgsql'
+        ? "set lock_timeout to '500ms'"
+        : 'set innodb_lock_wait_timeout = 1';
+}
+
+/**
+ * Slips a rival writer in between the tail read and the insert. Whether it gets through
+ * is the engine's business: MySQL holds it on the gap lock, PostgreSQL lets it commit.
+ */
+function raceTheGate(string $rival): void
+{
+    $raced = false;
+
+    DB::listen(function (QueryExecuted $query) use (&$raced, $rival): void {
+        if ($raced || ! str_contains($query->sql, 'desc')) {
+            return;
+        }
+
+        $raced = true;
+
+        rescue(function () use ($rival): void {
+            DB::connection($rival)->statement(lockTimeout());
+            DB::connection($rival)->table(auditsTable())->insert(auditRow(['sequence' => 1]));
+        }, report: false);
+    });
 }
