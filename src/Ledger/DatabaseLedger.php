@@ -4,32 +4,25 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Ledger;
 
-use Carbon\CarbonImmutable;
 use Closure;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Contracts\LedgerStream;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Exceptions\LedgerException;
-use ElPandaPe\Sentinel\Integrity\Hasher;
 use ElPandaPe\Sentinel\Integrity\Stream;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Support\AuditCollection;
-use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Database\UniqueConstraintViolationException;
-use Illuminate\Support\Str;
 
 final readonly class DatabaseLedger implements Ledger
 {
-    private const int PAYLOAD_VERSION = 1;
-
     private const int MAX_ATTEMPTS = 3;
 
     public function __construct(
         private Audit $model,
         private Stream $stream,
-        private Hasher $hasher,
-        private Config $config,
+        private EntryBuilder $builder,
     ) {}
 
     public function write(AuditData $audit): Audit
@@ -75,7 +68,9 @@ final readonly class DatabaseLedger implements Ledger
                 $previous = $tail->hash;
 
                 foreach ($group as $index => $data) {
-                    $audit = $this->build($data, $stream, ++$sequence, $previous, $versions);
+                    $audit = $this->builder->build($data, $stream, ++$sequence, $previous, $this->version($data, $versions));
+                    $audit->exists = true;
+                    $audit->wasRecentlyCreated = true;
                     $previous = $audit->hash;
                     $rows[] = $audit->getAttributes();
                     $written[$index] = $audit;
@@ -103,58 +98,6 @@ final readonly class DatabaseLedger implements Ledger
         }
 
         return $groups;
-    }
-
-    /**
-     * @param  array<string, int>  $versions
-     */
-    private function build(AuditData $data, string $stream, int $sequence, ?string $previous, array &$versions): Audit
-    {
-        $audit = $this->model->newInstance();
-
-        $audit->forceFill([
-            'id' => (string) Str::ulid(),
-            'stream' => $stream,
-            'sequence' => $sequence,
-            'audit_type' => $data->audit_type,
-            'event' => $data->event,
-            'severity' => $data->severity,
-            'subject_type' => $data->subject_type,
-            'subject_id' => $data->subject_id,
-            'actor_type' => $data->actor_type,
-            'actor_id' => $data->actor_id,
-            'impersonator_type' => $data->impersonator_type,
-            'impersonator_id' => $data->impersonator_id,
-            'tenant_id' => $data->tenant_id,
-            'transaction_id' => $data->transaction_id,
-            'request_id' => $data->request_id,
-            'trace_id' => $data->trace_id,
-            'span_id' => $data->span_id,
-            'source' => $data->source,
-            'version' => $this->version($data, $versions),
-            'context' => $data->context,
-            'before' => $data->before,
-            'after' => $data->after,
-            'changes' => $data->changes,
-            'metadata' => $data->metadata,
-            'encryption' => $data->encryption,
-            'criteria' => $data->criteria,
-            'affected_rows' => $data->affected_rows,
-            'source_audit_id' => $data->source_audit_id,
-            'capture_id' => $data->capture_id,
-            'payload_version' => self::PAYLOAD_VERSION,
-            'algorithm' => $this->config->integrityAlgorithm(),
-            'previous_hash' => $previous,
-            'occurred_at' => $data->occurred_at,
-            'created_at' => CarbonImmutable::now(),
-        ]);
-
-        $audit->hash = $this->hasher->hash($audit);
-        $audit->exists = true;
-        $audit->wasRecentlyCreated = true;
-        $audit->syncOriginal();
-
-        return $audit;
     }
 
     /**
