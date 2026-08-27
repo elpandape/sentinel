@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.7.0-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.8.0-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -20,7 +20,7 @@ the state was before, what it is now — and whether the record itself can be pr
 
 ```json
 "repositories": [{ "type": "vcs", "url": "https://github.com/elpandape/sentinel" }],
-"require": { "elpandape/sentinel": "v0.7.0" }
+"require": { "elpandape/sentinel": "v0.8.0" }
 ```
 
 ```bash
@@ -38,6 +38,7 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.5.0` | Structured diffs, `$audit->diff()`, JSON Patch import and export |
 | `v0.6.0` | Resolved context: actor, impersonator, tenant, request, trace, source, host, job, command |
 | `v0.7.0` | The write pipeline, field-level redaction, hashing and encryption, key rotation, discards |
+| `v0.8.0` | `MemoryLedger`, `FanoutLedger`, the published contract suite, `append()` |
 
 Everything else is on the roadmap: relationship auditing, business transactions, custom events,
 state transitions, restore, advanced verification (checkpoints and signatures), retention and
@@ -47,7 +48,8 @@ compliance, performance modes and distributed tracing.
 `v0.5.0` is the one that answers what changed, instead of leaving you two states to compare.
 `v0.6.0` is the one that answers who did it and from where, instead of every entry claiming it came
 from nowhere. `v0.7.0` is the one that stops the answer from being a leak: no declared value reaches
-the ledger in the clear, and nothing writes an entry that says nothing happened.
+the ledger in the clear, and nothing writes an entry that says nothing happened. `v0.8.0` is the one
+that makes "extensible by drivers" a thing you can run rather than a thing this file claims.
 
 ## Quick start
 
@@ -728,24 +730,96 @@ does not pass through it.
 
 ## Ledger drivers
 
-`Contracts\Ledger` ships two drivers, chosen by `ledger.default`:
+`Contracts\Ledger` ships four drivers, chosen by `ledger.default`:
 
 ```php
 // config/sentinel.php
 'ledger' => [
-    'default' => env('SENTINEL_LEDGER', 'database'), // 'database' or 'null'
+    'default' => env('SENTINEL_LEDGER', 'database'), // 'database', 'fanout', 'memory' or 'null'
 ],
 ```
 
-- `Ledger\DatabaseLedger` writes to `sentinel_audits`: it serializes the stream, reads its tail,
-  builds the link and inserts, retrying if a concurrent writer claims the same `(stream, sequence)`
-  first.
-- `Ledger\NullLedger` computes the exact same chain but keeps it only on the instance that runs it —
-  nothing reaches storage. It runs the same contract suite as `DatabaseLedger`, so the two drivers
-  cannot drift apart.
+| Driver | What it does |
+|---|---|
+| `Ledger\DatabaseLedger` | Writes to `sentinel_audits`: serializes the stream, reads its tail, builds the link and inserts, retrying if a concurrent writer claims the same `(stream, sequence)` first |
+| `Ledger\FanoutLedger` | Sends one entry to several destinations at once |
+| `Ledger\MemoryLedger` | The whole contract over plain arrays. A reference implementation and a test double — everything it holds dies with the instance, so it is never a store |
+| `Ledger\NullLedger` | Auditing off without taking the code path apart: it still builds, seals and chains, and keeps nothing. `find()` answers nothing and `stream()` walks nothing |
 
-> The `Ledger` contract is **unstable until `v0.8.0`**. It is declared now so every driver has one
-> shape to answer to, and it gets tensioned against a non-SQL backend before the freeze.
+All four run the same contract suite, so they cannot drift apart.
+
+### Writing to more than one place
+
+```php
+// config/sentinel.php
+'ledger' => [
+    'default' => 'fanout',
+    'ledgers' => [
+        'fanout' => [
+            'destinations' => ['database', 'memory'],
+            'on_failure' => 'strict',
+        ],
+    ],
+],
+```
+
+The **first destination is the primary**, and the only one that assigns the sequence and seals the
+hash. The rest are handed the entry it sealed, through `append()`. Two ledgers each numbering their
+own chain would produce two different truths about one fact, so only one of them numbers. Reads go
+to the primary for the same reason.
+
+`on_failure` decides what a destination refusing an entry means:
+
+- `strict` — the write fails. Whatever the earlier destinations already took stays with them: an
+  entry is sealed before it is handed out and nothing can unseal it.
+- `primary` — only the first destination is critical. Every other refusal raises
+  `Events\LedgerDestinationFailed`, carrying the destination, the stream, the sequence and the entry
+  id, and the write settles.
+
+## Writing your own driver
+
+A driver implements `Contracts\Ledger` and is held to one thing: **the chain**. Within a stream the
+sequence is dense and monotonic, and every entry links to the one before it. Three guarantees are
+deliberately *not* part of the contract, because a store without transactions cannot honour them and
+a contract nobody can implement is a contract that gets ignored:
+
+- `writeMany()` is not atomic. It either returns everything that settled, or throws having made a
+  best effort to leave nothing behind.
+- No read is promised to see a write that just returned.
+- Idempotency by `capture_id` belongs to the caller.
+
+The package publishes the suite that checks the rest, as production code rather than as a dev
+dependency — a contract nobody outside this package can execute is a promise, not a verification:
+
+```php
+use ElPandaPe\Sentinel\Contracts\Ledger;
+use ElPandaPe\Sentinel\Testing\LedgerContractTestCase;
+
+final class RedisLedgerContractTest extends LedgerContractTestCase
+{
+    protected function ledger(): Ledger
+    {
+        return new RedisLedger(/* ... */);
+    }
+}
+```
+
+It needs `phpunit/phpunit` and `orchestra/testbench`, both declared in `suggest`. Two hooks let a
+driver say what it is instead of failing for being it:
+
+- `retains(): bool` — answer `false` if your driver keeps nothing. It is not an exemption: a driver
+  that answers `false` is held to keeping nothing as strictly as the others are held to keeping
+  everything.
+- `settle(Ledger $ledger): void` — called between a write and the read that checks it. If your
+  reads are eventually consistent, make what was just written visible here.
+
+Two things that are easy to get wrong and are not obvious from the interface:
+
+- **Write the entries before you advance whatever tracks the tail of the stream.** The other order
+  burns a sequence number if the process dies in between, and the gap in the chain is permanent.
+- **Hydrate with `setRawAttributes()`, never `forceFill()`.** `forceFill` runs the *set* casts, so a
+  JSON column that already arrives encoded gets encoded a second time and the entry stops
+  reproducing its own hash — which verification will then report, correctly, as tampering.
 
 ## Development
 

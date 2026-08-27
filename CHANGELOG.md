@@ -2,6 +2,70 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.8.0 — Ledger contract & drivers (2026-08-27)
+
+### Added
+
+- **`Contracts\Ledger::append()`**, which stores an entry that arrives already sealed, exactly as it
+  is: no sequence assigned, no hash recomputed. It is how a secondary destination takes what the
+  primary sealed, and how an archive or a replica takes an entry it did not write.
+- **`Ledger\FanoutLedger`**, one entry to several destinations — a hot store plus a cold one, or
+  either plus a search satellite. Only the first destination numbers the chain and seals the hash;
+  the rest receive what it sealed, and reads go to the first. Two failure policies: `strict` fails
+  the write if any destination refuses, `primary` fails only for the first and raises
+  `Events\LedgerDestinationFailed` for every other refusal.
+- **`Ledger\MemoryLedger`**, the whole contract over plain arrays, chained with the algorithm the
+  database driver uses. A reference implementation and a test double, never a store: everything it
+  holds dies with the instance, and the shipped configuration will not name it as the default.
+- **`ElPandaPe\Sentinel\Testing\LedgerContractTestCase`, published as production code.** Extend it,
+  return your driver, and your driver is held to the same chain the four in this package are. PHPUnit
+  and Testbench stay development dependencies and are declared in `suggest`. A contract nobody
+  outside this package can execute is a promise, not a verification.
+- `ledger.ledgers.fanout` in the configuration: destinations in the order they are written, and a
+  failure policy. A fanout that names itself is refused rather than looped.
+- README: *Ledger drivers* rewritten around four drivers, and *Writing your own driver*.
+- `UPGRADE.md`, which starts here.
+
+### Changed
+
+- **The contract states three guarantees it does not make**, because a store without transactions
+  cannot honour the strong form and a contract nobody can implement is one that gets ignored:
+  `writeMany()` is not atomic, no read is promised to see a write that just returned, and idempotency
+  by `capture_id` belongs to the caller. `DatabaseLedger` still wraps a batch in a transaction and
+  still reads its own writes — the contract simply stops requiring every driver to.
+- **`NullLedger` keeps nothing.** It still builds, seals and chains every entry, so the code path an
+  application measures is the same one, but it retains only the tail of each stream and a version
+  counter per subject — the two things the next entry is sealed with.
+- The published suite stops assuming SQL: the two expectations that queried `sentinel_audits` were
+  about one driver, not about the contract, and the driver's own tests already covered them.
+- `payload_version` stays at `1`. Nothing about how an entry is sealed changed, and every entry
+  frozen before this version reproduces its hash byte for byte through both a driver with a table and
+  one without.
+- `make test-dbs` recreates the schema on both engines before it runs, instead of trusting whoever
+  ran it last.
+
+### Removed
+
+- `--tag=sentinel-factories`. It copied a class in this package's namespace into a directory an
+  application maps to its own, so what it produced was either never loaded or a collision. The
+  factory ships with the package and is autoloaded from it.
+
+### Upgrade notes
+
+Full detail, with the before and the after of each change, in [UPGRADE.md](UPGRADE.md).
+
+- **Implementations of `Contracts\Ledger` must add `append()`.** It stores the entry verbatim. An
+  implementation that reseals what it is appended is wrong: two ledgers each numbering their own
+  chain produce two different truths about one fact.
+- **The `null` driver no longer answers `find()` or `stream()`.** If you were reading entries back
+  out of it, the driver you want is `memory`, which is what that behaviour now is.
+- **`Tests\Testing\LedgerContractTestCase` is now `Testing\LedgerContractTestCase`**, and `persists()`
+  is gone. A driver that keeps nothing answers `false` to `retains()`; a driver whose reads are
+  eventually consistent makes its writes visible in `settle()`.
+- **`vendor:publish --tag=sentinel-factories` no longer exists.** If you published it, delete the
+  copy: it never changed anything.
+- Nothing to migrate. No new tables, no altered columns, no rewritten hashes.
+
 ## v0.7.0 — Pipeline & data security (2026-08-27)
 
 ### Added
