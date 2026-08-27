@@ -81,9 +81,12 @@ return [
 
     /*
      * Stages every audit goes through before it reaches the ledger. Order is
-     * the list order; a stage returning null discards the audit.
+     * the list order; a stage returning null discards the audit. An empty list
+     * means this one: dropping a stage means declaring the list without it.
      */
-    'pipeline' => [],
+    'pipeline' => [
+        ElPandaPe\Sentinel\Pipeline\Stages\ResolveContext::class,
+    ],
 
     /*
      * Hidden attributes are audited by default: auditing is what the package is

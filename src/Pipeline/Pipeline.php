@@ -8,6 +8,7 @@ use Closure;
 use ElPandaPe\Sentinel\Contracts\Transformer;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Events\AuditDiscarded;
+use ElPandaPe\Sentinel\Pipeline\Stages\ResolveContext;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Contracts\Events\Dispatcher;
@@ -22,7 +23,9 @@ final readonly class Pipeline
     /**
      * @var list<class-string<Transformer>>
      */
-    public const array DEFAULT_STAGES = [];
+    public const array DEFAULT_STAGES = [
+        ResolveContext::class,
+    ];
 
     public function __construct(
         private Container $container,

@@ -30,8 +30,8 @@ it('runs the stages in the order the list declares them', function (): void {
     expect(pipeline()->process(auditData())?->metadata)->toBe(['stamps' => ['second', 'first']]);
 });
 
-it('returns the entry untouched when no stage is configured', function (): void {
-    stagedPipeline([]);
+it('gives back the same object, not a copy of it', function (): void {
+    stagedPipeline([PassThroughStage::class]);
 
     $data = auditData();
 

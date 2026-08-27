@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Capture;
 
 use Carbon\CarbonImmutable;
-use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Sentinel;
 use ElPandaPe\Sentinel\Snapshot\SnapshotBuilder;
 use ElPandaPe\Sentinel\Snapshot\SnapshotPair;
@@ -28,7 +28,7 @@ final readonly class ModelCapture
         private Ledger $ledger,
         private SnapshotBuilder $snapshots,
         private Config $config,
-        private ContextEngine $context,
+        private Pipeline $pipeline,
     ) {}
 
     /**
@@ -43,7 +43,7 @@ final readonly class ModelCapture
         $pair = $this->snapshots->pair($model, $event, $restorePoint);
         $retained = $this->snapshots->retains($model);
 
-        return $this->ledger->write(($this->context)(new AuditData(
+        $audit = $this->pipeline->process(new AuditData(
             audit_type: self::AUDIT_TYPE,
             event: $event->value,
             severity: $this->severity($model, $event),
@@ -53,7 +53,9 @@ final readonly class ModelCapture
             before: $retained ? $pair->before : null,
             after: $retained ? $pair->after : null,
             changes: $this->changes($pair),
-        )));
+        ));
+
+        return $audit instanceof AuditData ? $this->ledger->write($audit) : null;
     }
 
     /**
