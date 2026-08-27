@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Tests;
 
 use DateTimeImmutable;
+use ElPandaPe\Sentinel\Context\Runtime;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Enums\Severity;
@@ -20,6 +21,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -301,4 +303,32 @@ function raceTheGate(string $rival): void
 function diffEntries(mixed $before, mixed $after): array
 {
     return Diff::between($before, $after)->toArray();
+}
+
+function runtime(): Runtime
+{
+    /** @var Runtime $runtime */
+    $runtime = app(Runtime::class);
+
+    return $runtime;
+}
+
+/**
+ * Puts a request where a real one lands: bound in the container and latched on the
+ * runtime, which is what the router's own event does when a request reaches it.
+ *
+ * @param  array<string, string>  $headers
+ */
+function httpRequest(string $uri, array $headers = []): Request
+{
+    $request = Request::create($uri);
+
+    foreach ($headers as $name => $value) {
+        $request->headers->set($name, $value);
+    }
+
+    app()->instance('request', $request);
+    runtime()->enteredRequest($request);
+
+    return $request;
 }
