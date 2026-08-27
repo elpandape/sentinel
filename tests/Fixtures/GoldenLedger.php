@@ -85,6 +85,29 @@ final class GoldenLedger
                 '{"actor_id":null,"actor_type":null,"affected_rows":null,"after":null,"audit_type":"command","before":null,"changes":null,"context":{"command":"sentinel:verify"},"criteria":null,"encryption":null,"event":"custom","id":"01JGOLDEN000000000000000C3","impersonator_id":null,"impersonator_type":null,"metadata":null,"occurred_at":"2026-08-26 23:59:59.999999","request_id":null,"severity":"critical","source":"cli","source_audit_id":null,"span_id":null,"subject_id":null,"subject_type":null,"tenant_id":null,"trace_id":null,"transaction_id":null,"version":null}',
                 'b86189bf5d9578a7db1fee3742eb90ae6682560e3bc5a713167e1e826874c24d',
             ],
+            'a model entry with both snapshots populated' => [
+                [
+                    'id' => '01JGOLDEN000000000000000D4',
+                    'stream' => 'global',
+                    'sequence' => 3,
+                    'audit_type' => 'model',
+                    'event' => 'updated',
+                    'severity' => 'info',
+                    'source' => 'system',
+                    'subject_type' => 'subject',
+                    'subject_id' => '1',
+                    'version' => 2,
+                    'context' => [],
+                    'before' => ['active' => true, 'name' => 'Ada', 'published_at' => '2026-08-26T10:00:00.123456+00:00'],
+                    'after' => ['active' => false, 'name' => 'Grace', 'published_at' => null],
+                    'payload_version' => 1,
+                    'algorithm' => 'sha256',
+                    'previous_hash' => 'b86189bf5d9578a7db1fee3742eb90ae6682560e3bc5a713167e1e826874c24d',
+                    'occurred_at' => '2026-08-26 10:00:00.000000',
+                ],
+                '{"actor_id":null,"actor_type":null,"affected_rows":null,"after":{"active":false,"name":"Grace","published_at":null},"audit_type":"model","before":{"active":true,"name":"Ada","published_at":"2026-08-26T10:00:00.123456+00:00"},"changes":null,"context":[],"criteria":null,"encryption":null,"event":"updated","id":"01JGOLDEN000000000000000D4","impersonator_id":null,"impersonator_type":null,"metadata":null,"occurred_at":"2026-08-26 10:00:00.000000","request_id":null,"severity":"info","source":"system","source_audit_id":null,"span_id":null,"subject_id":"1","subject_type":"subject","tenant_id":null,"trace_id":null,"transaction_id":null,"version":2}',
+                '729aaf38a9811bb46f582c262d4e4e2ab4a7509dc9cb4989d8356e8508402402',
+            ],
         ];
     }
 }

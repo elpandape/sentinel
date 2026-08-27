@@ -1,0 +1,33 @@
+<?php
+
+declare(strict_types=1);
+
+namespace ElPandaPe\Sentinel\Tests\Fixtures;
+
+use ElPandaPe\Sentinel\Concerns\Auditable;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
+
+final class UuidAuditedSubject extends Model
+{
+    use Auditable;
+    use HasUuids;
+
+    public function getTable(): string
+    {
+        return 'fixture_uuid_subjects';
+    }
+
+    public function usesTimestamps(): bool
+    {
+        return false;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function getGuarded(): array
+    {
+        return [];
+    }
+}

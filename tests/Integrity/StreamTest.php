@@ -10,6 +10,12 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use function ElPandaPe\Sentinel\Tests\auditData;
 use function ElPandaPe\Sentinel\Tests\stream;
 
+// enforceMorphMap is global static state and the suite runs in one process under coverage.
+afterEach(function (): void {
+    Relation::morphMap([], false);
+    Relation::requireMorphMap(false);
+});
+
 it('names the single chain when the scope is global', function (): void {
     expect(stream(['integrity.stream' => 'global'])->resolve(auditData(['tenant_id' => 'acme'])))
         ->toBe('global');
