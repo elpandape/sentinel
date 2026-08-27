@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Tests\Fixtures;
 
 use ElPandaPe\Sentinel\Contracts\Auditable;
+use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Models\Audit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
@@ -80,5 +81,10 @@ final class AuditableSubject extends Model implements Auditable
     public function auditSnapshotsEnabled(): bool
     {
         return true;
+    }
+
+    public function auditSeverity(): ?Severity
+    {
+        return null;
     }
 }

@@ -73,8 +73,13 @@ return [
      */
     'pipeline' => [],
 
+    /*
+     * Hidden attributes are audited by default: auditing is what the package is
+     * for. Turning include_hidden off drops them from every snapshot.
+     */
     'snapshots' => [
         'enabled' => true,
+        'include_hidden' => true,
     ],
 
     'security' => [

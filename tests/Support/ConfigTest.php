@@ -20,6 +20,7 @@ it('reads the defaults shipped with the package', function (): void {
         ->and($config->ledger())->toBe('database')
         ->and($config->connection())->toBeNull()
         ->and($config->snapshotsEnabled())->toBeTrue()
+        ->and($config->snapshotsIncludeHidden())->toBeTrue()
         ->and($config->integrityEnabled())->toBeFalse()
         ->and($config->complianceEnabled())->toBeFalse()
         ->and($config->retention())->toBeEmpty();
@@ -121,3 +122,11 @@ it('rejects a hash algorithm the runtime does not provide', function (): void {
 it('reads the configured stream strategy', function (): void {
     expect(sentinelConfig()->streamStrategy())->toBe('global');
 });
+
+it('reads whether hidden attributes reach the snapshot', function (): void {
+    expect(sentinelConfig(['snapshots.include_hidden' => false])->snapshotsIncludeHidden())->toBeFalse();
+});
+
+it('rejects a non boolean hidden policy', function (): void {
+    sentinelConfig(['snapshots.include_hidden' => 'yes'])->snapshotsIncludeHidden();
+})->throws(ConfigurationException::class, 'must be a boolean, string given');

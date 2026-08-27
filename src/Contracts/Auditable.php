@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Contracts;
 
+use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Models\Audit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
@@ -41,4 +42,6 @@ interface Auditable
     public function auditHashed(): array;
 
     public function auditSnapshotsEnabled(): bool;
+
+    public function auditSeverity(): ?Severity;
 }

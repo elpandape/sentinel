@@ -37,6 +37,7 @@ it('declares the field policies an auditable model answers for', function (): vo
         'auditEncrypted',
         'auditHashed',
         'auditSnapshotsEnabled',
+        'auditSeverity',
     ]);
 });
 
@@ -64,5 +65,6 @@ it('lets a model implement the auditable contract and reach its own entries', fu
     expect($subject->audits()->count())->toBe(1)
         ->and($subject->auditExcluded())->toBe(['remember_token'])
         ->and($subject->auditRedacted())->toBe(['email'])
-        ->and($subject->auditSnapshotsEnabled())->toBeTrue();
+        ->and($subject->auditSnapshotsEnabled())->toBeTrue()
+        ->and($subject->auditSeverity())->toBeNull();
 });

@@ -89,6 +89,11 @@ final readonly class Config
         return $this->boolean('snapshots.enabled');
     }
 
+    public function snapshotsIncludeHidden(): bool
+    {
+        return $this->boolean('snapshots.include_hidden');
+    }
+
     public function integrityEnabled(): bool
     {
         return $this->boolean('integrity.enabled');
