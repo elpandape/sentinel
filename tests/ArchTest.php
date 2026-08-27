@@ -32,3 +32,23 @@ arch('models stay open so the configuration can replace them')
     ->expect('ElPandaPe\Sentinel\Models')
     ->classes()
     ->not->toBeFinal();
+
+arch('the diff component depends on nothing in the package and nothing in the database layer')
+    ->expect('ElPandaPe\Sentinel\Diff')
+    ->not->toUse([
+        'Illuminate\Database',
+        'ElPandaPe\Sentinel\Capture',
+        'ElPandaPe\Sentinel\Concerns',
+        'ElPandaPe\Sentinel\Contracts',
+        'ElPandaPe\Sentinel\Data',
+        'ElPandaPe\Sentinel\Enums',
+        'ElPandaPe\Sentinel\Events',
+        'ElPandaPe\Sentinel\Exceptions',
+        'ElPandaPe\Sentinel\Facades',
+        'ElPandaPe\Sentinel\Integrity',
+        'ElPandaPe\Sentinel\Ledger',
+        'ElPandaPe\Sentinel\Models',
+        'ElPandaPe\Sentinel\Query',
+        'ElPandaPe\Sentinel\Snapshot',
+        'ElPandaPe\Sentinel\Support',
+    ]);

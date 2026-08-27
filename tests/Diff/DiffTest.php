@@ -5,6 +5,7 @@ declare(strict_types=1);
 use ElPandaPe\Sentinel\Diff\Change;
 use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Diff\DiffException;
+use ElPandaPe\Sentinel\Tests\Fixtures\DiffVectors;
 
 it('carries no entries and counts zero when nothing changed', function (): void {
     $diff = Diff::fromChanges([]);
@@ -56,3 +57,33 @@ it('refuses an entry that is not an entry', function (mixed $entry): void {
     'path not a string' => [['path' => 7, 'op' => 'add', 'new' => 1]],
     'no new' => [['path' => '/a', 'op' => 'add']],
 ]);
+
+it('filters the entries of a subtree, in dot notation or as a literal pointer', function (string $path): void {
+    [$before, $after] = DiffVectors::pair();
+
+    expect(Diff::between($before, $after)->for($path)->toArray())->toBe([
+        ['path' => '/profile/address/city', 'op' => 'replace', 'old' => 'Lima', 'new' => 'Arequipa'],
+    ]);
+})->with(['profile.address.city', '/profile/address/city', 'profile.address', '/profile']);
+
+it('keeps a key that contains a dot reachable through its literal pointer', function (): void {
+    $diff = Diff::between(['a.b' => 1], ['a.b' => 2]);
+
+    expect($diff->for('/a.b')->toArray())->toHaveCount(1)
+        ->and($diff->for('a.b')->toArray())->toBeEmpty();
+});
+
+it('returns everything for the root and nothing for a path that changed nothing', function (): void {
+    [$before, $after] = DiffVectors::pair();
+    $diff = Diff::between($before, $after);
+
+    expect($diff->for('')->toArray())->toBe($diff->toArray())
+        ->and($diff->for('name')->toArray())->toBeEmpty();
+});
+
+it('does not let a prefix match a sibling whose name merely starts the same', function (): void {
+    $diff = Diff::between(['role' => 1, 'roles' => 1], ['role' => 2, 'roles' => 2]);
+
+    expect($diff->for('role')->toArray())
+        ->toBe([['path' => '/role', 'op' => 'replace', 'old' => 1, 'new' => 2]]);
+});

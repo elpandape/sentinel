@@ -111,6 +111,25 @@ final readonly class Diff implements Countable, IteratorAggregate
         return $entries;
     }
 
+    /**
+     * Dot notation is what a caller writes; a literal pointer is what a key holding a dot
+     * needs. Both are accepted, and the pointer is the one that is never ambiguous.
+     */
+    public function for(string $path): self
+    {
+        $pointer = Pointer::of($path);
+
+        if ($pointer === '') {
+            return $this;
+        }
+
+        return new self(array_values(array_filter(
+            $this->changes,
+            static fn (Change $change): bool => $change->path === $pointer
+                || str_starts_with($change->path, $pointer.'/'),
+        )));
+    }
+
     public function isEmpty(): bool
     {
         return $this->changes === [];
