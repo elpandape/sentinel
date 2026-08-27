@@ -37,6 +37,13 @@ it('reads the header the configuration names', function (): void {
     expect(($this->through)($request)->headers->get('X-Correlation-Id'))->toBe('edge-42');
 });
 
+it('honours an incoming identifier that fills the column exactly', function (): void {
+    $request = Request::create('/invoices');
+    $request->headers->set('X-Request-Id', str_repeat('a', 64));
+
+    expect(($this->through)($request)->headers->get('X-Request-Id'))->toBe(str_repeat('a', 64));
+});
+
 it('ignores an incoming identifier longer than the column', function (): void {
     $request = Request::create('/invoices');
     $request->headers->set('X-Request-Id', str_repeat('a', 65));

@@ -23,10 +23,18 @@ it('returns the default for an unknown key', function (): void {
 });
 
 it('merges and forgets', function (): void {
+    $this->context->set('reason', 'migration');
     $this->context->merge(['a' => 1, 'b' => 2]);
     $this->context->forget('a');
 
-    expect($this->context->all())->toBe(['b' => 2]);
+    expect($this->context->all())->toBe(['reason' => 'migration', 'b' => 2]);
+});
+
+it('lets what is merged win over what was already there', function (): void {
+    $this->context->set('reason', 'migration');
+    $this->context->merge(['reason' => 'approved by finance']);
+
+    expect($this->context->all())->toBe(['reason' => 'approved by finance']);
 });
 
 it('flushes everything', function (): void {

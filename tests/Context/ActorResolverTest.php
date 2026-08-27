@@ -34,5 +34,5 @@ it('refuses a guard the application never defined', function (): void {
     config()->set('sentinel.resolvers.actor.guard', 'ghost');
 
     expect(fn (): array => app(ActorResolver::class)->resolve())
-        ->toThrow(ConfigurationException::class);
+        ->toThrow(ConfigurationException::class, 'ghost');
 });

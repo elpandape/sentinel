@@ -70,3 +70,14 @@ it('never fills the impersonator with the actor itself', function (): void {
 
     expect(app(ImpersonatorResolver::class)->resolve())->toBeEmpty();
 });
+
+it('resolves nothing when the session carries something no column could hold', function (): void {
+    $user = ActingUser::query()->create(['name' => 'Ada']);
+    auth()->guard()->setUser($user);
+
+    $request = httpRequest('/invoices');
+    $request->setLaravelSession(app('session.store'));
+    $request->session()->put('impersonated_by', ['id' => 7]);
+
+    expect(app(ImpersonatorResolver::class)->resolve())->toBeEmpty();
+});

@@ -5,7 +5,10 @@ declare(strict_types=1);
 use ElPandaPe\Sentinel\Benchmarks\BenchAudited;
 use ElPandaPe\Sentinel\Benchmarks\BenchPlain;
 use ElPandaPe\Sentinel\Benchmarks\BenchSnapshotless;
+use ElPandaPe\Sentinel\Context\ContextEngine;
+use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Diff\Diff;
+use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\SentinelServiceProvider;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
@@ -122,6 +125,22 @@ for ($i = 0; $i < ITERATIONS; $i++) {
 }
 
 $results['diff only (no ledger, no write)'] = (hrtime(true) - $start) / 1_000_000;
+
+// The resolver chain with nothing around it: ten resolvers over one data object, which is
+// the fixed cost this version adds to every capture.
+$engine = $app->make(ContextEngine::class);
+
+for ($i = 0; $i < WARMUP; $i++) {
+    $engine(new AuditData('model', 'created', Severity::Info, new DateTimeImmutable));
+}
+
+$start = hrtime(true);
+
+for ($i = 0; $i < ITERATIONS; $i++) {
+    $engine(new AuditData('model', 'created', Severity::Info, new DateTimeImmutable));
+}
+
+$results['context only (no ledger, no write)'] = (hrtime(true) - $start) / 1_000_000;
 
 $baseline = $results['plain (not audited)'];
 
