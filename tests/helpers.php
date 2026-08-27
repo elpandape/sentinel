@@ -12,6 +12,7 @@ use ElPandaPe\Sentinel\Integrity\Hasher;
 use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
 use ElPandaPe\Sentinel\Integrity\Stream;
 use ElPandaPe\Sentinel\Integrity\Verifier;
+use ElPandaPe\Sentinel\Snapshot\SnapshotBuilder;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Events\QueryExecuted;
@@ -167,6 +168,11 @@ function withSortedKeys(array $value): array
 function hasher(): Hasher
 {
     return new Hasher(new JsonCanonicalizer);
+}
+
+function snapshotBuilder(): SnapshotBuilder
+{
+    return new SnapshotBuilder(sentinelConfig());
 }
 
 /**
