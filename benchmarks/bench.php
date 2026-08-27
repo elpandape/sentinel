@@ -5,6 +5,7 @@ declare(strict_types=1);
 use ElPandaPe\Sentinel\Benchmarks\BenchAudited;
 use ElPandaPe\Sentinel\Benchmarks\BenchPlain;
 use ElPandaPe\Sentinel\Benchmarks\BenchSnapshotless;
+use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\SentinelServiceProvider;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
@@ -98,6 +99,29 @@ $app->forgetScopedInstances();
 $run(BenchAudited::class, WARMUP, $offset);
 $offset += WARMUP;
 $results['audited, null ledger'] = $run(BenchAudited::class, ITERATIONS, $offset);
+
+// The comparator with nothing around it: the row that says what the diff itself costs,
+// separated from the write it happens inside.
+$sample = [
+    'active' => true,
+    'email' => 'subject-1@example.com',
+    'id' => 1,
+    'name' => 'subject-1',
+    'role' => 'admin',
+    'score' => 1,
+];
+
+for ($i = 0; $i < WARMUP; $i++) {
+    Diff::between([], $sample);
+}
+
+$start = hrtime(true);
+
+for ($i = 0; $i < ITERATIONS; $i++) {
+    Diff::between([], $sample);
+}
+
+$results['diff only (no ledger, no write)'] = (hrtime(true) - $start) / 1_000_000;
 
 $baseline = $results['plain (not audited)'];
 
