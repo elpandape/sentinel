@@ -18,6 +18,7 @@ use ElPandaPe\Sentinel\Pipeline\Discard;
 use ElPandaPe\Sentinel\Security\Keyring;
 use ElPandaPe\Sentinel\Security\Maskers;
 use ElPandaPe\Sentinel\Support\Config;
+use ElPandaPe\Sentinel\Support\Policies;
 use ElPandaPe\Sentinel\Support\PolicyRegistry;
 use ElPandaPe\Sentinel\Support\PublishedMigration;
 use Illuminate\Console\Events\CommandFinished;
@@ -42,6 +43,9 @@ final class SentinelServiceProvider extends ServiceProvider
         ));
 
         $this->app->singleton(Canonicalizer::class, JsonCanonicalizer::class);
+
+        // Not scoped: a policy is a decision of the application, not of the request it was registered in.
+        $this->app->singleton(Policies::class);
 
         $this->app->bind(Audit::class, static function (Application $app): Audit {
             $model = $app->make(Config::class)->model('audit', Audit::class);

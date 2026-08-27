@@ -6,9 +6,11 @@ namespace ElPandaPe\Sentinel;
 
 use Closure;
 use ElPandaPe\Sentinel\Context\ExecutionContext;
+use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Integrity\VerificationResult;
 use ElPandaPe\Sentinel\Integrity\Verifier;
 use ElPandaPe\Sentinel\Support\Config;
+use ElPandaPe\Sentinel\Support\Policies;
 
 final class Sentinel
 {
@@ -18,7 +20,19 @@ final class Sentinel
         private readonly Config $config,
         private readonly ExecutionContext $context,
         private readonly Verifier $verifier,
+        private readonly Policies $policies,
     ) {}
+
+    /**
+     * The last word on whether an entry settles. A policy that returns false discards it,
+     * before the ledger has given it a sequence and therefore without leaving a gap.
+     *
+     * @param  Closure(AuditData): bool  $policy
+     */
+    public function filter(Closure $policy): void
+    {
+        $this->policies->add($policy);
+    }
 
     public function verifyIntegrity(string $stream, ?int $from = null, ?int $to = null): VerificationResult
     {

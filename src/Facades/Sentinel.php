@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Facade;
 /**
  * @method static \ElPandaPe\Sentinel\Support\Config config()
  * @method static \ElPandaPe\Sentinel\Context\ExecutionContext context()
+ * @method static void filter(\Closure $policy)
  * @method static bool isRecording()
  * @method static void pause()
  * @method static void resume()

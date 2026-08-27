@@ -90,6 +90,7 @@ return [
         ElPandaPe\Sentinel\Pipeline\Stages\NormalizeData::class,
         ElPandaPe\Sentinel\Pipeline\Stages\MaskSensitiveData::class,
         ElPandaPe\Sentinel\Pipeline\Stages\EncryptSensitiveData::class,
+        ElPandaPe\Sentinel\Pipeline\Stages\EnforcePolicies::class,
     ],
 
     /*

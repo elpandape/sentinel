@@ -5,6 +5,7 @@ declare(strict_types=1);
 return [
 
     'discarded' => [
+        'policy' => 'Una policy descartó el asiento :event de :type :id antes de que llegara al ledger.',
         'unchanged' => 'El :event de :type :id no cambió nada de lo que se audita, así que no se escribió ningún asiento.',
         'unspecified' => 'La etapa :stage descartó el asiento :event de :type :id antes de que llegara al ledger.',
     ],
