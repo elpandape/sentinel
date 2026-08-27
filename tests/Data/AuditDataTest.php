@@ -11,11 +11,11 @@ it('needs only what the capture always knows', function (): void {
         audit_type: 'model',
         event: 'created',
         severity: Severity::Info,
-        source: Source::Http,
         occurred_at: new DateTimeImmutable('2026-08-26 10:00:00'),
     );
 
-    expect($data->stream)->toBeNull()
+    expect($data->source)->toBe(Source::System)
+        ->and($data->stream)->toBeNull()
         ->and($data->context)->toBeEmpty()
         ->and($data->before)->toBeNull()
         ->and($data->capture_id)->toBeNull()
@@ -27,10 +27,10 @@ it('is mutable, because the pipeline is what transforms it', function (): void {
         audit_type: 'model',
         event: 'updated',
         severity: Severity::Info,
-        source: Source::Cli,
         occurred_at: new DateTimeImmutable('2026-08-26 10:00:00'),
     );
 
+    $data->source = Source::Cli;
     $data->before = ['email' => 'a@example.com'];
     $data->after = ['email' => 'b@example.com'];
     $data->severity = Severity::Warning;
@@ -39,6 +39,7 @@ it('is mutable, because the pipeline is what transforms it', function (): void {
     expect($data->before)->toBe(['email' => 'a@example.com'])
         ->and($data->after)->toBe(['email' => 'b@example.com'])
         ->and($data->severity)->toBe(Severity::Warning)
+        ->and($data->source)->toBe(Source::Cli)
         ->and($data->capture_id)->toBe('01j0000000000000000000000');
 });
 

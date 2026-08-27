@@ -10,7 +10,6 @@ use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
 use ElPandaPe\Sentinel\Enums\Severity;
-use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Sentinel;
 use ElPandaPe\Sentinel\Snapshot\SnapshotBuilder;
@@ -46,8 +45,6 @@ final readonly class ModelCapture
             audit_type: self::AUDIT_TYPE,
             event: $event->value,
             severity: $this->severity($model, $event),
-            // Context resolution lands in v0.6.0; until then an entry says where it did not come from.
-            source: Source::System,
             occurred_at: CarbonImmutable::now(),
             subject_type: $model->getMorphClass(),
             subject_id: $this->key($model),

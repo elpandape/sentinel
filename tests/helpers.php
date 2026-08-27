@@ -8,7 +8,6 @@ use DateTimeImmutable;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Enums\Severity;
-use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Integrity\Hasher;
 use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
 use ElPandaPe\Sentinel\Integrity\Stream;
@@ -188,7 +187,6 @@ function auditData(array $overrides = []): AuditData
         'audit_type' => 'model',
         'event' => 'created',
         'severity' => Severity::Info,
-        'source' => Source::System,
         'occurred_at' => new DateTimeImmutable('2026-08-26 10:00:00.000000'),
         ...$overrides,
     ]);
