@@ -6,6 +6,7 @@ use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Exceptions\LedgerException;
 use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
+use ElPandaPe\Sentinel\Ledger\EntryBuilder;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use Illuminate\Database\Events\QueryExecuted;
@@ -62,6 +63,16 @@ it('writes an entry that verifies against the row it stored', function (): void 
     $stored = Audit::query()->firstOrFail();
 
     expect(hasher()->hash($stored))->toBe($written->hash);
+});
+
+it('marks an entry it was appended as one the row already holds', function (): void {
+    $sealed = app(EntryBuilder::class)->build(auditData(), 'imported', 1, null, null);
+
+    $appended = app(DatabaseLedger::class)->append($sealed);
+
+    expect($appended->exists)->toBeTrue()
+        ->and($appended->wasRecentlyCreated)->toBeTrue()
+        ->and(Audit::query()->where('id', $sealed->id)->count())->toBe(1);
 });
 
 it('finds nothing for an id that was never written', function (): void {

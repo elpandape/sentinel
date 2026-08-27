@@ -101,12 +101,16 @@ it('leaves an entry with half a subject out of the version count in memory too',
     expect($written->pluck('version')->all())->toBe([null, null]);
 });
 
-it('tells two subjects apart when their type and key run together', function (): void {
+it('tells seven subjects apart however their type and key run together', function (): void {
     $written = $this->ledger->writeMany([
+        auditData(['subject_type' => 'user', 'subject_id' => '1']),
+        auditData(['subject_type' => 'user', 'subject_id' => '2']),
+        auditData(['subject_type' => 'role', 'subject_id' => '1']),
         auditData(['subject_type' => 'user', 'subject_id' => '11']),
         auditData(['subject_type' => 'user1', 'subject_id' => '1']),
-        auditData(['subject_type' => 'user', 'subject_id' => '11']),
+        auditData(['subject_type' => 'ab', 'subject_id' => 'c']),
+        auditData(['subject_type' => 'b', 'subject_id' => 'ca']),
     ]);
 
-    expect($written->pluck('version')->all())->toBe([1, 1, 2]);
+    expect($written->pluck('version')->all())->toBe([1, 1, 1, 1, 1, 1, 1]);
 });
