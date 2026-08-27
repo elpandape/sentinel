@@ -110,6 +110,12 @@ it('covers both ends of the period it was given', function (): void {
         ->and($period?->covers(new DateTimeImmutable('2026-09-01 00:00:00')))->toBeFalse();
 });
 
+it('takes a period that starts and ends at the same instant', function (): void {
+    $moment = new DateTimeImmutable('2026-08-15 10:00:00');
+
+    expect(auditQuery()->between($moment, $moment)->period?->covers($moment))->toBeTrue();
+});
+
 it('refuses a period that ends before it starts', function (): void {
     expect(fn (): AuditQuery => auditQuery()->between(
         new DateTimeImmutable('2026-08-31 23:59:59'),

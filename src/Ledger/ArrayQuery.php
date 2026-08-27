@@ -21,10 +21,13 @@ final readonly class ArrayQuery
      */
     public function resolve(array $entries, AuditQuery $query): array
     {
-        $matched = array_values(array_filter(
-            $entries,
-            fn (Audit $audit): bool => $this->matches($audit, $query),
-        ));
+        $matched = [];
+
+        foreach ($entries as $audit) {
+            if ($this->matches($audit, $query)) {
+                $matched[] = $audit;
+            }
+        }
 
         usort($matched, $this->chronologically(...));
 

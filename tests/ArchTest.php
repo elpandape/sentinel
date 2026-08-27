@@ -58,6 +58,10 @@ arch('the diff component depends on nothing in the package and nothing in the da
         'ElPandaPe\Sentinel\Support',
     ]);
 
+arch('the query surface states a query without knowing what answers it')
+    ->expect('ElPandaPe\Sentinel\Query')
+    ->not->toUse('Illuminate\Database');
+
 arch('every resolver the package ships implements the contract and is final')
     ->expect('ElPandaPe\Sentinel\Context\Resolvers')
     ->toImplement(ElPandaPe\Sentinel\Contracts\Resolver::class)

@@ -9,6 +9,8 @@ use ElPandaPe\Sentinel\Query\AuditPage;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Tests\Fixtures\AuditedSubject;
+use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\DB;
 
 use function ElPandaPe\Sentinel\Tests\insertAudit;
 
@@ -68,6 +70,42 @@ it('walks to the last page, which says there is nothing behind it', function ():
     expect($page->entries->pluck('event')->all())->toBe(['created'])
         ->and($page->hasMore)->toBeFalse()
         ->and($page->page)->toBe(2);
+});
+
+it('hands back a page of one entry, which is still a page', function (): void {
+    $subject = AuditedSubject::query()->create(['name' => 'Ada']);
+    $subject->update(['name' => 'Grace']);
+
+    $page = Sentinel::audits()->for($subject)->paginate(1);
+
+    expect($page)->toHaveCount(1)
+        ->and($page->perPage)->toBe(1)
+        ->and($page->hasMore)->toBeTrue();
+});
+
+it('says there is nothing behind a page that filled exactly to its last entry', function (): void {
+    $subject = AuditedSubject::query()->create(['name' => 'Ada']);
+    $subject->update(['name' => 'Grace']);
+    $subject->update(['name' => 'Hedy']);
+    $subject->update(['name' => 'Radia']);
+
+    $page = Sentinel::audits()->for($subject)->paginate(2, 2);
+
+    expect($page)->toHaveCount(2)
+        ->and($page->hasMore)->toBeFalse();
+});
+
+it('asks the store for exactly one entry more than the page holds', function (): void {
+    $statements = [];
+
+    DB::listen(function (QueryExecuted $query) use (&$statements): void {
+        $statements[] = $query->sql;
+    });
+
+    Sentinel::audits()->paginate(25, 3);
+
+    expect(end($statements))->toContain('limit 26')
+        ->and(end($statements))->toContain('offset 50');
 });
 
 it('refuses a page that cannot exist', function (int $perPage, int $page): void {

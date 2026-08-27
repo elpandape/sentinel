@@ -169,6 +169,21 @@ it('gives the oldest entry first, and the newest first on request', function ():
         ->toBe(['third', 'second', 'first']);
 });
 
+it('breaks a tie on the ledger clock by the identifier, not by the order it was handed them', function (): void {
+    $this->travelTo('2026-08-15 10:00:00');
+
+    foreach (['C', 'A', 'B'] as $position => $suffix) {
+        $this->ledger->append(
+            app(EntryBuilder::class)
+                ->build(auditData(), 'global', $position + 1, null, null)
+                ->forceFill(['id' => str_pad('01JTIE', 25, '0').$suffix])
+        );
+    }
+
+    expect($this->ledger->query(auditQuery($this->ledger))->pluck('id')->all())
+        ->toBe([str_pad('01JTIE', 25, '0').'A', str_pad('01JTIE', 25, '0').'B', str_pad('01JTIE', 25, '0').'C']);
+});
+
 it('orders entries stamped in the same microsecond by the ulid that carries the instant', function (): void {
     $this->travelTo('2026-08-15 10:00:00');
     $written = $this->ledger->writeMany([auditData(), auditData(), auditData()]);
