@@ -2,6 +2,81 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.6.0 — Context engine (2026-08-27)
+
+### Added
+
+- Ten resolvers under `Context\Resolvers\`, each final, stateless and replaceable one at a time from
+  the `resolvers` section of the config: `Actor`, `Impersonator`, `Tenant`, `Request`, `Session`,
+  `Trace`, `Source`, `Host`, `Job` and `Command`. A resolver implements one method and returns what
+  it could resolve, or an empty array.
+- `Context\ContextEngine`: the single invocable that runs the chain over an `AuditData` before it
+  reaches the ledger, so the context is the one of the moment audited and travels inside the data
+  object for the release that defers the write. One rule decides where a resolved key lands — the
+  nine names matching a promoted column go to the column, everything else goes into `context` — and
+  running it twice over the same entry produces the same entry, because every column is written on
+  every pass, absent value included.
+- `Context\Runtime`: what the process is doing right now, latched from events the framework already
+  fires — the router reaching a request, artisan starting a command, a worker picking up a job, the
+  scheduler running a task. Resolvers read a fact instead of inspecting the world, which is also why
+  every source in the matrix has a test that produces it without a server behind it.
+- `Http\Middleware\AssignRequestId`: opt-in and registered in no group. It honours an incoming
+  identifier when it is printable and fits the column, generates one otherwise, and returns it in the
+  response. The header is `X-Request-Id`, configurable.
+- `Context\Identity`: how a person becomes two columns — the morph alias for a model, the class name
+  for anything else.
+- Sixth frozen entry in the golden dataset, this one with all nine context columns and a populated
+  `context` payload.
+
+### Changed
+
+- Model entries carry their context. `source` stops being a default nobody decided: each of the eight
+  values of the enum is produced by its own signal, in a declared order, and the entry says where it
+  came from instead of where it did not.
+- `payload_version` stays at **1**: the nine columns have been part of the canonical payload since
+  `v0.3.0`, and filling declared fields changes what is hashed, not how. The five entries frozen
+  before this version reproduce their hashes byte for byte.
+- `AuditData` takes `occurred_at` fourth and `source` fifth with a default of `system`, so a data
+  object that never meets the engine still carries a valid, honest value.
+- `integrity.stream` ships as `tenant`. On its own it changes nothing — the stream falls back to
+  `global` until a tenant actually resolves — and an installation that published its config keeps
+  whatever value it has.
+- `require` gains `illuminate/console`, `illuminate/http`, `illuminate/queue` and
+  `illuminate/routing`. The package read a request, a command and a job without asking for any of
+  them; it worked only because the framework metapackage happened to be installed.
+- `mutation-nightly.yml` gains thresholds for `Context/` (95) and `Http/` (90). `Context/` entered
+  this version at 80 % as an empty container and leaves it at 96 % with ten resolvers inside.
+- `make bench` gains a row that isolates what the resolver chain costs per capture from the write it
+  lands in.
+
+### Upgrade notes
+
+- **Activating a tenant partitions the chain.** `integrity.stream` ships as `tenant` for new
+  installations, which behaves exactly like `global` until `resolvers.tenant` resolves a value. The
+  moment one does, entries move to a `tenant:<id>` stream of their own, with `sequence` restarting at
+  `1` and `previous_hash` at `null`. Older chains keep verifying with their own genealogy and no
+  migration rewrites them, but they stop growing. Set `integrity.stream` explicitly before wiring a
+  tenant if you do not want that partition.
+- **A published config keeps working without being republished.** Every key under `resolvers` also
+  has its default in code, which is what an installation that published the file while the subtree
+  was still empty falls back to — the config merge is shallow, so the published empty array would
+  otherwise win and leave that installation with no resolvers and no error to show for it.
+- **Entries written before this version are untouched.** They keep their empty context and their
+  `source` of `system`, and their hashes stay valid. Nothing backfills them; the integrity rule
+  forbids it.
+
+### Notes
+
+- **Context carries sensitive data.** Addresses, user agents, urls, session identifiers and command
+  arguments now sit in `context`, on entries that already duplicate the audited value in `changes`.
+  `CommandResolver` masks any argument whose name matches `resolvers.command.redact` at a fixed
+  length, so nothing about the secret leaks; general redaction and encryption still land in `v0.7.0`.
+- A scheduled task Laravel runs in a subprocess reaches that child with no scheduler signal, so the
+  child reports `cli`. The parent process and the scheduler's own commands are covered.
+- No user-facing strings in this version. The new exceptions are developer-facing — an undefined
+  guard, a tenant hook returning something no column can hold, a boundary that is neither a pattern
+  nor a closure — and stay in plain English, as Laravel itself does.
+
 ## v0.5.0 — Diff engine (2026-08-26)
 
 ### Added

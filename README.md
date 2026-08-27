@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.4.0-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.6.0-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -20,7 +20,7 @@ the state was before, what it is now — and whether the record itself can be pr
 
 ```json
 "repositories": [{ "type": "vcs", "url": "https://github.com/elpandape/sentinel" }],
-"require": { "elpandape/sentinel": "v0.4.0" }
+"require": { "elpandape/sentinel": "v0.6.0" }
 ```
 
 ```bash
@@ -36,13 +36,16 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.3.0` | `DatabaseLedger`, `NullLedger`, the hash chain, verification, immutability guards |
 | `v0.4.0` | Model auditing, full snapshots, the `Auditable` trait, the write-path baseline |
 | `v0.5.0` | Structured diffs, `$audit->diff()`, JSON Patch import and export |
+| `v0.6.0` | Resolved context: actor, impersonator, tenant, request, trace, source, host, job, command |
 
-Everything else is on the roadmap: resolved context, relationship auditing, business transactions,
-custom events, state transitions, restore, advanced verification (checkpoints and signatures),
-retention and compliance, performance modes and distributed tracing.
+Everything else is on the roadmap: relationship auditing, business transactions, custom events,
+state transitions, restore, advanced verification (checkpoints and signatures), retention and
+compliance, performance modes and distributed tracing.
 
 `v0.4.0` is the version that starts auditing: a model with the trait writes its own chained entries.
 `v0.5.0` is the one that answers what changed, instead of leaving you two states to compare.
+`v0.6.0` is the one that answers who did it and from where, instead of every entry claiming it came
+from nowhere.
 
 ## Quick start
 
@@ -202,6 +205,160 @@ depends on them: entries are read by key, and the chain hashes the canonical for
 
 `Diff` knows nothing about eloquent or about the rest of the package — `Diff::between($a, $b)` works
 on any two structures, inside an audit or outside one.
+
+## Context & resolvers
+
+Every entry resolves its own circumstances while it is being built — before it reaches the ledger, so
+the context is the one of the moment audited. Ten resolvers do it, each replaceable one at a time:
+
+| Resolver | Fills |
+|---|---|
+| `ActorResolver` | `actor_type`, `actor_id` from the configured guard |
+| `ImpersonatorResolver` | `impersonator_type`, `impersonator_id` |
+| `TenantResolver` | `tenant_id` |
+| `RequestResolver` | `request_id`, and `ip`, `user_agent`, `url`, `route`, `method` in `context` |
+| `SessionResolver` | `context.session_id` |
+| `TraceResolver` | `trace_id`, `span_id` from an incoming `traceparent` |
+| `SourceResolver` | `source` |
+| `HostResolver` | `context.hostname`, `context.environment` |
+| `JobResolver` | `context.job`, `queue`, `attempts`, `batch_id` |
+| `CommandResolver` | `context.command` and its arguments, redacted |
+
+Nine names are **promoted columns** — `actor_type`, `actor_id`, `impersonator_type`,
+`impersonator_id`, `tenant_id`, `request_id`, `trace_id`, `span_id` and `source`. A resolver
+returning one of them fills the column; every other key it returns lands inside the `context` JSON.
+That is the whole mapping rule.
+
+### Where an entry came from
+
+`source` is not a default and not a guess by elimination. Each value is produced by a signal the
+framework itself emits, and the table is read top to bottom:
+
+| `source` | Signal |
+|---|---|
+| `queue` | Sentinel is writing the entry from its own job |
+| `job` | A queued job of the application is in flight |
+| `scheduler` | A scheduled task is running, or the command is `schedule:run`, `schedule:work` or `schedule:finish` |
+| `api` | A request reached the router and the boundary recognises it as the api |
+| `http` | A request reached the router and the boundary does not |
+| `cli` | An artisan command is running |
+| `console` | A console process with no command: a REPL, a boot script |
+| `system` | No signal applies |
+
+The `http`/`api` boundary is a route pattern by default, `api/*`, and takes a closure instead:
+
+```php
+// config/sentinel.php
+'resolvers' => [
+    'request' => ['api' => fn (Request $request): bool => $request->hasHeader('X-Api-Key')],
+],
+```
+
+### Replacing a resolver
+
+Every entry takes a `class`, and `null` means the one the package ships:
+
+```php
+'resolvers' => [
+    'tenant' => ['class' => App\Sentinel\SpatieTenantResolver::class],
+],
+```
+
+A resolver implements one method and returns whatever it could resolve, or an empty array:
+
+```php
+use ElPandaPe\Sentinel\Contracts\Resolver;
+
+final class SpatieTenantResolver implements Resolver
+{
+    public function resolve(): array
+    {
+        return Tenant::current() === null ? [] : ['tenant_id' => (string) Tenant::current()->id];
+    }
+}
+```
+
+For the common case a closure is enough and needs no class at all:
+
+```php
+'resolvers' => [
+    'tenant' => ['using' => fn (): ?string => Tenant::current()?->id],
+],
+```
+
+> **Activating a tenant partitions the chain.** `integrity.stream` ships as `tenant`, which behaves
+> exactly like `global` until a tenant actually resolves. The moment one does, entries move to a
+> `tenant:<id>` stream of their own, with `sequence` restarting at `1`. Existing chains keep
+> verifying with their own genealogy — nothing is rewritten — but they stop growing. Set
+> `integrity.stream` explicitly before wiring a tenant if you do not want that partition.
+
+### Pushing your own context
+
+`Sentinel::withContext()` adds to the `context` payload for the duration of a callback:
+
+```php
+Sentinel::withContext(['reason' => 'Approved by finance'], function () use ($invoice) {
+    $invoice->update(['status' => 'paid']);
+});
+```
+
+Manual context merges **over** the resolved payload and can never reach a promoted column: pushing
+an `actor_id` by hand puts it in the payload, not in the column. To change who acted, replace
+`ActorResolver`.
+
+### Correlating a request
+
+`request_id` is generated per request and is the same on every entry that request writes. To honour
+an identifier a gateway already assigned — and hand it back in the response — add the middleware. It
+is opt-in and registered in no group:
+
+```php
+// bootstrap/app.php
+$middleware->append(ElPandaPe\Sentinel\Http\Middleware\AssignRequestId::class);
+```
+
+The header is `X-Request-Id` by default and configurable at `resolvers.request.header`. An incoming
+value is honoured when it is printable and fits the 64-character column; otherwise one is generated.
+
+> **Context carries sensitive data.** Addresses, user agents, urls, session identifiers and command
+> arguments now sit in `context`. `CommandResolver` masks any argument whose name matches
+> `resolvers.command.redact` — `password`, `token` and `secret` by default — and nothing else is
+> redacted until `v0.7.0`.
+
+## Actor & impersonator
+
+An entry tells **who acted** apart from **on whose behalf**:
+
+```php
+$audit->actor_type;         // App\Models\User
+$audit->actor_id;           // 100
+$audit->impersonator_type;  // App\Models\User
+$audit->impersonator_id;    // 1
+```
+
+The actor comes from the configured guard, `null` meaning the application's default:
+
+```php
+'resolvers' => [
+    'actor' => ['guard' => 'admin'],
+],
+```
+
+The impersonator comes from a session key, `impersonated_by` by default:
+
+```php
+'resolvers' => [
+    'impersonator' => ['session_key' => 'original_user'],
+],
+```
+
+Two invariants hold, and tests fix them. Without impersonation both columns are `null` — never a
+copy of the actor. And an identifier equal to the actor's own is not impersonation either: it is the
+same session, and the columns stay `null`.
+
+Because `Illuminate\Contracts\Auth\Guard` exposes no provider, the impersonator carries the class the
+guard authenticates rather than a hydrated model. Replace `ImpersonatorResolver` if your
+impersonation package stores something else.
 
 ## Configuration
 
