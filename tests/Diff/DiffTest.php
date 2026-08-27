@@ -87,3 +87,26 @@ it('does not let a prefix match a sibling whose name merely starts the same', fu
     expect($diff->for('role')->toArray())
         ->toBe([['path' => '/role', 'op' => 'replace', 'old' => 1, 'new' => 2]]);
 });
+
+it('names the entry that is malformed by its position in the list', function (): void {
+    $entries = [
+        ['path' => '/a', 'op' => 'add', 'old' => null, 'new' => 1],
+        ['path' => '/b', 'op' => 'jump', 'old' => null, 'new' => 2],
+    ];
+
+    expect(fn (): Diff => Diff::fromEntries($entries))
+        ->toThrow(DiffException::class, 'at index 1');
+});
+
+it('gives back the very same diff when the subtree asked for is the root', function (): void {
+    $diff = Diff::fromChanges([new Change('/a', 'add', null, 1)]);
+
+    expect($diff->for(''))->toBe($diff);
+});
+
+it('escapes each segment of dot notation on its way to a pointer', function (): void {
+    $diff = Diff::between(['a/b' => ['c' => 1]], ['a/b' => ['c' => 2]]);
+
+    expect($diff->for('a/b.c')->toArray())
+        ->toBe([['path' => '/a~1b/c', 'op' => 'replace', 'old' => 1, 'new' => 2]]);
+});

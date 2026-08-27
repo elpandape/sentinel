@@ -204,12 +204,12 @@ final class Comparator
     }
 
     /**
-     * The type travels inside the key: without it an id of 1 and an id of '1' would be
-     * the same element, and the strict equality the rest of the comparison applies would
-     * stop holding here.
+     * var_export renders the type as well as the value, so an id of 1 and an id of '1'
+     * key differently and the strict equality the rest of the comparison applies keeps
+     * holding here.
      */
     private static function key(mixed $value): string
     {
-        return get_debug_type($value).':'.var_export($value, true);
+        return var_export($value, true);
     }
 }

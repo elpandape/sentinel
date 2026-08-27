@@ -123,3 +123,12 @@ it('does not match on an identity that is not a scalar', function (): void {
         ['path' => '/roles/0/n', 'op' => 'replace', 'old' => 'a', 'new' => 'b'],
     ]);
 });
+
+it('needs both sides identified before it matches on identity', function (): void {
+    $before = ['roles' => [['id' => 1, 'n' => 'a']]];
+    $after = ['roles' => [['n' => 'a']]];
+
+    expect(diffEntries($before, $after))->toBe([
+        ['path' => '/roles/0/id', 'op' => 'remove', 'old' => 1, 'new' => null],
+    ]);
+});

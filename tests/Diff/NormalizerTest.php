@@ -55,12 +55,28 @@ it('refuses a value no contract reaches, naming the path', function (): void {
     Normalizer::value(['profile' => ['badge' => new UnrepresentableValue]]);
 })->throws(DiffException::class, '/profile/badge');
 
-it('refuses a structure deeper than the declared limit', function (): void {
+it('reduces a structure that reaches the declared limit exactly', function (): void {
+    $value = 'leaf';
+
+    for ($i = 0; $i < Normalizer::MAX_DEPTH; $i++) {
+        $value = ['down' => $value];
+    }
+
+    expect(Normalizer::value($value))->toBe($value);
+});
+
+it('refuses the first level past the declared limit, naming where it gave up', function (): void {
     $value = 'leaf';
 
     for ($i = 0; $i <= Normalizer::MAX_DEPTH; $i++) {
         $value = ['down' => $value];
     }
 
-    Normalizer::value($value);
-})->throws(DiffException::class, 'deeper than');
+    expect(fn (): mixed => Normalizer::value($value))
+        ->toThrow(DiffException::class, '/down/down/down');
+});
+
+it('names the root as such when the value it cannot represent is the value itself', function (): void {
+    expect(fn (): mixed => Normalizer::value(new UnrepresentableValue))
+        ->toThrow(DiffException::class, 'Cannot diff [/]:');
+});

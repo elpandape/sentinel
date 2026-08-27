@@ -109,3 +109,15 @@ it('is empty and countable straight off the comparison', function (): void {
     expect(Diff::between(['a' => 1], ['a' => 1])->isEmpty())->toBeTrue()
         ->and(Diff::between(['a' => 1], ['a' => 2]))->toHaveCount(1);
 });
+
+it('replaces outright when only one of the two sides is a structure', function (): void {
+    expect(diffEntries(['a' => 1], 'x'))
+        ->toBe([['path' => '', 'op' => 'replace', 'old' => ['a' => 1], 'new' => 'x']])
+        ->and(diffEntries('x', ['a' => 1]))
+        ->toBe([['path' => '', 'op' => 'replace', 'old' => 'x', 'new' => ['a' => 1]]]);
+});
+
+it('builds a pointer segment from a key that is not a string', function (): void {
+    expect(diffEntries([5 => 1, 'a' => 1], [5 => 2, 'a' => 1]))
+        ->toBe([['path' => '/5', 'op' => 'replace', 'old' => 1, 'new' => 2]]);
+});

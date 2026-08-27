@@ -83,3 +83,20 @@ it('refuses a malformed operation', function (mixed $operation): void {
     'replace with no value' => [['op' => 'replace', 'path' => '/a']],
     'op not a string' => [['op' => 7, 'path' => '/a', 'value' => 1]],
 ]);
+
+it('names the operation that is malformed by its position in the patch', function (): void {
+    $patch = [
+        ['op' => 'add', 'path' => '/a', 'value' => 1],
+        ['op' => 'add', 'path' => '/b'],
+    ];
+
+    expect(fn (): Diff => Diff::fromJsonPatch($patch))
+        ->toThrow(DiffException::class, 'at index 1');
+});
+
+it('names the unreadable operation by its position too', function (): void {
+    $patch = [['op' => 'add', 'path' => '/a', 'value' => 1], 'not an operation'];
+
+    expect(fn (): Diff => Diff::fromJsonPatch($patch))
+        ->toThrow(DiffException::class, 'at index 1');
+});
