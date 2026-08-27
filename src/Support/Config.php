@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Support;
 
 use Closure;
+use ElPandaPe\Sentinel\Contracts\Resolver;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
 use ElPandaPe\Sentinel\Enums\Mode;
 use ElPandaPe\Sentinel\Enums\Severity;
@@ -138,6 +139,124 @@ final readonly class Config
         }
 
         return $policies;
+    }
+
+    /**
+     * The defaults live here and not only in the publishable file because the config merge is
+     * shallow: an installation that published sentinel.php while `resolvers` was still an empty
+     * array would otherwise override the whole subtree and end up with no resolvers at all.
+     *
+     * @template TResolver of Resolver
+     *
+     * @param  class-string<TResolver>  $default
+     * @return class-string<TResolver>
+     */
+    public function resolverClass(string $name, string $default): string
+    {
+        $value = $this->repository->get("sentinel.resolvers.{$name}.class");
+
+        if ($value === null) {
+            return $default;
+        }
+
+        if (! is_string($value)) {
+            throw ConfigurationException::expected("resolvers.{$name}.class", 'a class-string or null', get_debug_type($value));
+        }
+
+        if (! class_exists($value) || ! is_a($value, Resolver::class, true)) {
+            throw ConfigurationException::invalidClass("resolvers.{$name}.class", $value, Resolver::class);
+        }
+
+        /** @var class-string<TResolver> $value */
+        return $value;
+    }
+
+    public function actorGuard(): ?string
+    {
+        $value = $this->repository->get('sentinel.resolvers.actor.guard');
+
+        return $value === null || is_string($value)
+            ? $value
+            : throw ConfigurationException::expected('resolvers.actor.guard', 'a string or null', get_debug_type($value));
+    }
+
+    public function impersonatorSessionKey(): string
+    {
+        return $this->resolverString('impersonator.session_key', 'impersonated_by');
+    }
+
+    public function tenantUsing(): ?Closure
+    {
+        $value = $this->repository->get('sentinel.resolvers.tenant.using');
+
+        return $value === null || $value instanceof Closure
+            ? $value
+            : throw ConfigurationException::expected('resolvers.tenant.using', 'a closure or null', get_debug_type($value));
+    }
+
+    public function requestIdHeader(): string
+    {
+        return $this->resolverString('request.header', 'X-Request-Id');
+    }
+
+    public function apiBoundary(): string|Closure
+    {
+        $value = $this->repository->get('sentinel.resolvers.request.api');
+
+        return match (true) {
+            $value === null => 'api/*',
+            is_string($value) && $value !== '' => $value,
+            $value instanceof Closure => $value,
+            default => throw ConfigurationException::expected('resolvers.request.api', 'a route pattern or a closure', get_debug_type($value)),
+        };
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function commandRedactions(): array
+    {
+        $value = $this->repository->get('sentinel.resolvers.command.redact');
+
+        if ($value === null) {
+            return ['password', 'token', 'secret'];
+        }
+
+        if (! is_array($value)) {
+            throw ConfigurationException::expected('resolvers.command.redact', 'a list of strings', get_debug_type($value));
+        }
+
+        $needles = [];
+
+        foreach ($value as $needle) {
+            $needles[] = is_string($needle)
+                ? $needle
+                : throw ConfigurationException::expected('resolvers.command.redact', 'a list of strings', get_debug_type($needle));
+        }
+
+        return $needles;
+    }
+
+    public function redactionMask(): string
+    {
+        $value = $this->repository->get('sentinel.security.redaction.mask');
+
+        return match (true) {
+            $value === null || $value === '' => '*',
+            is_string($value) => $value,
+            default => throw ConfigurationException::expected('security.redaction.mask', 'a string', get_debug_type($value)),
+        };
+    }
+
+    private function resolverString(string $key, string $default): string
+    {
+        $value = $this->repository->get("sentinel.resolvers.{$key}");
+
+        return match (true) {
+            $value === null => $default,
+            is_string($value) && $value !== '' => $value,
+            default => throw ConfigurationException::expected("resolvers.{$key}", 'a non-empty string or null', get_debug_type($value)),
+        };
     }
 
     private function boolean(string $key): bool

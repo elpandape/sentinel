@@ -26,7 +26,7 @@ use Orchestra\Testbench\Foundation\Application as TestbenchApplication;
 
 it('merges the package configuration', function (): void {
     expect(config('sentinel.tables.prefix'))->toBe('sentinel_')
-        ->and(config('sentinel.integrity.stream'))->toBe('global');
+        ->and(config('sentinel.integrity.stream'))->toBe('tenant');
 });
 
 it('binds the manager and its collaborators', function (): void {

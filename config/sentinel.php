@@ -62,10 +62,22 @@ return [
     ],
 
     /*
-     * Context resolvers, keyed by what they resolve. Null means the package
-     * default; any class implementing the matching contract replaces it.
+     * Context resolvers, one entry each. A null class means the package default;
+     * any class implementing Contracts\Resolver replaces it. Every key here also
+     * has a default in code, so a config published before they existed still boots.
      */
-    'resolvers' => [],
+    'resolvers' => [
+        'actor' => ['class' => null, 'guard' => null],
+        'impersonator' => ['class' => null, 'session_key' => 'impersonated_by'],
+        'tenant' => ['class' => null, 'using' => null],
+        'request' => ['class' => null, 'header' => 'X-Request-Id', 'api' => 'api/*'],
+        'session' => ['class' => null],
+        'trace' => ['class' => null],
+        'source' => ['class' => null],
+        'host' => ['class' => null],
+        'job' => ['class' => null],
+        'command' => ['class' => null, 'redact' => ['password', 'token', 'secret']],
+    ],
 
     /*
      * Stages every audit goes through before it reaches the ledger. Order is
@@ -103,7 +115,7 @@ return [
     'integrity' => [
         'enabled' => false,
         'algorithm' => 'sha256',
-        'stream' => 'global',
+        'stream' => 'tenant',
         'checkpoints' => [
             'enabled' => false,
             'every' => 1000,

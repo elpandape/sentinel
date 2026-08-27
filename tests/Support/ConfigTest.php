@@ -7,6 +7,8 @@ use ElPandaPe\Sentinel\Enums\Mode;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
 use ElPandaPe\Sentinel\Support\Config;
+use ElPandaPe\Sentinel\Tests\Fixtures\PromotingResolver;
+use ElPandaPe\Sentinel\Tests\Fixtures\SubstituteResolver;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\User;
 
@@ -120,7 +122,7 @@ it('rejects a hash algorithm the runtime does not provide', function (): void {
 });
 
 it('reads the configured stream strategy', function (): void {
-    expect(sentinelConfig()->streamStrategy())->toBe('global');
+    expect(sentinelConfig()->streamStrategy())->toBe('tenant');
 });
 
 it('reads whether hidden attributes reach the snapshot', function (): void {
@@ -130,3 +132,92 @@ it('reads whether hidden attributes reach the snapshot', function (): void {
 it('rejects a non boolean hidden policy', function (): void {
     sentinelConfig(['snapshots.include_hidden' => 'yes'])->snapshotsIncludeHidden();
 })->throws(ConfigurationException::class, 'must be a boolean, string given');
+
+it('falls back to the package defaults when the published config predates the resolvers', function (): void {
+    $config = sentinelConfig(['resolvers' => []]);
+
+    expect($config->actorGuard())->toBeNull()
+        ->and($config->impersonatorSessionKey())->toBe('impersonated_by')
+        ->and($config->tenantUsing())->toBeNull()
+        ->and($config->requestIdHeader())->toBe('X-Request-Id')
+        ->and($config->apiBoundary())->toBe('api/*')
+        ->and($config->commandRedactions())->toBe(['password', 'token', 'secret'])
+        ->and($config->redactionMask())->toBe('*')
+        ->and($config->resolverClass('actor', SubstituteResolver::class))->toBe(SubstituteResolver::class);
+});
+
+it('reads the shipped resolver settings', function (): void {
+    $config = sentinelConfig();
+
+    expect($config->impersonatorSessionKey())->toBe('impersonated_by')
+        ->and($config->requestIdHeader())->toBe('X-Request-Id')
+        ->and($config->apiBoundary())->toBe('api/*')
+        ->and($config->commandRedactions())->toBe(['password', 'token', 'secret']);
+});
+
+it('takes the resolver the configuration names over the package default', function (): void {
+    $config = sentinelConfig(['resolvers.actor.class' => PromotingResolver::class]);
+
+    expect($config->resolverClass('actor', SubstituteResolver::class))->toBe(PromotingResolver::class)
+        ->and($config->resolverClass('tenant', SubstituteResolver::class))->toBe(SubstituteResolver::class);
+});
+
+it('rejects a resolver that does not implement the contract', function (): void {
+    sentinelConfig(['resolvers.actor.class' => Config::class])->resolverClass('actor', SubstituteResolver::class);
+})->throws(ConfigurationException::class, 'or a subclass of it');
+
+it('rejects a resolver class that is not a string', function (): void {
+    sentinelConfig(['resolvers.actor.class' => 42])->resolverClass('actor', SubstituteResolver::class);
+})->throws(ConfigurationException::class, 'a class-string or null');
+
+it('rejects a guard name that is not a string', function (): void {
+    sentinelConfig(['resolvers.actor.guard' => 42])->actorGuard();
+})->throws(ConfigurationException::class, 'a string or null');
+
+it('reads the guard the configuration names', function (): void {
+    expect(sentinelConfig(['resolvers.actor.guard' => 'admin'])->actorGuard())->toBe('admin');
+});
+
+it('rejects a session key that is not a non empty string', function (): void {
+    sentinelConfig(['resolvers.impersonator.session_key' => ''])->impersonatorSessionKey();
+})->throws(ConfigurationException::class, 'a non-empty string or null');
+
+it('takes a closure as the api boundary', function (): void {
+    $boundary = static fn (): bool => true;
+
+    expect(sentinelConfig(['resolvers.request.api' => $boundary])->apiBoundary())->toBe($boundary);
+});
+
+it('rejects a boundary that is neither a pattern nor a closure', function (): void {
+    sentinelConfig(['resolvers.request.api' => 42])->apiBoundary();
+})->throws(ConfigurationException::class, 'a route pattern or a closure');
+
+it('takes a closure as the tenant hook', function (): void {
+    $using = static fn (): string => 'acme';
+
+    expect(sentinelConfig(['resolvers.tenant.using' => $using])->tenantUsing())->toBe($using);
+});
+
+it('rejects a tenant hook that is not a closure', function (): void {
+    sentinelConfig(['resolvers.tenant.using' => 'acme'])->tenantUsing();
+})->throws(ConfigurationException::class, 'a closure or null');
+
+it('reads the redaction list the configuration names', function (): void {
+    expect(sentinelConfig(['resolvers.command.redact' => ['month']])->commandRedactions())->toBe(['month']);
+});
+
+it('rejects a redaction list that is not a list', function (): void {
+    sentinelConfig(['resolvers.command.redact' => 'password'])->commandRedactions();
+})->throws(ConfigurationException::class, 'a list of strings');
+
+it('rejects a redaction entry that is not a string', function (): void {
+    sentinelConfig(['resolvers.command.redact' => [42]])->commandRedactions();
+})->throws(ConfigurationException::class, 'a list of strings');
+
+it('reads the redaction mask the configuration names', function (): void {
+    expect(sentinelConfig(['security.redaction.mask' => '#'])->redactionMask())->toBe('#');
+});
+
+it('rejects a mask that is not a string', function (): void {
+    sentinelConfig(['security.redaction.mask' => 42])->redactionMask();
+})->throws(ConfigurationException::class, 'a string');
