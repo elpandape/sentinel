@@ -85,6 +85,7 @@ return [
      * means this one: dropping a stage means declaring the list without it.
      */
     'pipeline' => [
+        ElPandaPe\Sentinel\Pipeline\Stages\FilterUnchanged::class,
         ElPandaPe\Sentinel\Pipeline\Stages\ResolveContext::class,
     ],
 

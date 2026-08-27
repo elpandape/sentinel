@@ -5,6 +5,7 @@ declare(strict_types=1);
 return [
 
     'discarded' => [
+        'unchanged' => 'The :event to :type :id changed nothing that is audited, so no entry was written.',
         'unspecified' => 'Stage :stage discarded the :event entry for :type :id before it reached the ledger.',
     ],
 

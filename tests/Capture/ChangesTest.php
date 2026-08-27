@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Capture\ModelCapture;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
+use ElPandaPe\Sentinel\Pipeline\Stages\ResolveContext;
 use ElPandaPe\Sentinel\Tests\Fixtures\AuditedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\SelectiveSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\SnapshotlessSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\SoftDeletingSubject;
 
 use function ElPandaPe\Sentinel\Tests\auditsOf;
+use function ElPandaPe\Sentinel\Tests\stagedPipeline;
 
 it('writes only additions for a creation', function (): void {
     $subject = AuditedSubject::query()->create(['name' => 'Ada']);
@@ -39,6 +41,8 @@ it('writes only removals for a deletion', function (): void {
 });
 
 it('writes an empty list, not a null, for an update the field policy leaves untouched', function (): void {
+    stagedPipeline([ResolveContext::class]);
+
     $subject = SelectiveSubject::query()->create(['name' => 'Ada', 'secret' => 'first']);
     $subject->update(['secret' => 'second']);
 
