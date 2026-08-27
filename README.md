@@ -688,8 +688,8 @@ one trace.
 matches is not bounded by anything — `whereEvent('updated')` on a busy trail is most of the table, and
 its index finds those rows but cannot order them. Put a filter in front of it.
 
-`get()` returns at most `AuditQuery::DEFAULT_LIMIT` entries. A trail has no natural end, so a read
-with no bound is a read of the whole table; `paginate()` is how you walk past it.
+`get()` returns at most `AuditQuery::DEFAULT_LIMIT` entries — 500. A trail has no natural end, so a
+read with no bound is a read of the whole table; `paginate()` is how you walk past it.
 
 ```php
 $page = Sentinel::audits()->for($invoice)->latest()->paginate(25);
