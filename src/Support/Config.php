@@ -6,6 +6,7 @@ namespace ElPandaPe\Sentinel\Support;
 
 use Closure;
 use ElPandaPe\Sentinel\Contracts\Resolver;
+use ElPandaPe\Sentinel\Contracts\Transformer;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
 use ElPandaPe\Sentinel\Enums\Mode;
 use ElPandaPe\Sentinel\Enums\Severity;
@@ -169,6 +170,43 @@ final readonly class Config
 
         /** @var class-string<TResolver> $value */
         return $value;
+    }
+
+    /**
+     * An empty list falls back to the package order rather than to no pipeline at all: the
+     * config published in v0.1.0 ships `pipeline => []`, and a shallow merge would leave those
+     * installations transforming nothing. Dropping a stage means declaring the list without it.
+     *
+     * @param  list<class-string<Transformer>>  $default
+     * @return list<class-string<Transformer>>
+     */
+    public function pipelineStages(array $default): array
+    {
+        $value = $this->repository->get('sentinel.pipeline');
+
+        if ($value === null || $value === []) {
+            return $default;
+        }
+
+        if (! is_array($value)) {
+            throw ConfigurationException::expected('pipeline', 'a list of stage class-strings', get_debug_type($value));
+        }
+
+        $stages = [];
+
+        foreach ($value as $stage) {
+            if (! is_string($stage)) {
+                throw ConfigurationException::expected('pipeline', 'a list of stage class-strings', get_debug_type($stage));
+            }
+
+            if (! class_exists($stage) || ! is_a($stage, Transformer::class, true)) {
+                throw ConfigurationException::invalidClass('pipeline', $stage, Transformer::class);
+            }
+
+            $stages[] = $stage;
+        }
+
+        return $stages;
     }
 
     public function actorGuard(): ?string

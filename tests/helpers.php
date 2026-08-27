@@ -15,6 +15,8 @@ use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
 use ElPandaPe\Sentinel\Integrity\Stream;
 use ElPandaPe\Sentinel\Integrity\Verifier;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Pipeline\Discard;
+use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Snapshot\SnapshotBuilder;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Config;
@@ -337,6 +339,33 @@ function httpRequest(string $uri, array $headers = []): Request
     runtime()->enteredRequest($request);
 
     return $request;
+}
+
+/**
+ * @param  list<class-string<\ElPandaPe\Sentinel\Contracts\Transformer>>  $stages
+ */
+function stagedPipeline(array $stages): void
+{
+    /** @var Repository $repository */
+    $repository = app(Repository::class);
+
+    $repository->set('sentinel.pipeline', $stages);
+}
+
+function pipeline(): Pipeline
+{
+    /** @var Pipeline $pipeline */
+    $pipeline = app(Pipeline::class);
+
+    return $pipeline;
+}
+
+function discard(): Discard
+{
+    /** @var Discard $discard */
+    $discard = app(Discard::class);
+
+    return $discard;
 }
 
 function contextEngine(): ContextEngine

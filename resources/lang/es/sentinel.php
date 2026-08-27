@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 return [
 
+    'discarded' => [
+        'unspecified' => 'La etapa :stage descartó el asiento :event de :type :id antes de que llegara al ledger.',
+    ],
+
     'integrity' => [
         'hash_mismatch' => 'El asiento :id ya no reproduce su propio hash en la secuencia :sequence del stream :stream.',
         'link_mismatch' => 'El asiento :id no enlaza con el anterior en la secuencia :sequence del stream :stream.',
