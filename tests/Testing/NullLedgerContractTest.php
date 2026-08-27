@@ -6,6 +6,7 @@ namespace ElPandaPe\Sentinel\Tests\Testing;
 
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Ledger\NullLedger;
+use ElPandaPe\Sentinel\Testing\LedgerContractTestCase;
 
 final class NullLedgerContractTest extends LedgerContractTestCase
 {

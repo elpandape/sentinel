@@ -26,7 +26,12 @@ arch('classes are final')
     ->expect('ElPandaPe\Sentinel')
     ->classes()
     ->toBeFinal()
-    ->ignoring('ElPandaPe\Sentinel\Models');
+    ->ignoring(['ElPandaPe\Sentinel\Models', 'ElPandaPe\Sentinel\Testing']);
+
+arch('the published contract suite stays open, because being extended is what it is for')
+    ->expect('ElPandaPe\Sentinel\Testing')
+    ->classes()
+    ->toBeAbstract();
 
 arch('models stay open so the configuration can replace them')
     ->expect('ElPandaPe\Sentinel\Models')
@@ -57,3 +62,7 @@ arch('every resolver the package ships implements the contract and is final')
     ->expect('ElPandaPe\Sentinel\Context\Resolvers')
     ->toImplement(ElPandaPe\Sentinel\Contracts\Resolver::class)
     ->toBeFinal();
+
+arch('the published contract suite depends on nothing in the test suite')
+    ->expect('ElPandaPe\Sentinel\Testing')
+    ->not->toUse('ElPandaPe\Sentinel\Tests');

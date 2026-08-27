@@ -16,9 +16,9 @@ return RectorConfig::configure()
         PestSetList::CODING_STYLE,
     ])
     ->withSkip([
-        // tests/Testing ships plain PHPUnit test cases meant for third-party
+        // src/Testing publishes plain PHPUnit test cases meant for third-party
         // drivers to extend, so it keeps native assertions instead of Pest's.
-        ConvertAssertToExpectRector::class => [__DIR__.'/tests/Testing'],
-        ChainExpectCallsRector::class => [__DIR__.'/tests/Testing'],
-        SimplifyToLiteralBooleanRector::class => [__DIR__.'/tests/Testing'],
+        ConvertAssertToExpectRector::class => [__DIR__.'/src/Testing'],
+        ChainExpectCallsRector::class => [__DIR__.'/src/Testing'],
+        SimplifyToLiteralBooleanRector::class => [__DIR__.'/src/Testing'],
     ]);

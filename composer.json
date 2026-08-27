@@ -1,6 +1,6 @@
 {
     "name": "elpandape/sentinel",
-    "description": "Ledger-first audit & integrity engine for Laravel \u2014 full snapshots, structured diffs, relationship auditing, execution context and a tamper-evident hash chain.",
+    "description": "Ledger-first audit & integrity engine for Laravel — full snapshots, structured diffs, relationship auditing, execution context and a tamper-evident hash chain.",
     "keywords": [
         "laravel",
         "audit",
@@ -50,6 +50,10 @@
         "pestphp/pest-plugin-type-coverage": "^5.0",
         "phpstan/extension-installer": "^1.4",
         "rector/rector": "^2.0"
+    },
+    "suggest": {
+        "orchestra/testbench": "^11.0 to run Testing\\LedgerContractTestCase against your own ledger driver: it boots a Laravel application.",
+        "phpunit/phpunit": "^13.0 to run Testing\\LedgerContractTestCase, which is a PHPUnit test case."
     },
     "autoload": {
         "psr-4": {
