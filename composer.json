@@ -33,6 +33,7 @@
         "illuminate/console": "^13.0",
         "illuminate/contracts": "^13.0",
         "illuminate/database": "^13.0",
+        "illuminate/encryption": "^13.0",
         "illuminate/http": "^13.0",
         "illuminate/queue": "^13.0",
         "illuminate/routing": "^13.0",

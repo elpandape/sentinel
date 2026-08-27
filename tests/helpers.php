@@ -18,10 +18,12 @@ use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Pipeline\Discard;
 use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Security\Digester;
+use ElPandaPe\Sentinel\Security\Keyring;
 use ElPandaPe\Sentinel\Security\Maskers;
 use ElPandaPe\Sentinel\Snapshot\SnapshotBuilder;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Config;
+use ElPandaPe\Sentinel\Tests\Fixtures\EncryptedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\ProtectedSubject;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
@@ -382,6 +384,23 @@ function digester(array $overrides = []): Digester
 function maskers(array $overrides = []): Maskers
 {
     return new Maskers(app(), sentinelConfig($overrides));
+}
+
+/**
+ * @param  array<string, mixed>  $overrides
+ * @return array<string, mixed>
+ */
+function encryptedEntry(array $overrides = []): array
+{
+    return ['subject_type' => EncryptedSubject::class, 'subject_id' => '7', ...$overrides];
+}
+
+function keyring(): Keyring
+{
+    /** @var Keyring $keyring */
+    $keyring = app(Keyring::class);
+
+    return $keyring;
 }
 
 function pipeline(): Pipeline

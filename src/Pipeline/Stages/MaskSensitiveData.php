@@ -34,11 +34,17 @@ final readonly class MaskSensitiveData implements Transformer
     {
         $policy = $this->policies->for($audit->subject_type);
 
-        foreach ($this->config->redactedFields($policy->redacted) as $field) {
-            Fields::protect($audit, [$field], fn (mixed $value): mixed => $this->maskers->for($field)->mask($field, $value));
-        }
+        Fields::protect(
+            $audit,
+            $this->config->redactedFields($policy->redacted),
+            fn (mixed $value, string $field): mixed => $this->maskers->for($field)->mask($field, $value),
+        );
 
-        Fields::protect($audit, $this->config->hashedFields($policy->hashed), $this->digester->digest(...));
+        Fields::protect(
+            $audit,
+            $this->config->hashedFields($policy->hashed),
+            fn (mixed $value): mixed => $this->digester->digest($value),
+        );
 
         return $next($audit);
     }

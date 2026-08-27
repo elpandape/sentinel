@@ -8,6 +8,7 @@ use Closure;
 use ElPandaPe\Sentinel\Contracts\Transformer;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Events\AuditDiscarded;
+use ElPandaPe\Sentinel\Pipeline\Stages\EncryptSensitiveData;
 use ElPandaPe\Sentinel\Pipeline\Stages\FilterUnchanged;
 use ElPandaPe\Sentinel\Pipeline\Stages\MaskSensitiveData;
 use ElPandaPe\Sentinel\Pipeline\Stages\NormalizeData;
@@ -31,6 +32,7 @@ final readonly class Pipeline
         ResolveContext::class,
         NormalizeData::class,
         MaskSensitiveData::class,
+        EncryptSensitiveData::class,
     ];
 
     public function __construct(

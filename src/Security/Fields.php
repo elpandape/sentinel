@@ -19,21 +19,33 @@ final readonly class Fields
 {
     /**
      * @param  list<string>  $fields
-     * @param  Closure(mixed): mixed  $transform
+     * @param  Closure(mixed, string): mixed  $transform
+     * @return list<string> the fields that were found and transformed
      */
-    public static function protect(AuditData $audit, array $fields, Closure $transform): void
+    public static function protect(AuditData $audit, array $fields, Closure $transform): array
     {
         if ($fields === []) {
-            return;
+            return [];
         }
 
+        $touched = [];
         $names = array_flip($fields);
+        $record = static function (string $field, mixed $value) use ($transform, &$touched): mixed {
+            $touched[$field] = true;
 
-        $audit->before = self::walk($audit->before, $names, $transform);
-        $audit->after = self::walk($audit->after, $names, $transform);
-        $audit->metadata = self::walk($audit->metadata, $names, $transform);
-        $audit->context = self::walk($audit->context, $names, $transform) ?? [];
-        $audit->changes = self::changes($audit->changes, $names, $transform);
+            return $transform($value, $field);
+        };
+
+        $audit->before = self::walk($audit->before, $names, $record);
+        $audit->after = self::walk($audit->after, $names, $record);
+        $audit->metadata = self::walk($audit->metadata, $names, $record);
+        $audit->context = self::walk($audit->context, $names, $record) ?? [];
+        $audit->changes = self::changes($audit->changes, $names, $record);
+
+        $found = array_keys($touched);
+        sort($found);
+
+        return $found;
     }
 
     /**
@@ -41,7 +53,7 @@ final readonly class Fields
      *
      * @param  array<TKey, mixed>|null  $container
      * @param  array<string, int>  $names
-     * @param  Closure(mixed): mixed  $transform
+     * @param  Closure(string, mixed): mixed  $transform
      * @return array<TKey, mixed>|null
      */
     private static function walk(?array $container, array $names, Closure $transform): ?array
@@ -52,7 +64,7 @@ final readonly class Fields
 
         foreach ($container as $key => $value) {
             $container[$key] = match (true) {
-                is_string($key) && array_key_exists($key, $names) => $transform($value),
+                is_string($key) && array_key_exists($key, $names) => $transform($key, $value),
                 is_array($value) => self::walk($value, $names, $transform),
                 default => $value,
             };
@@ -69,7 +81,7 @@ final readonly class Fields
      *
      * @param  array<TKey, mixed>|null  $changes
      * @param  array<string, int>  $names
-     * @param  Closure(mixed): mixed  $transform
+     * @param  Closure(string, mixed): mixed  $transform
      * @return array<TKey, mixed>|null
      */
     private static function changes(?array $changes, array $names, Closure $transform): ?array
@@ -83,9 +95,11 @@ final readonly class Fields
                 continue;
             }
 
-            $changes[$index] = self::protects($change, $names)
-                ? self::values($change, $transform)
-                : self::walk($change, $names, $transform);
+            $protected = self::protects($change, $names);
+
+            $changes[$index] = $protected === null
+                ? self::walk($change, $names, $transform)
+                : self::values($change, $protected, $transform);
         }
 
         return $changes;
@@ -95,15 +109,15 @@ final readonly class Fields
      * @param  array<array-key, mixed>  $change
      * @param  array<string, int>  $names
      */
-    private static function protects(array $change, array $names): bool
+    private static function protects(array $change, array $names): ?string
     {
         $path = $change['path'] ?? null;
 
         if (! is_string($path)) {
-            return false;
+            return null;
         }
 
-        return array_any(
+        return array_find(
             Pointer::segments($path),
             static fn (string $segment): bool => array_key_exists($segment, $names),
         );
@@ -111,14 +125,14 @@ final readonly class Fields
 
     /**
      * @param  array<array-key, mixed>  $change
-     * @param  Closure(mixed): mixed  $transform
+     * @param  Closure(string, mixed): mixed  $transform
      * @return array<array-key, mixed>
      */
-    private static function values(array $change, Closure $transform): array
+    private static function values(array $change, string $field, Closure $transform): array
     {
         foreach (['old', 'new'] as $side) {
             if (array_key_exists($side, $change)) {
-                $change[$side] = $transform($change[$side]);
+                $change[$side] = $transform($field, $change[$side]);
             }
         }
 

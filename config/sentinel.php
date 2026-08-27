@@ -89,6 +89,7 @@ return [
         ElPandaPe\Sentinel\Pipeline\Stages\ResolveContext::class,
         ElPandaPe\Sentinel\Pipeline\Stages\NormalizeData::class,
         ElPandaPe\Sentinel\Pipeline\Stages\MaskSensitiveData::class,
+        ElPandaPe\Sentinel\Pipeline\Stages\EncryptSensitiveData::class,
     ],
 
     /*
@@ -114,8 +115,14 @@ return [
             'maskers' => [],
         ],
         'encryption' => [
-            'enabled' => false,
+            'cipher' => 'aes-256-gcm',
+            // The key every new entry is written with. Older entries keep the identifier
+            // they recorded, so rotating this leaves them readable as long as their key stays.
             'key_id' => 'default',
+            'keys' => [
+                'default' => env('SENTINEL_ENCRYPTION_KEY'),
+            ],
+            'fields' => [],
         ],
         'hashing' => [
             'algorithm' => 'sha256',

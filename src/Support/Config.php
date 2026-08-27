@@ -12,6 +12,7 @@ use ElPandaPe\Sentinel\Enums\AuditEvent;
 use ElPandaPe\Sentinel\Enums\Mode;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
+use ElPandaPe\Sentinel\Exceptions\EncryptionException;
 use Illuminate\Contracts\Config\Repository;
 
 final readonly class Config
@@ -296,6 +297,71 @@ final readonly class Config
     public function hashedFields(array $declared): array
     {
         return $this->union($declared, 'security.hashing.fields');
+    }
+
+    /**
+     * @param  list<string>  $declared
+     * @return list<string>
+     */
+    public function encryptedFields(array $declared): array
+    {
+        return $this->union($declared, 'security.encryption.fields');
+    }
+
+    public function encryptionKeyId(): string
+    {
+        $value = $this->repository->get('sentinel.security.encryption.key_id');
+
+        return match (true) {
+            $value === null => 'default',
+            is_string($value) && $value !== '' => $value,
+            default => throw ConfigurationException::expected('security.encryption.key_id', 'a non-empty string or null', get_debug_type($value)),
+        };
+    }
+
+    public function encryptionCipher(): string
+    {
+        $value = $this->repository->get('sentinel.security.encryption.cipher');
+
+        return match (true) {
+            $value === null => 'aes-256-gcm',
+            is_string($value) && $value !== '' => $value,
+            default => throw ConfigurationException::expected('security.encryption.cipher', 'a cipher name or null', get_debug_type($value)),
+        };
+    }
+
+    /**
+     * The application key is the fallback for the default identifier only. Any other one is
+     * named on purpose, and silently writing it with a key it did not name would make the
+     * key_id recorded in the entry a lie.
+     */
+    public function encryptionKey(string $keyId): string
+    {
+        $keys = $this->repository->get('sentinel.security.encryption.keys');
+
+        if ($keys !== null && ! is_array($keys)) {
+            throw ConfigurationException::expected('security.encryption.keys', 'a map of key id to key', get_debug_type($keys));
+        }
+
+        $key = is_array($keys) ? $keys[$keyId] ?? null : null;
+
+        if (is_string($key) && $key !== '') {
+            return $key;
+        }
+
+        if ($key !== null) {
+            throw ConfigurationException::expected("security.encryption.keys.{$keyId}", 'a non-empty string or null', get_debug_type($key));
+        }
+
+        if ($keyId !== 'default') {
+            throw EncryptionException::unknownKey($keyId);
+        }
+
+        $application = $this->repository->get('app.key');
+
+        return is_string($application) && $application !== ''
+            ? $application
+            : throw ConfigurationException::missingApplicationKey('security.encryption.keys.default');
     }
 
     /**
