@@ -25,8 +25,10 @@ use ElPandaPe\Sentinel\Snapshot\SnapshotBuilder;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Tests\Fixtures\EncryptedSubject;
+use ElPandaPe\Sentinel\Tests\Fixtures\EventLog;
 use ElPandaPe\Sentinel\Tests\Fixtures\ProtectedSubject;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\Schema\Blueprint;
@@ -410,6 +412,39 @@ function rekeyer(): Rekeyer
     $rekeyer = app(Rekeyer::class);
 
     return $rekeyer;
+}
+
+/**
+ * The events the package dispatches, kept whole. A fake would stop the pipeline from
+ * dispatching at all, and what this has to prove is what the real payloads carried.
+ */
+function recordEveryEvent(): void
+{
+    $log = new EventLog;
+
+    app()->instance(EventLog::class, $log);
+
+    app(Dispatcher::class)->listen('*', static function (string $name, array $payload) use ($log): void {
+        $log->record($name, $payload);
+    });
+}
+
+function eventPayloads(): string
+{
+    return eventLog()->contents();
+}
+
+function recordedEvents(): int
+{
+    return eventLog()->count();
+}
+
+function eventLog(): EventLog
+{
+    /** @var EventLog $log */
+    $log = app(EventLog::class);
+
+    return $log;
 }
 
 function pipeline(): Pipeline

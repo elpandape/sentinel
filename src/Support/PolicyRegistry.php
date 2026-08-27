@@ -6,6 +6,7 @@ namespace ElPandaPe\Sentinel\Support;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use ReflectionClass;
 
 /**
  * A pipeline stage knows the subject type, not the model: the data object is named after
@@ -28,6 +29,12 @@ final class PolicyRegistry
         return $this->policies[$subjectType] ??= $this->resolve($subjectType);
     }
 
+    /**
+     * Built without its constructor on purpose. A stage runs inside the lifecycle of the
+     * very model it is asking about, and eloquent refuses to be instantiated while it is
+     * booting. Declared defaults are set on the object either way, and reading a
+     * declaration is all this needs.
+     */
     private function resolve(string $subjectType): AuditPolicy
     {
         $class = Relation::getMorphedModel($subjectType) ?? $subjectType;
@@ -36,6 +43,9 @@ final class PolicyRegistry
             return AuditPolicy::none();
         }
 
-        return AuditPolicy::of(new $class);
+        /** @var Model $model */
+        $model = new ReflectionClass($class)->newInstanceWithoutConstructor();
+
+        return AuditPolicy::of($model);
     }
 }
