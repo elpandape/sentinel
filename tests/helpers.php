@@ -218,6 +218,97 @@ function auditData(array $overrides = []): AuditData
 }
 
 /**
+ * A trail shaped the way the indexes were built for: many subjects, many actors, many
+ * tenants, and a severity where the one worth filtering by is the rare one. A planner reads
+ * statistics, so an evenly spread column measures nothing about an index that exists for the
+ * uneven case.
+ */
+function seedTheTrail(int $entries = 600): void
+{
+    $rows = [];
+
+    for ($sequence = 1; $sequence <= $entries; $sequence++) {
+        $bucket = $sequence % 60;
+
+        $rows[] = auditRow([
+            'sequence' => $sequence,
+            'subject_type' => 'invoice',
+            'subject_id' => (string) $bucket,
+            'actor_type' => 'user',
+            'actor_id' => (string) $bucket,
+            'event' => 'event.'.$bucket,
+            'severity' => $sequence % 150 === 0 ? 'critical' : 'info',
+            'source' => $sequence % 2 === 0 ? 'http' : 'cli',
+            'tenant_id' => 'tenant-'.$bucket,
+            'transaction_id' => str_pad((string) $bucket, 26, '0', STR_PAD_LEFT),
+            'trace_id' => str_pad((string) $bucket, 32, '0', STR_PAD_LEFT),
+            'created_at' => new CarbonImmutable('2026-08-01 00:00:00')->addSeconds($sequence)->format('Y-m-d H:i:s.u'),
+        ]);
+    }
+
+    foreach (array_chunk($rows, 100) as $chunk) {
+        DB::table(auditsTable())->insert($chunk);
+    }
+
+    match (DB::connection()->getDriverName()) {
+        'pgsql' => DB::statement('analyze '.auditsTable()),
+        'mysql' => DB::statement('analyze table '.auditsTable()),
+        default => DB::statement('analyze'),
+    };
+}
+
+/**
+ * The plan the engine chose for the statement the query compiled into, flattened to one
+ * line. The statement is captured as it runs instead of rebuilt, so what gets explained is
+ * what the driver issues and not an approximation of it.
+ */
+function planFor(AuditQuery $query): string
+{
+    $connection = DB::connection();
+    $captured = ['sql' => '', 'bindings' => []];
+
+    DB::listen(static function (QueryExecuted $event) use (&$captured): void {
+        $captured = ['sql' => $event->sql, 'bindings' => $event->bindings];
+    });
+
+    $query->get();
+
+    $sql = $captured['sql'];
+    /** @var list<mixed> $bindings */
+    $bindings = $captured['bindings'];
+
+    return match ($connection->getDriverName()) {
+        'mysql' => collect($connection->select('explain '.$sql, $bindings))
+            ->map(static fn (object $row): string => (string) $row->EXPLAIN)
+            ->implode(' | '),
+        'pgsql' => collect($connection->select('explain '.$sql, $bindings))
+            ->map(static fn (object $row): string => (string) $row->{'QUERY PLAN'})
+            ->implode(' | '),
+        default => collect($connection->select('explain query plan '.$sql, $bindings))
+            ->map(static fn (object $row): string => (string) $row->detail)
+            ->implode(' | '),
+    };
+}
+
+function readsAnIndex(string $plan): bool
+{
+    return match (DB::connection()->getDriverName()) {
+        'mysql' => ! str_contains($plan, 'Table scan on'),
+        'pgsql' => ! str_contains($plan, 'Seq Scan'),
+        default => str_contains($plan, 'USING INDEX') || str_contains($plan, 'USING COVERING INDEX'),
+    };
+}
+
+function sortsOutsideTheIndex(string $plan): bool
+{
+    return match (DB::connection()->getDriverName()) {
+        'mysql' => str_contains($plan, 'Sort:'),
+        'pgsql' => str_contains($plan, 'Sort'),
+        default => str_contains($plan, 'USE TEMP B-TREE FOR ORDER BY'),
+    };
+}
+
+/**
  * The entries frozen in v0.3.0, put in the table exactly as they were sealed. created_at is
  * stamped here because it is not part of the canonical payload and the rows never carried
  * one: the order it gives them is what the query api is then read against.
