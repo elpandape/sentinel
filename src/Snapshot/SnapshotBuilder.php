@@ -6,6 +6,7 @@ namespace ElPandaPe\Sentinel\Snapshot;
 
 use BackedEnum;
 use DateTimeInterface;
+use ElPandaPe\Sentinel\Enums\AuditEvent;
 use ElPandaPe\Sentinel\Exceptions\SnapshotException;
 use ElPandaPe\Sentinel\Support\AuditPolicy;
 use ElPandaPe\Sentinel\Support\Config;
@@ -40,6 +41,34 @@ final readonly class SnapshotBuilder
         ksort($snapshot);
 
         return $snapshot;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $restorePoint
+     */
+    public function pair(Model $model, AuditEvent $event, ?array $restorePoint = null): SnapshotPair
+    {
+        if (! $this->enabled($model)) {
+            return new SnapshotPair;
+        }
+
+        return match ($event) {
+            AuditEvent::Created => new SnapshotPair(after: $this->build($model, $model->getAttributes())),
+            AuditEvent::Updated => new SnapshotPair(
+                $this->build($model, $model->getRawOriginal()),
+                $this->build($model, $model->getAttributes()),
+            ),
+            AuditEvent::Deleted, AuditEvent::ForceDeleted => new SnapshotPair(
+                before: $this->build($model, $model->getAttributes()),
+            ),
+            AuditEvent::Restored => new SnapshotPair($restorePoint, $this->build($model, $model->getAttributes())),
+            default => new SnapshotPair,
+        };
+    }
+
+    private function enabled(Model $model): bool
+    {
+        return $this->config->snapshotsEnabled() && AuditPolicy::of($model)->snapshots;
     }
 
     /**
