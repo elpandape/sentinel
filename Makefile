@@ -1,7 +1,7 @@
 DC = docker compose
 PHP = $(DC) run --rm php
 
-.PHONY: build install update test bench coverage types stan lint lint-fix rector rector-fix mutation validate ci shell test-dbs
+.PHONY: build install update test test-quiet verify bench coverage types stan lint lint-fix rector rector-fix mutation validate ci shell test-dbs
 
 build: ## Build the dev image
 	$(DC) build php
@@ -14,6 +14,14 @@ update: ## composer update
 
 test: ## Run the test suite (make test ARGS="tests/Support/ConfigTest.php")
 	$(PHP) vendor/bin/pest --parallel $(ARGS)
+
+# Paratest already prints one character per test; the colour around it is what costs.
+# --no-progress would trim further, but it drops the count of tests that passed with it.
+test-quiet: ## Same suite, output trimmed to its result
+	$(PHP) vendor/bin/pest --parallel --colors=never $(ARGS)
+
+verify: ## One-off expectation (make verify ARGS='expect(1 + 1)->toBe(2);')
+	$(PHP) vendor/bin/pest --agent '$(ARGS)'
 
 bench: ## Write-path baseline (report, not a gate)
 	$(PHP) php -d memory_limit=1G benchmarks/bench.php
