@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Tests\Testing;
 
 use ElPandaPe\Sentinel\Contracts\Ledger;
+use ElPandaPe\Sentinel\Ledger\EntryBuilder;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Tests\TestCase;
 
@@ -92,6 +93,29 @@ abstract class LedgerContractTestCase extends TestCase
         $this->assertSame([], iterator_to_array($this->ledger()->stream('nonesuch')));
     }
 
+    public function test_it_stores_an_entry_it_did_not_seal(): void
+    {
+        $sealed = $this->sealedElsewhere();
+        $appended = $this->ledger()->append($sealed);
+
+        $this->assertSame($sealed->sequence, $appended->sequence);
+        $this->assertSame($sealed->hash, $appended->hash);
+        $this->assertSame($sealed->previous_hash, $appended->previous_hash);
+    }
+
+    public function test_it_gives_an_appended_entry_back_unchanged(): void
+    {
+        if (! $this->persists()) {
+            $this->markTestSkipped('This ledger keeps nothing, so there is nothing to read back.');
+        }
+
+        $ledger = $this->ledger();
+        $sealed = $this->sealedElsewhere();
+        $ledger->append($sealed);
+
+        $this->assertSame($sealed->hash, $ledger->find($sealed->id)?->hash);
+    }
+
     public function test_it_finds_what_it_wrote(): void
     {
         $ledger = $this->ledger();
@@ -128,6 +152,16 @@ abstract class LedgerContractTestCase extends TestCase
     }
 
     abstract protected function ledger(): Ledger;
+
+    /**
+     * An entry another ledger sealed. append() has to take it exactly as it is, so building
+     * it here rather than writing it is the point: nothing about it belongs to the ledger
+     * under test.
+     */
+    protected function sealedElsewhere(): Audit
+    {
+        return app(EntryBuilder::class)->build(auditData(), 'imported', 1, null, null);
+    }
 
     protected function persists(): bool
     {

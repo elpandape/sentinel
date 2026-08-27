@@ -35,6 +35,16 @@ final readonly class DatabaseLedger implements Ledger
         return new AuditCollection($audits === [] ? [] : $this->chain($audits));
     }
 
+    public function append(Audit $audit): Audit
+    {
+        $this->model->newQuery()->insert([$audit->getAttributes()]);
+
+        $audit->exists = true;
+        $audit->wasRecentlyCreated = true;
+
+        return $audit;
+    }
+
     public function find(string $id): ?Audit
     {
         return $this->model->newQuery()->find($id);

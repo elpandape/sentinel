@@ -16,7 +16,7 @@ use function ElPandaPe\Sentinel\Tests\insertAudit;
 
 it('declares the ledger surface the rest of the roadmap programs against', function (): void {
     expect(get_class_methods(Ledger::class))
-        ->toEqualCanonicalizing(['write', 'writeMany', 'find', 'query', 'stream']);
+        ->toEqualCanonicalizing(['write', 'writeMany', 'append', 'find', 'query', 'stream']);
 });
 
 it('declares a stream that can be walked in order and bounded by range', function (): void {

@@ -59,6 +59,13 @@ final class NullLedger implements Ledger
         return new AuditCollection(array_map($this->write(...), $audits));
     }
 
+    public function append(Audit $audit): Audit
+    {
+        $this->streams[$audit->stream][] = $audit;
+
+        return $audit;
+    }
+
     public function find(string $id): ?Audit
     {
         foreach ($this->streams as $entries) {
