@@ -9,6 +9,81 @@ before `1.0.0`.
 
 ---
 
+## v0.8.0 → v0.9.0
+
+`v0.9.0` gives `Ledger::query()` something to answer. The signature has been on the contract since
+`v0.2.0` and every driver in this package threw from it; now they all answer, and the published
+contract suite holds them to answering the same thing.
+
+**Nothing to migrate.** No new tables, no new indexes, no altered columns, no rewritten hashes.
+`payload_version` stays at `1`, and every entry frozen before this version comes back through the
+new surface reproducing the hash it was frozen with. The query plan of each published filter was
+measured on MySQL 9 and PostgreSQL 16, and none of them needed an index that did not already exist.
+
+If you do not implement `Contracts\Ledger` yourself, there is nothing here for you: the rest of this
+section is about drivers.
+
+### `query()` has to work now
+
+**Before:** the method was on the interface and no driver in this package implemented it. A driver of
+your own could throw from it and nothing noticed.
+
+**After:** it takes an `AuditQuery` and returns the entries that match it, ordered by `created_at`
+with the entry's identifier behind it — oldest first, or newest first when `newestFirst` is set —
+bounded by `limit` and `offset` when they are set.
+
+```php
+public function query(AuditQuery $query): AuditCollection;
+```
+
+The criteria are plain readable properties: `subject` and `actor` (a `Support\Reference` with a type
+and a key), `event`, `severity`, `source`, `tenantId`, `transactionId`, `traceId`, `period` (a
+`Query\Period` with `from` and `to`, both ends inclusive, over `created_at`), `newestFirst`, `limit`
+and `offset`.
+
+If your store keeps entries in memory or in anything you can iterate, `Ledger\ArrayQuery` resolves
+the whole thing for you:
+
+```php
+public function query(AuditQuery $query): AuditCollection
+{
+    return new AuditCollection($this->queries->resolve($this->entries, $query));
+}
+```
+
+Extend `Testing\LedgerContractTestCase` and the fifteen new expectations run against your driver
+without you writing any of them.
+
+### A filter you cannot translate is declared, never dropped
+
+If your backend cannot answer one of the filters, say so. The query then refuses it as it is added,
+which is a readable exception at the call site instead of a result that quietly answers a different
+question:
+
+```php
+use ElPandaPe\Sentinel\Contracts\DeclaresFilters;
+use ElPandaPe\Sentinel\Contracts\Ledger;
+use ElPandaPe\Sentinel\Enums\Filter;
+
+final class RedisLedger implements DeclaresFilters, Ledger
+{
+    public function supportedFilters(): array
+    {
+        return [Filter::Subject, Filter::Tenant];
+    }
+}
+```
+
+A driver that does not implement `DeclaresFilters` is taken to answer all nine. Dropping a filter you
+cannot translate would hand back entries nobody asked for, and a trail that shows the wrong history
+is worse than one that refuses to answer.
+
+### `LedgerException::queryNotImplemented()` is gone
+
+It existed to say the Query API had not arrived. It has.
+
+---
+
 ## v0.7.0 → v0.8.0
 
 `v0.8.0` ran the `Ledger` contract against a store with no transactions, no joins and no

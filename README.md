@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.8.0-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.9.0-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -20,7 +20,7 @@ the state was before, what it is now — and whether the record itself can be pr
 
 ```json
 "repositories": [{ "type": "vcs", "url": "https://github.com/elpandape/sentinel" }],
-"require": { "elpandape/sentinel": "v0.8.0" }
+"require": { "elpandape/sentinel": "v0.9.0" }
 ```
 
 ```bash
@@ -39,6 +39,7 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.6.0` | Resolved context: actor, impersonator, tenant, request, trace, source, host, job, command |
 | `v0.7.0` | The write pipeline, field-level redaction, hashing and encryption, key rotation, discards |
 | `v0.8.0` | `MemoryLedger`, `FanoutLedger`, the published contract suite, `append()` |
+| `v0.9.0` | The Query API: `Sentinel::audits()`, nine filters, ordering and paging over the ledger contract |
 
 Everything else is on the roadmap: relationship auditing, business transactions, custom events,
 state transitions, restore, advanced verification (checkpoints and signatures), retention and
@@ -49,7 +50,8 @@ compliance, performance modes and distributed tracing.
 `v0.6.0` is the one that answers who did it and from where, instead of every entry claiming it came
 from nowhere. `v0.7.0` is the one that stops the answer from being a leak: no declared value reaches
 the ledger in the clear, and nothing writes an entry that says nothing happened. `v0.8.0` is the one
-that makes "extensible by drivers" a thing you can run rather than a thing this file claims.
+that makes "extensible by drivers" a thing you can run rather than a thing this file claims. `v0.9.0`
+is the one that lets you ask, which a trail you cannot read back is not.
 
 ## Quick start
 
@@ -604,6 +606,130 @@ same session, and the columns stay `null`.
 Because `Illuminate\Contracts\Auth\Guard` exposes no provider, the impersonator carries the class the
 guard authenticates rather than a hydrated model. Replace `ImpersonatorResolver` if your
 impersonation package stores something else.
+
+## Querying the trail
+
+`Sentinel::audits()` hands back an `AuditQuery`: a description of what you want, stated against
+the ledger contract rather than against Eloquent. Nothing here returns a query builder and no
+method takes a column name, so the same query a SQL driver compiles into a `where` clause a
+driver over arrays — or over something that is not a table at all — answers by walking what it
+holds. Every read goes through `Ledger::query()`, which is the one place a later version can
+record who read what.
+
+```php
+use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Facades\Sentinel;
+
+$page = Sentinel::audits()
+    ->for($invoice)
+    ->by($admin)
+    ->whereSeverity(Severity::Critical)
+    ->between($from, $to)
+    ->latest()
+    ->paginate(50);
+```
+
+The query is immutable: every method returns a new one, so a query you hand to something else
+cannot be narrowed behind your back.
+
+### The filters
+
+| Method | Narrows by | Index that finds it | Index that orders it |
+|---|---|---|---|
+| `for()` / `forModel()` | `subject_type`, `subject_id` | `(subject_type, subject_id, id)` | none — the subject's own entries are sorted |
+| `by()` / `byActor()` | `actor_type`, `actor_id` | `(actor_type, actor_id, id)` | none — the actor's own entries are sorted |
+| `whereEvent()` | `event` | `(event)` | none — see below |
+| `whereSeverity()` | `severity` | `(severity, created_at)` | the same index |
+| `forTenant()` | `tenant_id` | `(tenant_id, created_at)` | the same index |
+| `inTransaction()` | `transaction_id` | `(transaction_id)` | none — one transaction is sorted |
+| `withTrace()` | `trace_id` | `(trace_id)` | none — one trace is sorted |
+| `whereSource()` | `source` | **none — a refiner** | — |
+| `between()` | `created_at` | **none — a refiner** | — |
+
+Every row of that table was measured, on SQLite, MySQL 9 and PostgreSQL 16, with the engine's own
+`EXPLAIN` over the statement the driver actually issues — and the measurement is a test, so it
+stays true. No published filter falls back to a full pass over the table without being called a
+refiner here.
+
+`for()` and `by()` take a model, or the type and key the entry recorded — a hard-deleted subject
+has no model left to hand over, and its trail is exactly what outlives it:
+
+```php
+Sentinel::audits()->for($invoice)->get();
+Sentinel::audits()->for(Invoice::class, 500)->get();
+```
+
+### Refiners
+
+Two filters are **refiners**: they narrow a result, they do not find one. `whereSource()` reads a
+column with eight possible values and no index of its own, and `between()` reads `created_at`, which
+lives in the tail of the composite indexes and not at the head of any. On MySQL and PostgreSQL either
+one, alone, walks the whole table. Put one of the indexed filters in front and they ride its index.
+
+`between()` bounds `created_at`, the clock the ledger stamps the entry with, and both ends are
+inclusive. It is not `occurred_at`: that is what the entry says about the world, it has no index,
+and the two come apart the moment writing stops being synchronous.
+
+### Order, and how much comes back
+
+Entries come back oldest first. `latest()` turns that around. The order is total on every driver:
+`created_at`, and the entry's own ULID behind it, which sorts by the instant it was minted — so two
+entries stamped in the same microsecond still come back in the order they were written, and they come
+back in that order whether the ledger is a table or not.
+
+That is one order for nine filters, and no single one can be free for all of them: the schema has
+indexes that end in `created_at` and indexes that end in `id`, and an order can only ride one shape.
+It rides `created_at`, which is free exactly where it matters most — `forTenant()` and
+`whereSeverity()`, the two filters whose match grows with the table. The rest sort what they matched,
+which is bounded by what they selected: one subject's history, one actor's actions, one transaction,
+one trace.
+
+**`whereEvent()` is the exception worth knowing.** It names a category rather than a thing, so what it
+matches is not bounded by anything — `whereEvent('updated')` on a busy trail is most of the table, and
+its index finds those rows but cannot order them. Put a filter in front of it.
+
+`get()` returns at most `AuditQuery::DEFAULT_LIMIT` entries. A trail has no natural end, so a read
+with no bound is a read of the whole table; `paginate()` is how you walk past it.
+
+```php
+$page = Sentinel::audits()->for($invoice)->latest()->paginate(25);
+
+$page->entries;   // the entries
+$page->hasMore;   // whether there is another page behind this one
+$page->page;
+$page->perPage;
+
+foreach ($page as $audit) { /* ... */ }
+```
+
+There is no total, and that is a decision rather than an omission: counting the rows a filter
+matches on a table that only ever grows is the one question in this API whose cost is unbounded
+and that no index answers. A page costs one call to the ledger, which asks for one entry more
+than it hands back — which is how it knows there is another page.
+
+### Drivers that cannot answer everything
+
+A driver over a store that cannot translate one of the filters declares the ones it can, by
+implementing `Contracts\DeclaresFilters`. The query then refuses that filter **as you add it**,
+not when it runs:
+
+```php
+use ElPandaPe\Sentinel\Contracts\DeclaresFilters;
+use ElPandaPe\Sentinel\Contracts\Ledger;
+use ElPandaPe\Sentinel\Enums\Filter;
+
+final class RedisLedger implements DeclaresFilters, Ledger
+{
+    public function supportedFilters(): array
+    {
+        return [Filter::Subject, Filter::Tenant];
+    }
+}
+```
+
+A driver that does not implement it answers all of them. Silently dropping a filter it could not
+translate would answer with entries nobody asked for, and a trail that shows the wrong history is
+worse than one that refuses to answer.
 
 ## Configuration
 

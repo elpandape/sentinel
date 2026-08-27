@@ -2,6 +2,69 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.9.0 — Query API (2026-08-27)
+
+### Added
+
+- **`Sentinel::audits()`**, which hands back an `AuditQuery`: a description of what you want, stated
+  against the ledger contract instead of against Eloquent. Nine filters, each naming one indexed
+  criterion — `for()`/`forModel()`, `by()`/`byActor()`, `whereEvent()`, `whereSeverity()`,
+  `whereSource()`, `forTenant()`, `inTransaction()`, `withTrace()` and `between()` — plus `latest()`
+  to turn the order around. Nothing returns a query builder and no method takes a column name, so
+  every read goes through `Ledger::query()` and there is no shortcut around it.
+- **The query is immutable.** Every method returns a new one, so a query handed to something else
+  cannot be narrowed behind the caller's back.
+- **`Ledger::query()` implemented by all four drivers.** `DatabaseLedger` compiles the criteria into
+  a statement whose every value is a binding; `MemoryLedger` answers the same criteria by walking
+  what it holds, with no database at all; `NullLedger` answers with nothing however narrow the query
+  was; a fanout answers from its primary.
+- **`paginate()`**, returning a `Query\AuditPage` with the entries, the page, its size and whether
+  another page follows. One call to the ledger per page: it asks for one entry more than it hands
+  back, and learns from that whether there is another. There is no total — counting what a filter
+  matches on a table that only grows is the one question here whose cost is unbounded and that no
+  index answers.
+- **`Contracts\DeclaresFilters`**, optional. A driver over a store that cannot translate one of the
+  filters declares the ones it can, and the query refuses the rest **as they are added**, not when it
+  runs. A driver that does not implement it answers all of them.
+- **`Support\Reference`**: `for()` and `by()` take a model, or the type and key the entry recorded.
+  A hard-deleted subject has no model left to hand over, and its trail is exactly what outlives it.
+- `LedgerContractTestCase` gains the whole query suite — every filter, the combinations, the order,
+  a period bounded at both ends and paging. A third-party driver that extends it inherits all of it
+  without writing a test.
+- README: *Querying the trail*.
+
+### Changed
+
+- **`get()` is bounded** at `AuditQuery::DEFAULT_LIMIT` entries. A trail has no natural end, so a
+  read with no bound is a read of the whole table.
+- **`between()` bounds `created_at`**, the clock the ledger stamps the entry with, both ends
+  inclusive — not `occurred_at`, which has no index and comes apart from it the moment writing stops
+  being synchronous. It is a **refiner**, like `whereSource()`: it narrows a result, it does not find
+  one, and on MySQL and PostgreSQL either one alone walks the table.
+- **The order is `created_at` with the entry's ULID behind it**, oldest first unless `latest()` says
+  otherwise. It is total on every driver: two entries stamped in the same microsecond still come back
+  in the order they were written.
+- `payload_version` stays at `1`. This version only reads: no entry is written, no hash recomputed,
+  and the entries frozen in `v0.3.0` come back through the new surface reproducing the hashes they
+  were frozen with.
+
+### Removed
+
+- `Exceptions\LedgerException::queryNotImplemented()`. The four drivers answer now, and one of them
+  answering with nothing is an answer.
+
+### Upgrade notes
+
+Nothing to migrate: no new tables, no new indexes, no altered columns, no rewritten hashes. The
+query plan of every published filter was measured on MySQL 9 and PostgreSQL 16 and none of them
+needed one.
+
+- **Implementations of `Contracts\Ledger` must implement `query()` for real.** The signature has been
+  on the interface since `v0.2.0` and there was nothing to answer until now. A driver that cannot
+  translate a filter should implement `Contracts\DeclaresFilters` and leave it out, rather than drop
+  it silently: a trail that shows the wrong history is worse than one that refuses to answer.
+- **`LedgerException::queryNotImplemented()` is gone.** Nothing could usefully call it.
+
 ## v0.8.0 — Ledger contract & drivers (2026-08-27)
 
 ### Added
