@@ -9,6 +9,7 @@ use ElPandaPe\Sentinel\Contracts\Transformer;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Events\AuditDiscarded;
 use ElPandaPe\Sentinel\Pipeline\Stages\FilterUnchanged;
+use ElPandaPe\Sentinel\Pipeline\Stages\NormalizeData;
 use ElPandaPe\Sentinel\Pipeline\Stages\ResolveContext;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Contracts\Container\Container;
@@ -27,6 +28,7 @@ final readonly class Pipeline
     public const array DEFAULT_STAGES = [
         FilterUnchanged::class,
         ResolveContext::class,
+        NormalizeData::class,
     ];
 
     public function __construct(

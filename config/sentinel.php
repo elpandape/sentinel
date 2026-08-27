@@ -87,6 +87,7 @@ return [
     'pipeline' => [
         ElPandaPe\Sentinel\Pipeline\Stages\FilterUnchanged::class,
         ElPandaPe\Sentinel\Pipeline\Stages\ResolveContext::class,
+        ElPandaPe\Sentinel\Pipeline\Stages\NormalizeData::class,
     ],
 
     /*
