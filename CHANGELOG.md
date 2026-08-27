@@ -2,6 +2,77 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.4.0 — Snapshots and the Auditable trait (2026-08-26)
+
+### Added
+
+- `Concerns\Auditable`: a model that uses the trait audits itself. No interface to implement and no
+  observer to register — the trait registers the four eloquent events it needs when the model boots,
+  and answers for every field policy the package asks about.
+- `Capture\ModelObserver` and `Capture\ModelCapture`: the observer translates eloquent events into
+  audit intent, and one class builds the `AuditData` and hands it to the ledger. Four events produce
+  five kinds of entry: `created`, `updated`, `deleted`, `restored` and `force_deleted`. A force
+  delete fires `deleted` on its way to `forceDeleted`, so the first is suppressed; a restore is
+  derived from the update that clears the deletion mark, which is the only moment the state the
+  record had in the bin is still reachable.
+- `Snapshot\SnapshotBuilder` and `Snapshot\SnapshotPair`: the complete state before and after, with
+  the model's own casts applied, keys ordered, lists kept as lists, and `null` told apart from an
+  empty map. A date keeps the precision the audited model keeps — eloquent truncates on assignment
+  when the model's date format carries no microseconds.
+- Field policies on the model: `$auditInclude` (a whitelist that wins outright), `$auditExclude`,
+  `$auditSeverity` (beats the configured default for the event) and `$auditSnapshots = false` (an
+  entry with no payload, still chained and still verifiable).
+- `snapshots.include_hidden`: attributes in `$hidden` are audited by default and this key drops them
+  in bulk.
+- `Support\AuditPolicy`: a trait cannot implement an interface, so one class accepts either shape —
+  the concern or the `Auditable` contract — and returns the defaults for a model that is neither.
+  Without it, a model using the trait would have its policies ignored in silence.
+- `Exceptions\SnapshotException`: an attribute that cannot be represented in a snapshot fails loudly
+  instead of writing something else.
+- `benchmarks/` and `make bench`: the write-path baseline, four variants over a fixed dataset.
+- Fourth frozen entry in the golden dataset, this one with `before` and `after` populated.
+
+### Changed
+
+- **Breaking (0.x):** `Contracts\Auditable` gains `auditSeverity(): ?Severity`. The observer programs
+  against the contract, not against the trait, so a per-model severity override has to be visible
+  there. A model that implements the contract by hand needs the new method; a model that uses
+  `Concerns\Auditable` gets it for free.
+- `mutation-nightly.yml` gains a threshold for `Snapshot/` (90) and a second job that mutates the
+  ledger against MySQL 9 and PostgreSQL 16 — the advisory lock and the gap lock were invisible to a
+  run on SQLite alone.
+
+### Performance baseline
+
+Every later version that writes entries reports its delta against this table.
+
+| Variant | Writes | Per write (µs) | Δ vs plain |
+|---|---|---|---|
+| plain (not audited) | 2000 | 182.0 | — |
+| audited, snapshots on | 2000 | 1591.9 | +774.7% |
+| audited, snapshots off | 2000 | 1533.8 | +742.7% |
+| audited, null ledger | 2000 | 912.0 | +401.1% |
+
+Median of three runs. PHP 8.4.24 on SQLite with synchronous writes and the journal turned off — a
+container's `fsync` is not information about this package — six columns per subject, 2000 iterations
+after 200 warm-up writes, inside Docker on WSL2. The numbers are a report, not a gate: one that
+depends on the machine cannot block a merge.
+
+What the breakdown says: auditing a write costs about **1410 µs**, of which the snapshot itself is
+only **58 µs** (snapshots on minus snapshots off). Canonicalising and hashing the entry account for
+**730 µs** (null ledger minus plain), and the per-engine gate plus the insert for the remaining
+**680 µs** (snapshots on minus null ledger). Those were the two numbers `v0.3.0` left owed.
+
+### Notes
+
+- No migrations. `sentinel_audits` was born complete in `v0.2.0`; this version only fills columns
+  that already existed.
+- `payload_version` stays at **1**. The three entries frozen in `v0.3.0` rehash byte for byte with
+  `before` and `after` now carrying content: filling a nullable column is not a format change.
+- No user-facing strings were added, so `resources/lang/en` and `resources/lang/es` are unchanged.
+- Until `v0.6.0` every entry carries `source = system`; until `v0.7.0` there is no redaction and no
+  encryption, and `$auditExclude` is the only lever.
+
 ## v0.3.0 — Ledger, sequence and the integrity core (2026-08-26)
 
 ### Added

@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.3.0-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.4.0-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -20,7 +20,7 @@ the state was before, what it is now — and whether the record itself can be pr
 
 ```json
 "repositories": [{ "type": "vcs", "url": "https://github.com/elpandape/sentinel" }],
-"require": { "elpandape/sentinel": "v0.3.0" }
+"require": { "elpandape/sentinel": "v0.4.0" }
 ```
 
 ```bash
@@ -34,24 +34,125 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.1.0` | Configuration, execution context, facade, enums, quality toolchain |
 | `v0.2.0` | `sentinel_audits` schema, `Audit` model, `AuditData`, package contracts, factory |
 | `v0.3.0` | `DatabaseLedger`, `NullLedger`, the hash chain, verification, immutability guards |
+| `v0.4.0` | Model auditing, full snapshots, the `Auditable` trait, the write-path baseline |
 
-Everything else is on the roadmap: model auditing, snapshots and diffs, relationship auditing,
+Everything else is on the roadmap: structured diffs, resolved context, relationship auditing,
 business transactions, custom events, state transitions, restore, advanced verification
 (checkpoints and signatures), retention and compliance, performance modes and distributed tracing.
 
-`v0.3.0` is the version that starts writing: every entry a `Ledger` records is chained as it lands.
+`v0.4.0` is the version that starts auditing: a model with the trait writes its own chained entries.
 
 ## Quick start
 
 ```php
+use ElPandaPe\Sentinel\Concerns\Auditable;
+
+class Invoice extends Model
+{
+    use Auditable;
+}
+```
+
+That is the whole setup — no interface to implement, no observer to register. Every `created`,
+`updated`, `deleted`, `restored` and `forceDeleted` on that model writes a chained entry carrying
+the full state before and after:
+
+```php
+$invoice->update(['status' => 'paid']);
+
+$invoice->latestAudit()->before['status'];  // 'pending'
+$invoice->latestAudit()->after['status'];   // 'paid'
+$invoice->audits();                          // the whole trail, oldest first
+```
+
+Auditing pauses on demand, and what happens while it is paused leaves no entry:
+
+```php
 use ElPandaPe\Sentinel\Facades\Sentinel;
+
+Sentinel::withoutAuditing(fn () => $importer->run());
 
 Sentinel::withContext(['reason' => 'Approved by finance'], function () {
     $invoice->approve();
 });
-
-Sentinel::withoutAuditing(fn () => $importer->run());
 ```
+
+## What gets audited
+
+Five kinds of entry, from four eloquent events — a force delete fires `deleted` on its way to
+`forceDeleted`, and a restore is the update that clears the deletion mark:
+
+| Entry | Written when | `before` | `after` |
+|---|---|---|---|
+| `created` | The record is inserted | `null` | The full state |
+| `updated` | Any attribute changed | The state before | The state after |
+| `deleted` | `delete()`, soft or hard | The state leaving | `null` |
+| `restored` | `restore()` on a soft deleting model | The state in the bin | The state restored |
+| `force_deleted` | `forceDelete()` | The last known state | `null` |
+
+`restored` and `force_deleted` only exist if the model uses `SoftDeletes`; the trait neither
+requires it nor adds it. A soft delete reads like a hard one from the trail's point of view: the
+subject leaves the visible set, and the instant is already in `occurred_at`.
+
+Every attribute is audited unless the model says otherwise:
+
+```php
+class Invoice extends Model
+{
+    use Auditable;
+
+    protected array $auditInclude = ['status', 'total'];   // a whitelist; wins outright
+    protected array $auditExclude = ['internal_notes'];    // ignored when $auditInclude is set
+
+    protected Severity $auditSeverity = Severity::Critical; // beats the configured default
+    protected bool $auditSnapshots = false;                 // entry without payload, still chained
+}
+```
+
+Attributes in `$hidden` **are audited** by default — auditing is what the package is for. One key
+drops them everywhere:
+
+```php
+// config/sentinel.php
+'snapshots' => [
+    'enabled' => true,
+    'include_hidden' => false,
+],
+```
+
+> **There is no redaction and no encryption yet.** Until `v0.7.0`, `$auditExclude` is the only lever,
+> and an entry is immutable once written: a password hash or a token that reaches `before`/`after`
+> stays there. Exclude those columns now.
+
+> **Context is not resolved yet.** Until `v0.6.0` every entry carries `source = system` and no actor,
+> impersonator, tenant or trace.
+
+## Snapshots & diffs
+
+Each entry stores the **complete** state, not just the dirty attributes: an entry has to be readable
+without the original row in front of you. The model's own casts apply — a date serializes with its
+microseconds, a backed enum as its value, a value object through the `toArray()` or `__toString()`
+it declares — so a new cast in your application never asks for a change in the package.
+
+`null` and `{}` are different answers and are kept different: `null` means the state does not apply
+to that event, an empty map means the state applied and was empty.
+
+Key order is normalized and lists stay lists, which is what makes the column come back from MySQL,
+PostgreSQL or SQLite with the shape it went in with. The chain hashes the structure, never the text
+the engine happened to store.
+
+For a wide table where two copies per write do not pay for themselves:
+
+```php
+protected bool $auditSnapshots = false;
+```
+
+The entry is still written, still chained and still verifies — the chain never depended on an entry
+carrying content. Until `v0.5.0` ships the diff, though, such an entry carries nothing but the
+event, the subject, the version and the link: verifiable, not yet informative.
+
+`version` is a counter per subject, assigned by the ledger in the same operation that assigns
+`sequence`, so you can talk about *v3 of Invoice #500* without counting rows at query time.
 
 ## Configuration
 
@@ -204,6 +305,7 @@ make lint       # Pint (check only)
 make rector     # Rector (dry-run)
 make ci         # everything CI runs
 make test-dbs   # suite against MySQL and PostgreSQL
+make bench      # write-path baseline (a report, never a gate)
 make shell      # a shell inside the container
 ```
 
