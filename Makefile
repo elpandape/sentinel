@@ -1,7 +1,7 @@
 DC = docker compose
 PHP = $(DC) run --rm php
 
-.PHONY: build install update test coverage types stan lint lint-fix rector rector-fix mutation validate ci shell test-dbs
+.PHONY: build install update test bench coverage types stan lint lint-fix rector rector-fix mutation validate ci shell test-dbs
 
 build: ## Build the dev image
 	$(DC) build php
@@ -14,6 +14,9 @@ update: ## composer update
 
 test: ## Run the test suite (make test ARGS="tests/Support/ConfigTest.php")
 	$(PHP) vendor/bin/pest --parallel $(ARGS)
+
+bench: ## Write-path baseline (report, not a gate)
+	$(PHP) php -d memory_limit=1G benchmarks/bench.php
 
 coverage: ## Tests + 100% coverage gate
 	$(PHP) php -d memory_limit=1G -d pcov.directory=/app -d 'pcov.exclude=~/(vendor|tests|\.cache)/~' vendor/bin/pest --ci --coverage --min=100

@@ -1,6 +1,6 @@
 {
     "name": "elpandape/sentinel",
-    "description": "Ledger-first audit & integrity engine for Laravel — full snapshots, structured diffs, relationship auditing, execution context and a tamper-evident hash chain.",
+    "description": "Ledger-first audit & integrity engine for Laravel \u2014 full snapshots, structured diffs, relationship auditing, execution context and a tamper-evident hash chain.",
     "keywords": [
         "laravel",
         "audit",
@@ -53,7 +53,8 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "ElPandaPe\\Sentinel\\Tests\\": "tests/"
+            "ElPandaPe\\Sentinel\\Tests\\": "tests/",
+            "ElPandaPe\\Sentinel\\Benchmarks\\": "benchmarks/"
         }
     },
     "extra": {
