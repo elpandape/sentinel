@@ -26,15 +26,23 @@ jobs:
       - name: Mutation testing
         # Mirrors `make mutation`: pest does not accumulate repeated --path flags.
         # Integrity sits higher than the rest: a mutant surviving there is a verification that lies.
+        # Every path is measured before any threshold is enforced. The step runs under `bash -e`, so
+        # letting a missed minimum abort it would leave the modules queued behind that one unmeasured
+        # for as long as it stays below its threshold — which is exactly when their numbers matter.
         run: |
           set -- "src/Integrity:95" "src/Diff:90" "src/Ledger:90" "src/Snapshot:90" "src/Capture:0" "src/Concerns:0" "src/Support:0" "src/Context:0" "src/Models:0" "src/SentinelServiceProvider.php:0"
+          below=""
           for entry in "$@"; do
             path="${entry%%:*}"
             min="${entry##*:}"
             echo "== $path (min $min)"
             php -d pcov.directory=$GITHUB_WORKSPACE -d 'pcov.exclude=~/(vendor|tests)/~' -d memory_limit=2G \
-              vendor/bin/pest --mutate --covered-only --path=$path --min=$min
+              vendor/bin/pest --mutate --covered-only --path=$path --min=$min || below="$below $path"
           done
+          if [ -n "$below" ]; then
+            echo "== below their threshold:$below"
+            exit 1
+          fi
 
   mutation-databases:
     runs-on: ubuntu-latest
