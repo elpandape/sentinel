@@ -7,6 +7,11 @@ namespace ElPandaPe\Sentinel\Diff;
 final class Comparator
 {
     /**
+     * @var list<string>
+     */
+    private const array IDENTITIES = ['id', 'uuid'];
+
+    /**
      * @return list<Change>
      */
     public static function compare(mixed $before, mixed $after, string $path = ''): array
@@ -88,6 +93,20 @@ final class Comparator
      */
     private static function lists(array $before, array $after, string $path): array
     {
+        $identity = self::identity($before, $after);
+
+        return $identity === null
+            ? self::byPosition($before, $after, $path)
+            : self::byIdentity($before, $after, $path, $identity);
+    }
+
+    /**
+     * @param  list<mixed>  $before
+     * @param  list<mixed>  $after
+     * @return list<Change>
+     */
+    private static function byPosition(array $before, array $after, string $path): array
+    {
         $changes = [];
 
         for ($index = 0; $index < max(count($before), count($after)); $index++) {
@@ -95,5 +114,102 @@ final class Comparator
         }
 
         return $changes;
+    }
+
+    /**
+     * Elements are followed, not compared where they happen to sit: an insertion in the
+     * middle is one addition. An addition is indexed on the document it appears in and a
+     * removal on the one it left, so the two can land on the same index.
+     *
+     * @param  list<mixed>  $before
+     * @param  list<mixed>  $after
+     * @return list<Change>
+     */
+    private static function byIdentity(array $before, array $after, string $path, string $identity): array
+    {
+        $kept = self::keyed($before, $identity);
+        $survivors = self::keyed($after, $identity);
+        $changes = [];
+
+        foreach ($after as $index => $element) {
+            /** @var array<array-key, mixed> $element */
+            $id = self::key($element[$identity]);
+
+            $changes = array_key_exists($id, $kept)
+                ? [...$changes, ...self::compare($kept[$id], $element, $path.'/'.$index)]
+                : [...$changes, new Change($path.'/'.$index, 'add', null, $element)];
+        }
+
+        foreach ($before as $index => $element) {
+            /** @var array<array-key, mixed> $element */
+            if (! array_key_exists(self::key($element[$identity]), $survivors)) {
+                $changes[] = new Change($path.'/'.$index, 'remove', $element);
+            }
+        }
+
+        return $changes;
+    }
+
+    /**
+     * @param  list<mixed>  $before
+     * @param  list<mixed>  $after
+     */
+    private static function identity(array $before, array $after): ?string
+    {
+        if ($before === [] || $after === []) {
+            return null;
+        }
+
+        foreach (self::IDENTITIES as $identity) {
+            if (self::identifies($before, $identity) && self::identifies($after, $identity)) {
+                return $identity;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  list<mixed>  $elements
+     */
+    private static function identifies(array $elements, string $identity): bool
+    {
+        $seen = [];
+
+        foreach ($elements as $element) {
+            if (! is_array($element) || ! is_scalar($element[$identity] ?? null)) {
+                return false;
+            }
+
+            $seen[self::key($element[$identity])] = true;
+        }
+
+        return count($seen) === count($elements);
+    }
+
+    /**
+     * @param  list<mixed>  $elements
+     * @return array<string, array<array-key, mixed>>
+     */
+    private static function keyed(array $elements, string $identity): array
+    {
+        $keyed = [];
+
+        foreach ($elements as $element) {
+            /** @var array<array-key, mixed> $element */
+            $keyed[self::key($element[$identity])] = $element;
+        }
+
+        return $keyed;
+    }
+
+    /**
+     * The type travels inside the key: without it an id of 1 and an id of '1' would be
+     * the same element, and the strict equality the rest of the comparison applies would
+     * stop holding here.
+     */
+    private static function key(mixed $value): string
+    {
+        return get_debug_type($value).':'.var_export($value, true);
     }
 }
