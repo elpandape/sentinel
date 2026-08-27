@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Benchmarks\BenchAudited;
 use ElPandaPe\Sentinel\Benchmarks\BenchPlain;
+use ElPandaPe\Sentinel\Benchmarks\BenchProtected;
 use ElPandaPe\Sentinel\Benchmarks\BenchSnapshotless;
 use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\SentinelServiceProvider;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
@@ -38,6 +40,9 @@ $app->make('config')->set('database.connections.bench', [
     'prefix' => '',
     'foreign_key_constraints' => false,
 ]);
+
+// Encryption derives its default key from this one, the way an application does.
+$app->make('config')->set('app.key', 'base64:'.base64_encode(str_pad('sentinel-bench-key', 32, '0')));
 
 $app->register(SentinelServiceProvider::class);
 
@@ -81,6 +86,7 @@ $variants = [
     'plain (not audited)' => BenchPlain::class,
     'audited, snapshots on' => BenchAudited::class,
     'audited, snapshots off' => BenchSnapshotless::class,
+    'audited, two fields protected' => BenchProtected::class,
 ];
 
 $offset = 0;
@@ -141,6 +147,22 @@ for ($i = 0; $i < ITERATIONS; $i++) {
 }
 
 $results['context only (no ledger, no write)'] = (hrtime(true) - $start) / 1_000_000;
+
+// The stage list with nothing around it: what this version adds to every capture, separated
+// from the write it lands in and from the resolver chain it contains.
+$pipeline = $app->make(Pipeline::class);
+
+for ($i = 0; $i < WARMUP; $i++) {
+    $pipeline->process(new AuditData('model', 'created', Severity::Info, new DateTimeImmutable));
+}
+
+$start = hrtime(true);
+
+for ($i = 0; $i < ITERATIONS; $i++) {
+    $pipeline->process(new AuditData('model', 'created', Severity::Info, new DateTimeImmutable));
+}
+
+$results['pipeline only (no ledger, no write)'] = (hrtime(true) - $start) / 1_000_000;
 
 $baseline = $results['plain (not audited)'];
 
