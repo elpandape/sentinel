@@ -250,10 +250,10 @@ function auditsOf(Model $subject): AuditCollection
     return $audits;
 }
 
-function verifier(): Verifier
+function verifier(?Ledger $ledger = null): Verifier
 {
     /** @var Verifier $verifier */
-    $verifier = app(Verifier::class);
+    $verifier = app(Verifier::class, array_filter(['ledger' => $ledger]));
 
     return $verifier;
 }
