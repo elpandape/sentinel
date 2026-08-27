@@ -108,6 +108,33 @@ final class GoldenLedger
                 '{"actor_id":null,"actor_type":null,"affected_rows":null,"after":{"active":false,"name":"Grace","published_at":null},"audit_type":"model","before":{"active":true,"name":"Ada","published_at":"2026-08-26T10:00:00.123456+00:00"},"changes":null,"context":[],"criteria":null,"encryption":null,"event":"updated","id":"01JGOLDEN000000000000000D4","impersonator_id":null,"impersonator_type":null,"metadata":null,"occurred_at":"2026-08-26 10:00:00.000000","request_id":null,"severity":"info","source":"system","source_audit_id":null,"span_id":null,"subject_id":"1","subject_type":"subject","tenant_id":null,"trace_id":null,"transaction_id":null,"version":2}',
                 '729aaf38a9811bb46f582c262d4e4e2ab4a7509dc9cb4989d8356e8508402402',
             ],
+            'an entry carrying the diff of its own change' => [
+                [
+                    'id' => '01JGOLDEN000000000000000E5',
+                    'stream' => 'global',
+                    'sequence' => 4,
+                    'audit_type' => 'model',
+                    'event' => 'updated',
+                    'severity' => 'info',
+                    'source' => 'system',
+                    'subject_type' => 'subject',
+                    'subject_id' => '1',
+                    'version' => 3,
+                    'context' => [],
+                    'before' => ['city' => 'Lima', 'roles' => [['id' => 1, 'name' => 'admin']]],
+                    'after' => ['city' => 'Arequipa', 'roles' => [['id' => 1, 'name' => 'owner']]],
+                    'changes' => [
+                        ['path' => '/city', 'op' => 'replace', 'old' => 'Lima', 'new' => 'Arequipa'],
+                        ['path' => '/roles/0/name', 'op' => 'replace', 'old' => 'admin', 'new' => 'owner'],
+                    ],
+                    'payload_version' => 1,
+                    'algorithm' => 'sha256',
+                    'previous_hash' => '729aaf38a9811bb46f582c262d4e4e2ab4a7509dc9cb4989d8356e8508402402',
+                    'occurred_at' => '2026-08-26 10:00:00.000000',
+                ],
+                '{"actor_id":null,"actor_type":null,"affected_rows":null,"after":{"city":"Arequipa","roles":[{"id":1,"name":"owner"}]},"audit_type":"model","before":{"city":"Lima","roles":[{"id":1,"name":"admin"}]},"changes":[{"new":"Arequipa","old":"Lima","op":"replace","path":"/city"},{"new":"owner","old":"admin","op":"replace","path":"/roles/0/name"}],"context":[],"criteria":null,"encryption":null,"event":"updated","id":"01JGOLDEN000000000000000E5","impersonator_id":null,"impersonator_type":null,"metadata":null,"occurred_at":"2026-08-26 10:00:00.000000","request_id":null,"severity":"info","source":"system","source_audit_id":null,"span_id":null,"subject_id":"1","subject_type":"subject","tenant_id":null,"trace_id":null,"transaction_id":null,"version":3}',
+                '6b42c17df4bb627e6bf237d873bd420b9fcf463c7fa035a3b09fd5012413086e',
+            ],
         ];
     }
 }

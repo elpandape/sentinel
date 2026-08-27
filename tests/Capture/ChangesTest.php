@@ -24,7 +24,7 @@ it('writes the leaf that moved and nothing else for an update', function (): voi
     $subject = AuditedSubject::query()->create(['name' => 'Ada', 'email' => 'ada@example.com']);
     $subject->update(['name' => 'Grace']);
 
-    expect(auditsOf($subject)->last()?->changes)->toBe([
+    expect(auditsOf($subject)->last()?->diff()->toArray())->toBe([
         ['path' => '/name', 'op' => 'replace', 'old' => 'Ada', 'new' => 'Grace'],
     ]);
 });
@@ -45,7 +45,8 @@ it('writes an empty list, not a null, for an update the field policy leaves unto
     $last = auditsOf($subject)->last();
 
     expect($last?->event)->toBe('updated')
-        ->and($last?->changes)->toBe([]);
+        ->and($last?->changes)->toBe([])
+        ->and($last?->diff()->isEmpty())->toBeTrue();
 });
 
 it('keeps the diff as the only record of the change when the model drops its snapshots', function (): void {
@@ -56,7 +57,7 @@ it('keeps the diff as the only record of the change when the model drops its sna
 
     expect($last?->before)->toBeNull()
         ->and($last?->after)->toBeNull()
-        ->and($last?->changes)->toBe([
+        ->and($last?->diff()->toArray())->toBe([
             ['path' => '/name', 'op' => 'replace', 'old' => 'Ada', 'new' => 'Grace'],
         ]);
 });
