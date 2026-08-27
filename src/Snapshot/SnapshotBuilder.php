@@ -48,10 +48,6 @@ final readonly class SnapshotBuilder
      */
     public function pair(Model $model, AuditEvent $event, ?array $restorePoint = null): SnapshotPair
     {
-        if (! $this->enabled($model)) {
-            return new SnapshotPair;
-        }
-
         return match ($event) {
             AuditEvent::Created => new SnapshotPair(after: $this->build($model, $model->getAttributes())),
             AuditEvent::Updated => new SnapshotPair(
@@ -66,7 +62,11 @@ final readonly class SnapshotBuilder
         };
     }
 
-    private function enabled(Model $model): bool
+    /**
+     * Whether the pair is written down. It is built either way: without it there is
+     * nothing to diff, and the diff is all an entry with no snapshots has left.
+     */
+    public function retains(Model $model): bool
     {
         return $this->config->snapshotsEnabled() && AuditPolicy::of($model)->snapshots;
     }

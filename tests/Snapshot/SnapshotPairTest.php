@@ -62,16 +62,21 @@ it('carries no snapshot for an event that is not a model change', function (): v
     expect($pair->before)->toBeNull()->and($pair->after)->toBeNull();
 });
 
-it('carries no snapshot when the configuration turned them off', function (): void {
+it('builds the pair even when the configuration says not to keep it', function (): void {
     $builder = new SnapshotBuilder(sentinelConfig(['snapshots.enabled' => false]));
+    $subject = new CastingSubject()->forceFill(['name' => 'Ada']);
 
-    $pair = $builder->pair(new CastingSubject()->forceFill(['name' => 'Ada']), AuditEvent::Created);
-
-    expect($pair->before)->toBeNull()->and($pair->after)->toBeNull();
+    expect($builder->pair($subject, AuditEvent::Created)->after)->toBe(['name' => 'Ada'])
+        ->and($builder->retains($subject))->toBeFalse();
 });
 
-it('carries no snapshot when the model turned them off', function (): void {
-    $pair = snapshotBuilder()->pair(new SnapshotlessSubject()->forceFill(['name' => 'Ada']), AuditEvent::Created);
+it('builds the pair even when the model says not to keep it', function (): void {
+    $subject = new SnapshotlessSubject()->forceFill(['name' => 'Ada']);
 
-    expect($pair->before)->toBeNull()->and($pair->after)->toBeNull();
+    expect(snapshotBuilder()->pair($subject, AuditEvent::Created)->after)->toBe(['name' => 'Ada'])
+        ->and(snapshotBuilder()->retains($subject))->toBeFalse();
+});
+
+it('keeps the pair for a model that says nothing about snapshots', function (): void {
+    expect(snapshotBuilder()->retains(new CastingSubject))->toBeTrue();
 });

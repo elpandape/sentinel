@@ -23,7 +23,7 @@ it('records a created entry with the state that now exists and nothing before it
         ->and($audit?->after['name'] ?? null)->toBe('Ada')
         ->and($audit?->severity)->toBe(Severity::Info)
         ->and($audit?->source)->toBe(Source::System)
-        ->and($audit?->changes)->toBeNull()
+        ->and($audit?->changes)->not->toBeNull()
         ->and($audit?->version)->toBe(1);
 });
 
