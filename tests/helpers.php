@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Tests;
 
 use DateTimeImmutable;
+use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Context\Runtime;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Diff\Diff;
@@ -336,4 +337,12 @@ function httpRequest(string $uri, array $headers = []): Request
     runtime()->enteredRequest($request);
 
     return $request;
+}
+
+function contextEngine(): ContextEngine
+{
+    /** @var ContextEngine $engine */
+    $engine = app(ContextEngine::class);
+
+    return $engine;
 }

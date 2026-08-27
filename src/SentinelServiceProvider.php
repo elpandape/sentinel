@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel;
 
+use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Context\ExecutionContext;
 use ElPandaPe\Sentinel\Context\Runtime;
 use ElPandaPe\Sentinel\Contracts\Canonicalizer;
@@ -56,6 +57,7 @@ final class SentinelServiceProvider extends ServiceProvider
         });
 
         // Scoped: execution context and recording state belong to one request or job, not to the worker.
+        $this->app->scoped(ContextEngine::class);
         $this->app->scoped(ExecutionContext::class);
         $this->app->scoped(Runtime::class);
         $this->app->scoped(Sentinel::class);

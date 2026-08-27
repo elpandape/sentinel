@@ -52,3 +52,8 @@ arch('the diff component depends on nothing in the package and nothing in the da
         'ElPandaPe\Sentinel\Snapshot',
         'ElPandaPe\Sentinel\Support',
     ]);
+
+arch('every resolver the package ships implements the contract and is final')
+    ->expect('ElPandaPe\Sentinel\Context\Resolvers')
+    ->toImplement(ElPandaPe\Sentinel\Contracts\Resolver::class)
+    ->toBeFinal();
