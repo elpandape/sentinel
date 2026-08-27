@@ -28,7 +28,11 @@ final readonly class ArrayQuery
 
         usort($matched, $this->chronologically(...));
 
-        return $query->newestFirst ? array_reverse($matched) : $matched;
+        if ($query->newestFirst) {
+            $matched = array_reverse($matched);
+        }
+
+        return array_slice($matched, $query->offset ?? 0, $query->limit);
     }
 
     private function matches(Audit $audit, AuditQuery $query): bool

@@ -14,6 +14,7 @@ use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Exceptions\LedgerException;
 use ElPandaPe\Sentinel\Exceptions\QueryException;
+use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Reference;
 
 /**
@@ -29,6 +30,13 @@ use ElPandaPe\Sentinel\Support\Reference;
  */
 final class AuditQuery
 {
+    /**
+     * What get() asks for when nothing else bounds it. A trail has no natural end, so a read
+     * with no bound is a read of the whole table: the surface declines to issue it rather
+     * than discovering the size of the answer once it has arrived. paginate() walks past it.
+     */
+    public const int DEFAULT_LIMIT = 500;
+
     public private(set) ?Reference $subject = null;
 
     public private(set) ?Reference $actor = null;
@@ -48,6 +56,10 @@ final class AuditQuery
     public private(set) ?Period $period = null;
 
     public private(set) bool $newestFirst = false;
+
+    public private(set) ?int $limit = null;
+
+    public private(set) ?int $offset = null;
 
     /**
      * @var list<Filter>
@@ -154,6 +166,39 @@ final class AuditQuery
         $query->newestFirst = true;
 
         return $query;
+    }
+
+    public function get(): AuditCollection
+    {
+        $query = clone $this;
+        $query->limit = self::DEFAULT_LIMIT;
+
+        return $this->ledger->query($query);
+    }
+
+    /**
+     * One page, one call to the ledger. It asks for one entry more than the page holds and
+     * hands back the page without it, which answers whether there is another page for the
+     * price of a row instead of the price of a count over everything the filter matches.
+     */
+    public function paginate(int $perPage, int $page = 1): AuditPage
+    {
+        if ($perPage < 1 || $page < 1) {
+            throw QueryException::unreachablePage($perPage, $page);
+        }
+
+        $query = clone $this;
+        $query->limit = $perPage + 1;
+        $query->offset = ($page - 1) * $perPage;
+
+        $entries = $this->ledger->query($query);
+
+        return new AuditPage(
+            $entries->take($perPage)->values(),
+            $page,
+            $perPage,
+            $entries->count() > $perPage,
+        );
     }
 
     private function accepting(Filter $filter): self

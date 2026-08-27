@@ -6,9 +6,11 @@ namespace ElPandaPe\Sentinel;
 
 use Closure;
 use ElPandaPe\Sentinel\Context\ExecutionContext;
+use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Integrity\VerificationResult;
 use ElPandaPe\Sentinel\Integrity\Verifier;
+use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Support\Policies;
 
@@ -21,7 +23,18 @@ final class Sentinel
         private readonly ExecutionContext $context,
         private readonly Verifier $verifier,
         private readonly Policies $policies,
+        private readonly Ledger $ledger,
     ) {}
+
+    /**
+     * The way in to the trail, and the only one: every read goes through the ledger contract
+     * from here, so a driver over something that is not a table answers the same query, and
+     * so the version that has to log who read what has one place to log it.
+     */
+    public function audits(): AuditQuery
+    {
+        return new AuditQuery($this->ledger);
+    }
 
     /**
      * The last word on whether an entry settles. A policy that returns false discards it,

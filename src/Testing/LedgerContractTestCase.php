@@ -258,6 +258,25 @@ abstract class LedgerContractTestCase extends TestCase
         $this->assertSame($this->retains() ? [$wanted->id] : [], $found->pluck('id')->all());
     }
 
+    public function test_it_answers_one_page_at_a_time_and_says_whether_another_follows(): void
+    {
+        $ledger = $this->ledger();
+        $written = [
+            $ledger->write($this->auditData())->id,
+            $ledger->write($this->auditData())->id,
+            $ledger->write($this->auditData())->id,
+        ];
+        $this->settle($ledger);
+
+        $first = $this->asking()->paginate(2);
+        $second = $this->asking()->paginate(2, 2);
+
+        $this->assertSame($this->retains() ? array_slice($written, 0, 2) : [], $first->entries->pluck('id')->all());
+        $this->assertSame($this->retains(), $first->hasMore);
+        $this->assertSame($this->retains() ? array_slice($written, 2) : [], $second->entries->pluck('id')->all());
+        $this->assertFalse($second->hasMore);
+    }
+
     public function test_it_walks_one_transaction_newest_first(): void
     {
         $ledger = $this->ledger();

@@ -7,6 +7,7 @@ namespace ElPandaPe\Sentinel\Facades;
 use Illuminate\Support\Facades\Facade;
 
 /**
+ * @method static \ElPandaPe\Sentinel\Query\AuditQuery audits()
  * @method static \ElPandaPe\Sentinel\Support\Config config()
  * @method static \ElPandaPe\Sentinel\Context\ExecutionContext context()
  * @method static void filter(\Closure $policy)

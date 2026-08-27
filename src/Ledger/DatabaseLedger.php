@@ -82,6 +82,8 @@ final readonly class DatabaseLedger implements Ledger
                 ->whereBetween('created_at', [$period->from, $period->to]))
             ->orderBy('created_at', $direction)
             ->orderBy('id', $direction)
+            ->when($query->offset, static fn (Builder $entries, int $offset): Builder => $entries->offset($offset))
+            ->when($query->limit, static fn (Builder $entries, int $limit): Builder => $entries->limit($limit))
             ->get();
 
         return $entries;
