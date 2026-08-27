@@ -27,7 +27,7 @@ jobs:
         # Mirrors `make mutation`: pest does not accumulate repeated --path flags.
         # Integrity sits higher than the rest: a mutant surviving there is a verification that lies.
         run: |
-          set -- "src/Integrity:95" "src/Ledger:90" "src/Support:0" "src/Context:0" "src/Models:0" "src/SentinelServiceProvider.php:0"
+          set -- "src/Integrity:95" "src/Ledger:90" "src/Snapshot:90" "src/Capture:0" "src/Concerns:0" "src/Support:0" "src/Context:0" "src/Models:0" "src/SentinelServiceProvider.php:0"
           for entry in "$@"; do
             path="${entry%%:*}"
             min="${entry##*:}"
@@ -35,3 +35,55 @@ jobs:
             php -d pcov.directory=$GITHUB_WORKSPACE -d 'pcov.exclude=~/(vendor|tests)/~' -d memory_limit=2G \
               vendor/bin/pest --mutate --covered-only --path=$path --min=$min
           done
+
+  mutation-databases:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    continue-on-error: true
+
+    services:
+      mysql:
+        image: mysql:9
+        env:
+          MYSQL_ROOT_PASSWORD: secret
+          MYSQL_DATABASE: sentinel
+        ports: ["3306:3306"]
+        options: --health-cmd="mysqladmin ping -psecret" --health-interval=5s --health-retries=10
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: secret
+          POSTGRES_DB: sentinel
+        ports: ["5432:5432"]
+        options: --health-cmd="pg_isready -U postgres" --health-interval=5s --health-retries=10
+
+    strategy:
+      fail-fast: false
+      matrix:
+        connection: [mysql, pgsql]
+
+    name: mutation DB ${{ matrix.connection }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: dom, curl, libxml, mbstring, zip, pdo, pdo_mysql, pdo_pgsql
+          coverage: pcov
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction
+
+      # The advisory lock and the gap lock are invisible to a run on SQLite alone.
+      - name: Mutation testing over the ledger
+        env:
+          DB_CONNECTION: ${{ matrix.connection }}
+          DB_HOST: 127.0.0.1
+          DB_USERNAME: ${{ matrix.connection == 'mysql' && 'root' || 'postgres' }}
+          DB_PASSWORD: secret
+          DB_DATABASE: sentinel
+        run: |
+          php -d pcov.directory=$GITHUB_WORKSPACE -d 'pcov.exclude=~/(vendor|tests)/~' -d memory_limit=2G \
+            vendor/bin/pest --mutate --covered-only --path=src/Ledger --min=90

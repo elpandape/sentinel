@@ -42,6 +42,10 @@ it('falls back to the global chain when the entry carries no subject', function 
     expect(stream(['integrity.stream' => 'subject_type'])->resolve(auditData()))->toBe('global');
 });
 
+it('refuses a class that exists but answers to no resolver contract', function (): void {
+    stream(['integrity.stream' => AuditableSubject::class])->resolve(auditData());
+})->throws(ConfigurationException::class, 'integrity.stream');
+
 it('lets a closure name the chain', function (): void {
     $strategy = static fn (): string => 'closure';
 

@@ -24,9 +24,9 @@ final readonly class Hasher
         }
 
         $prefix = implode(self::SEPARATOR, [
-            (string) $audit->payload_version,
+            $audit->payload_version,
             $audit->stream,
-            (string) $audit->sequence,
+            $audit->sequence,
             $audit->previous_hash ?? '',
         ]);
 

@@ -80,3 +80,41 @@ it('persists every entry of the batch', function (): void {
 
     expect(Audit::query()->count())->toBe(3);
 });
+
+it('counts a version per subject inside one batch', function (): void {
+    $written = $this->ledger->writeMany([
+        auditData(['subject_type' => 'user', 'subject_id' => '1']),
+        auditData(['subject_type' => 'user', 'subject_id' => '2']),
+        auditData(['subject_type' => 'user', 'subject_id' => '1']),
+        auditData(['subject_type' => 'role', 'subject_id' => '1']),
+    ]);
+
+    expect($written->pluck('version')->all())->toBe([1, 1, 2, 1]);
+});
+
+it('leaves an entry with half a subject out of the version count', function (): void {
+    $written = $this->ledger->writeMany([
+        auditData(['subject_type' => 'user']),
+        auditData(['subject_id' => '1']),
+    ]);
+
+    expect($written->pluck('version')->all())->toBe([null, null]);
+});
+
+it('marks every entry of a batch as one that has just been created', function (): void {
+    $written = $this->ledger->writeMany([auditData(), auditData()]);
+
+    expect($written->every(fn (Audit $audit): bool => $audit->wasRecentlyCreated))->toBeTrue()
+        ->and($written->every(fn (Audit $audit): bool => $audit->exists))->toBeTrue()
+        ->and($written->every(fn (Audit $audit): bool => ! $audit->isDirty()))->toBeTrue();
+});
+
+it('tells two subjects apart when their type and key run together', function (): void {
+    $written = $this->ledger->writeMany([
+        auditData(['subject_type' => 'user', 'subject_id' => '11']),
+        auditData(['subject_type' => 'user1', 'subject_id' => '1']),
+        auditData(['subject_type' => 'user', 'subject_id' => '11']),
+    ]);
+
+    expect($written->pluck('version')->all())->toBe([1, 1, 2]);
+});

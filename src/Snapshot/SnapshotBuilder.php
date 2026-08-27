@@ -30,7 +30,7 @@ final readonly class SnapshotBuilder
     public function build(Model $model, array $attributes): array
     {
         $replica = $model->newInstance();
-        $replica->setRawAttributes($attributes, true);
+        $replica->setRawAttributes($attributes);
 
         $snapshot = [];
 
@@ -73,7 +73,7 @@ final readonly class SnapshotBuilder
 
     /**
      * @param  array<string, mixed>  $attributes
-     * @return list<string>
+     * @return array<array-key, string>
      */
     private function keys(Model $model, array $attributes): array
     {
@@ -81,14 +81,14 @@ final readonly class SnapshotBuilder
         $keys = array_keys($attributes);
 
         if ($policy->included !== []) {
-            return array_values(array_intersect($keys, $policy->included));
+            return array_intersect($keys, $policy->included);
         }
 
         $dropped = $this->config->snapshotsIncludeHidden()
             ? $policy->excluded
             : [...$policy->excluded, ...$model->getHidden()];
 
-        return array_values(array_diff($keys, $dropped));
+        return array_diff($keys, $dropped);
     }
 
     private function normalize(string $attribute, mixed $value): mixed

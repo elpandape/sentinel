@@ -5,10 +5,13 @@ declare(strict_types=1);
 use ElPandaPe\Sentinel\Exceptions\SnapshotException;
 use ElPandaPe\Sentinel\Snapshot\SnapshotBuilder;
 use ElPandaPe\Sentinel\Tests\Fixtures\CastingSubject;
+use ElPandaPe\Sentinel\Tests\Fixtures\Coordinates;
 use ElPandaPe\Sentinel\Tests\Fixtures\HiddenSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\IntKeySubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\Money;
+use ElPandaPe\Sentinel\Tests\Fixtures\PureStatus;
 use ElPandaPe\Sentinel\Tests\Fixtures\SelectiveSubject;
+use ElPandaPe\Sentinel\Tests\Fixtures\Slug;
 use ElPandaPe\Sentinel\Tests\Fixtures\SubjectStatus;
 
 use function ElPandaPe\Sentinel\Tests\sentinelConfig;
@@ -102,6 +105,44 @@ it('reads every attribute of a model that answers for no policy', function (): v
     $subject = new IntKeySubject()->forceFill(['b' => 2, 'a' => 1]);
 
     expect(snapshotBuilder()->build($subject, $subject->getAttributes()))->toBe(['a' => 1, 'b' => 2]);
+});
+
+it('serializes a pure enum by the name it has, since it has no value', function (): void {
+    $subject = new CastingSubject;
+    $subject->setAttribute('name', PureStatus::Published);
+
+    expect(snapshotBuilder()->build($subject, $subject->getAttributes())['name'])->toBe('Published');
+});
+
+it('serializes an object that says how it turns into json', function (): void {
+    $subject = new CastingSubject;
+    $subject->setAttribute('name', new Coordinates(-12.05, -77.04));
+
+    expect(snapshotBuilder()->build($subject, $subject->getAttributes())['name'])
+        ->toBe(['lat' => -12.05, 'lng' => -77.04]);
+});
+
+it('serializes an object that only knows how to be a string', function (): void {
+    $subject = new CastingSubject;
+    $subject->setAttribute('name', new Slug('ada-lovelace'));
+
+    expect(snapshotBuilder()->build($subject, $subject->getAttributes())['name'])->toBe('ada-lovelace');
+});
+
+it('normalizes what an array holds and not just the array', function (): void {
+    $subject = new CastingSubject;
+    $subject->setAttribute('name', ['when' => new DateTimeImmutable('2026-08-26 10:00:00.123456'), 'who' => PureStatus::Draft]);
+
+    expect(snapshotBuilder()->build($subject, $subject->getAttributes())['name'])
+        ->toBe(['when' => '2026-08-26T10:00:00.123456+00:00', 'who' => 'Draft']);
+});
+
+it('drops what the model excludes and what it hides, at the same time', function (): void {
+    $subject = new CastingSubject()->forceFill(['name' => 'Ada', 'email' => 'a@b.c', 'secret' => 'shhh']);
+    $subject->setHidden(['email']);
+    $builder = new SnapshotBuilder(sentinelConfig(['snapshots.include_hidden' => false]));
+
+    expect(array_keys($builder->build($subject, $subject->getAttributes())))->toBe(['name']);
 });
 
 it('refuses an attribute it cannot represent instead of writing something else', function (): void {

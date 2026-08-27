@@ -46,3 +46,20 @@ it('refuses a key that is not valid utf-8', function (): void {
     expect(fn (): string => new JsonCanonicalizer()->canonicalize(["\xB1\x31" => 'a']))
         ->toThrow(CanonicalizationException::class, 'UTF-8');
 });
+
+it('writes a number the way ECMAScript does', function (float $value, string $expected): void {
+    expect(new JsonCanonicalizer()->canonicalize(['n' => $value]))->toBe('{"n":'.$expected.'}');
+})->with([
+    'zero' => [0.0, '0'],
+    'minus one' => [-1.0, '-1'],
+    'a negative below one' => [-0.5, '-0.5'],
+    'the last decimal before the exponent' => [1.0e-6, '0.000001'],
+    'one step further into the exponent' => [1.0e-7, '1e-7'],
+    'an integer that fits without a point' => [1000.0, '1000'],
+    'a decimal inside the digits' => [1.5, '1.5'],
+]);
+
+it('orders a numeric key as the string it becomes in json', function (): void {
+    expect(new JsonCanonicalizer()->canonicalize([2 => 'two', 'a' => 1]))
+        ->toBe('{"2":"two","a":1}');
+});

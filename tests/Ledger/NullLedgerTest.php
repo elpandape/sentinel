@@ -70,3 +70,33 @@ it('writes nothing for an empty batch', function (): void {
 it('says out loud that the query api has not arrived yet', function (): void {
     expect(fn (): mixed => $this->ledger->query(new AuditQuery))->toThrow(LedgerException::class);
 });
+
+it('counts a version per subject in memory too', function (): void {
+    $written = $this->ledger->writeMany([
+        auditData(['subject_type' => 'user', 'subject_id' => '1']),
+        auditData(['subject_type' => 'user', 'subject_id' => '2']),
+        auditData(['subject_type' => 'user', 'subject_id' => '1']),
+        auditData(['subject_type' => 'role', 'subject_id' => '1']),
+    ]);
+
+    expect($written->pluck('version')->all())->toBe([1, 1, 2, 1]);
+});
+
+it('leaves an entry with half a subject out of the version count in memory too', function (): void {
+    $written = $this->ledger->writeMany([
+        auditData(['subject_type' => 'user']),
+        auditData(['subject_id' => '1']),
+    ]);
+
+    expect($written->pluck('version')->all())->toBe([null, null]);
+});
+
+it('tells two subjects apart when their type and key run together', function (): void {
+    $written = $this->ledger->writeMany([
+        auditData(['subject_type' => 'user', 'subject_id' => '11']),
+        auditData(['subject_type' => 'user1', 'subject_id' => '1']),
+        auditData(['subject_type' => 'user', 'subject_id' => '11']),
+    ]);
+
+    expect($written->pluck('version')->all())->toBe([1, 1, 2]);
+});
