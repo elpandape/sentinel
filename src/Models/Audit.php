@@ -6,6 +6,7 @@ namespace ElPandaPe\Sentinel\Models;
 
 use Carbon\CarbonImmutable;
 use ElPandaPe\Sentinel\Database\Factories\AuditFactory;
+use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Exceptions\ImmutableAuditException;
@@ -95,6 +96,37 @@ class Audit extends Model
     public function impersonator(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    /**
+     * An entry written before the diff existed still answers: the comparison runs on read
+     * from the two states it stored, and the row is not touched.
+     *
+     * The attributes are read through getAttribute because eloquent declares a $changes
+     * property of its own — inside the model, $this->changes is the dirty set of the last
+     * save, not the column.
+     */
+    public function diff(): Diff
+    {
+        /** @var array<array-key, mixed>|null $changes */
+        $changes = $this->getAttribute('changes');
+
+        if ($changes !== null) {
+            return Diff::fromEntries($changes);
+        }
+
+        /** @var array<string, mixed>|null $before */
+        $before = $this->getAttribute('before');
+
+        /** @var array<string, mixed>|null $after */
+        $after = $this->getAttribute('after');
+
+        return Diff::between($before ?? [], $after ?? []);
+    }
+
+    public function diffFor(string $path): Diff
+    {
+        return $this->diff()->for($path);
     }
 
     public function verifyIntegrity(): bool
