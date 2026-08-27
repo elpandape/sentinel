@@ -14,6 +14,11 @@ final class ExecutionContext
     private array $data = [];
 
     /**
+     * @var array<string, array<string, mixed>>
+     */
+    private array $memo = [];
+
+    /**
      * @return array<string, mixed>
      */
     public function all(): array
@@ -52,6 +57,19 @@ final class ExecutionContext
     public function flush(): void
     {
         $this->data = [];
+        $this->memo = [];
+    }
+
+    /**
+     * The scope of a memo is the container scope, not the callback scope: pushing context
+     * by hand says nothing about the host the entry was written on.
+     *
+     * @param  Closure(): array<string, mixed>  $resolve
+     * @return array<string, mixed>
+     */
+    public function memoize(string $key, Closure $resolve): array
+    {
+        return $this->memo[$key] ??= $resolve();
     }
 
     /**

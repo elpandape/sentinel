@@ -58,3 +58,48 @@ it('restores the previous state when the scope throws', function (): void {
     }))->toThrow(RuntimeException::class)
         ->and($this->context->all())->toBe(['tenant' => 'acme']);
 });
+
+it('resolves a memoized key once', function (): void {
+    $calls = 0;
+    $resolve = function () use (&$calls): array {
+        $calls++;
+
+        return ['hostname' => 'node-1'];
+    };
+
+    expect($this->context->memoize('host', $resolve))->toBe(['hostname' => 'node-1'])
+        ->and($this->context->memoize('host', $resolve))->toBe(['hostname' => 'node-1'])
+        ->and($calls)->toBe(1);
+});
+
+it('forgets what it memoized when it is flushed', function (): void {
+    $calls = 0;
+    $resolve = function () use (&$calls): array {
+        $calls++;
+
+        return [];
+    };
+
+    $this->context->memoize('host', $resolve);
+    $this->context->flush();
+    $this->context->memoize('host', $resolve);
+
+    expect($calls)->toBe(2);
+});
+
+it('keeps what it memoized across a scope', function (): void {
+    $calls = 0;
+    $resolve = function () use (&$calls): array {
+        $calls++;
+
+        return [];
+    };
+
+    $this->context->memoize('host', $resolve);
+
+    $this->context->scope(['reason' => 'migration'], function () use ($resolve): void {
+        $this->context->memoize('host', $resolve);
+    });
+
+    expect($calls)->toBe(1);
+});
