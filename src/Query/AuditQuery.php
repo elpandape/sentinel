@@ -5,43 +5,156 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Query;
 
 use DateTimeImmutable;
+use DateTimeInterface;
+use ElPandaPe\Sentinel\Contracts\DeclaresFilters;
+use ElPandaPe\Sentinel\Contracts\Ledger;
+use ElPandaPe\Sentinel\Enums\AuditEvent;
+use ElPandaPe\Sentinel\Enums\Filter;
 use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Enums\Source;
+use ElPandaPe\Sentinel\Exceptions\LedgerException;
+use ElPandaPe\Sentinel\Support\Reference;
 
 /**
- * A container for the criteria the audits table indexes. It is deliberately
- * provisional: the fluent API that fills it lands with the query engine.
+ * A query stated against the ledger contract instead of against Eloquent. It describes; it
+ * never executes, and the only thing that turns a description into entries is the driver's
+ * own Ledger::query(). That is why the same filter a SQL driver compiles into a where clause
+ * a ledger over arrays resolves with no database at all.
+ *
+ * Every method returns a new instance, so a query passed around is a query nobody else can
+ * narrow behind your back. Every method also names one indexed criterion: there is no
+ * where(string $column, ...) and no builder to reach past this surface, because the read
+ * that compliance mode has to record is the one that goes through here.
  */
 final class AuditQuery
 {
-    public ?string $stream = null;
+    public private(set) ?Reference $subject = null;
 
-    public ?string $audit_type = null;
+    public private(set) ?Reference $actor = null;
 
-    public ?string $event = null;
+    public private(set) ?string $event = null;
 
-    public ?Severity $severity = null;
+    public private(set) ?Severity $severity = null;
 
-    public ?string $subject_type = null;
+    public private(set) ?Source $source = null;
 
-    public ?string $subject_id = null;
+    public private(set) ?string $tenantId = null;
 
-    public ?string $actor_type = null;
+    public private(set) ?string $transactionId = null;
 
-    public ?string $actor_id = null;
+    public private(set) ?string $traceId = null;
 
-    public ?string $tenant_id = null;
+    public private(set) ?DateTimeImmutable $from = null;
 
-    public ?string $transaction_id = null;
+    public private(set) ?DateTimeImmutable $to = null;
 
-    public ?string $request_id = null;
+    public private(set) bool $newestFirst = false;
 
-    public ?string $trace_id = null;
+    /**
+     * @var list<Filter>
+     */
+    private array $supported;
 
-    public ?DateTimeImmutable $from = null;
+    public function __construct(private readonly Ledger $ledger)
+    {
+        $this->supported = $ledger instanceof DeclaresFilters ? $ledger->supportedFilters() : Filter::cases();
+    }
 
-    public ?DateTimeImmutable $to = null;
+    public function for(object|string $subject, int|string|null $id = null): self
+    {
+        $query = $this->accepting(Filter::Subject);
+        $query->subject = Reference::to($subject, $id);
 
-    public ?int $limit = null;
+        return $query;
+    }
 
-    public ?int $offset = null;
+    public function forModel(object|string $subject, int|string|null $id = null): self
+    {
+        return $this->for($subject, $id);
+    }
+
+    public function by(object|string $actor, int|string|null $id = null): self
+    {
+        $query = $this->accepting(Filter::Actor);
+        $query->actor = Reference::to($actor, $id);
+
+        return $query;
+    }
+
+    public function byActor(object|string $actor, int|string|null $id = null): self
+    {
+        return $this->by($actor, $id);
+    }
+
+    public function whereEvent(AuditEvent|string $event): self
+    {
+        $query = $this->accepting(Filter::Event);
+        $query->event = $event instanceof AuditEvent ? $event->value : $event;
+
+        return $query;
+    }
+
+    public function whereSeverity(Severity $severity): self
+    {
+        $query = $this->accepting(Filter::Severity);
+        $query->severity = $severity;
+
+        return $query;
+    }
+
+    public function whereSource(Source $source): self
+    {
+        $query = $this->accepting(Filter::Source);
+        $query->source = $source;
+
+        return $query;
+    }
+
+    public function forTenant(string $tenant): self
+    {
+        $query = $this->accepting(Filter::Tenant);
+        $query->tenantId = $tenant;
+
+        return $query;
+    }
+
+    public function inTransaction(string $transaction): self
+    {
+        $query = $this->accepting(Filter::Transaction);
+        $query->transactionId = $transaction;
+
+        return $query;
+    }
+
+    public function withTrace(string $trace): self
+    {
+        $query = $this->accepting(Filter::Trace);
+        $query->traceId = $trace;
+
+        return $query;
+    }
+
+    public function between(DateTimeInterface $from, DateTimeInterface $to): self
+    {
+        $query = $this->accepting(Filter::Period);
+        $query->from = DateTimeImmutable::createFromInterface($from);
+        $query->to = DateTimeImmutable::createFromInterface($to);
+
+        return $query;
+    }
+
+    public function latest(): self
+    {
+        $query = clone $this;
+        $query->newestFirst = true;
+
+        return $query;
+    }
+
+    private function accepting(Filter $filter): self
+    {
+        return in_array($filter, $this->supported, true)
+            ? clone $this
+            : throw LedgerException::cannotFilterBy($filter, $this->ledger::class);
+    }
 }

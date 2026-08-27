@@ -6,9 +6,9 @@ use ElPandaPe\Sentinel\Exceptions\LedgerException;
 use ElPandaPe\Sentinel\Ledger\EntryBuilder;
 use ElPandaPe\Sentinel\Ledger\NullLedger;
 use ElPandaPe\Sentinel\Models\Audit;
-use ElPandaPe\Sentinel\Query\AuditQuery;
 
 use function ElPandaPe\Sentinel\Tests\auditData;
+use function ElPandaPe\Sentinel\Tests\auditQuery;
 use function ElPandaPe\Sentinel\Tests\hasher;
 
 beforeEach(function (): void {
@@ -75,7 +75,7 @@ it('writes nothing for an empty batch', function (): void {
 });
 
 it('says out loud that the query api has not arrived yet', function (): void {
-    expect(fn (): mixed => $this->ledger->query(new AuditQuery))->toThrow(LedgerException::class);
+    expect(fn (): mixed => $this->ledger->query(auditQuery($this->ledger)))->toThrow(LedgerException::class);
 });
 
 it('tells seven subjects apart however their type and key run together', function (): void {

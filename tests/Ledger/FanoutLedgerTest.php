@@ -10,11 +10,11 @@ use ElPandaPe\Sentinel\Exceptions\LedgerException;
 use ElPandaPe\Sentinel\Ledger\FanoutLedger;
 use ElPandaPe\Sentinel\Ledger\MemoryLedger;
 use ElPandaPe\Sentinel\Ledger\NullLedger;
-use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Tests\Fixtures\FailingLedger;
 use Illuminate\Support\Facades\Event;
 
 use function ElPandaPe\Sentinel\Tests\auditData;
+use function ElPandaPe\Sentinel\Tests\auditQuery;
 use function ElPandaPe\Sentinel\Tests\fanout;
 
 it('hands every destination the entry the primary sealed', function (): void {
@@ -57,7 +57,7 @@ it('reads from the primary, which is whose chain the sequence belongs to', funct
 });
 
 it('sends a query to the primary, which is the only one that answers for the chain', function (): void {
-    expect(fn (): mixed => fanout(app(MemoryLedger::class), [app(NullLedger::class)])->query(new AuditQuery))
+    expect(fn (): mixed => fanout(app(MemoryLedger::class), [app(NullLedger::class)])->query(auditQuery()))
         ->toThrow(LedgerException::class);
 });
 

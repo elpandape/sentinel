@@ -8,12 +8,12 @@ use ElPandaPe\Sentinel\Exceptions\LedgerException;
 use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
 use ElPandaPe\Sentinel\Ledger\EntryBuilder;
 use ElPandaPe\Sentinel\Models\Audit;
-use ElPandaPe\Sentinel\Query\AuditQuery;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
 use function ElPandaPe\Sentinel\Tests\auditData;
+use function ElPandaPe\Sentinel\Tests\auditQuery;
 use function ElPandaPe\Sentinel\Tests\auditRow;
 use function ElPandaPe\Sentinel\Tests\auditsTable;
 use function ElPandaPe\Sentinel\Tests\hasher;
@@ -166,7 +166,7 @@ it('hands back a stream that walks what it wrote', function (): void {
 });
 
 it('says out loud that the query api has not arrived yet', function (): void {
-    expect(fn (): mixed => $this->ledger->query(new AuditQuery))->toThrow(LedgerException::class);
+    expect(fn (): mixed => $this->ledger->query(auditQuery($this->ledger)))->toThrow(LedgerException::class);
 });
 
 it('retries when the unique index says another writer got there first', function (): void {

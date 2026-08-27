@@ -17,9 +17,11 @@ use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
 use ElPandaPe\Sentinel\Integrity\Stream;
 use ElPandaPe\Sentinel\Integrity\Verifier;
 use ElPandaPe\Sentinel\Ledger\FanoutLedger;
+use ElPandaPe\Sentinel\Ledger\MemoryLedger;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Pipeline\Discard;
 use ElPandaPe\Sentinel\Pipeline\Pipeline;
+use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Security\Digester;
 use ElPandaPe\Sentinel\Security\Keyring;
 use ElPandaPe\Sentinel\Security\Maskers;
@@ -211,6 +213,11 @@ function auditData(array $overrides = []): AuditData
         'occurred_at' => new DateTimeImmutable('2026-08-26 10:00:00.000000'),
         ...$overrides,
     ]);
+}
+
+function auditQuery(?Ledger $ledger = null): AuditQuery
+{
+    return new AuditQuery($ledger ?? app(MemoryLedger::class));
 }
 
 /**
