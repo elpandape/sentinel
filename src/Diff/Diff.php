@@ -54,6 +54,50 @@ final readonly class Diff implements Countable, IteratorAggregate
     }
 
     /**
+     * @param  array<array-key, mixed>  $patch
+     */
+    public static function fromJsonPatch(array $patch): self
+    {
+        $changes = [];
+        $guard = null;
+        $index = 0;
+
+        foreach ($patch as $operation) {
+            if (! is_array($operation) || ! is_string($operation['op'] ?? null) || ! is_string($operation['path'] ?? null)) {
+                throw DiffException::malformedPatch($index);
+            }
+
+            $guard = self::apply($operation, $index, $guard, $changes);
+            $index++;
+        }
+
+        return new self($changes);
+    }
+
+    /**
+     * RFC 6902 has no place for the old value, so a `test` in front of what the patch
+     * overwrites is what makes it verifiable against the document it came from.
+     *
+     * @return list<array{op: string, path: string, value?: mixed}>
+     */
+    public function toJsonPatch(bool $tests = true): array
+    {
+        $patch = [];
+
+        foreach ($this->changes as $change) {
+            if ($tests && $change->oldKnown && $change->op !== 'add') {
+                $patch[] = ['op' => 'test', 'path' => $change->path, 'value' => $change->old];
+            }
+
+            $patch[] = $change->op === 'remove'
+                ? ['op' => 'remove', 'path' => $change->path]
+                : ['op' => $change->op, 'path' => $change->path, 'value' => $change->new];
+        }
+
+        return $patch;
+    }
+
+    /**
      * @return list<array{path: string, op: string, old?: mixed, new: mixed}>
      */
     public function toArray(): array
@@ -83,6 +127,52 @@ final readonly class Diff implements Countable, IteratorAggregate
     public function getIterator(): Traversable
     {
         return new ArrayIterator($this->toArray());
+    }
+
+    /**
+     * An addition rebuilds with a known old value: there was none, and that is
+     * information. A replacement or a removal without its guarding `test` has genuinely
+     * lost it.
+     *
+     * @param  array<array-key, mixed>  $operation
+     * @param  array{path: string, value: mixed}|null  $guard
+     * @param  list<Change>  $changes
+     * @return array{path: string, value: mixed}|null
+     */
+    private static function apply(array $operation, int $index, ?array $guard, array &$changes): ?array
+    {
+        /** @var string $op */
+        $op = $operation['op'];
+        /** @var string $path */
+        $path = $operation['path'];
+
+        if ($op === 'test') {
+            return ['path' => $path, 'value' => $operation['value'] ?? null];
+        }
+
+        $known = $guard !== null && $guard['path'] === $path;
+        $old = $known ? $guard['value'] : null;
+
+        $changes[] = match ($op) {
+            'add' => new Change($path, 'add', null, self::required($operation, $index)),
+            'replace' => new Change($path, 'replace', $old, self::required($operation, $index), $known),
+            'remove' => new Change($path, 'remove', $old, null, $known),
+            default => throw DiffException::unsupportedOperation($op),
+        };
+
+        return null;
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $operation
+     */
+    private static function required(array $operation, int $index): mixed
+    {
+        if (! array_key_exists('value', $operation)) {
+            throw DiffException::malformedPatch($index);
+        }
+
+        return $operation['value'];
     }
 
     private static function change(mixed $entry, int $index): Change
