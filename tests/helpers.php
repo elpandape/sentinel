@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Tests;
 
+use Carbon\CarbonImmutable;
 use DateTimeImmutable;
 use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Context\Runtime;
@@ -31,6 +32,7 @@ use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Tests\Fixtures\EncryptedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\EventLog;
+use ElPandaPe\Sentinel\Tests\Fixtures\GoldenLedger;
 use ElPandaPe\Sentinel\Tests\Fixtures\ProtectedSubject;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
@@ -213,6 +215,30 @@ function auditData(array $overrides = []): AuditData
         'occurred_at' => new DateTimeImmutable('2026-08-26 10:00:00.000000'),
         ...$overrides,
     ]);
+}
+
+/**
+ * The entries frozen in v0.3.0, put in the table exactly as they were sealed. created_at is
+ * stamped here because it is not part of the canonical payload and the rows never carried
+ * one: the order it gives them is what the query api is then read against.
+ *
+ * @return list<string>
+ */
+function seedTheFrozenTrail(): array
+{
+    $ids = [];
+    $at = new CarbonImmutable('2026-08-26 12:00:00');
+
+    foreach (GoldenLedger::entries() as [$attributes, , $hash]) {
+        $audit = new Audit()->forceFill([...$attributes, 'hash' => $hash, 'created_at' => $at]);
+
+        DB::table(auditsTable())->insert($audit->getAttributes());
+
+        $ids[] = $audit->id;
+        $at = $at->addSecond();
+    }
+
+    return $ids;
 }
 
 function auditQuery(?Ledger $ledger = null): AuditQuery
