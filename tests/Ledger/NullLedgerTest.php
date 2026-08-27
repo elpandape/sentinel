@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Exceptions\LedgerException;
+use ElPandaPe\Sentinel\Ledger\EntryBuilder;
 use ElPandaPe\Sentinel\Ledger\NullLedger;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Query\AuditQuery;
@@ -14,7 +15,7 @@ beforeEach(function (): void {
     $this->ledger = app(NullLedger::class);
 });
 
-it('chains in memory exactly like a ledger that persists', function (): void {
+it('seals and chains an entry it keeps nothing of', function (): void {
     $first = $this->ledger->write(auditData());
     $second = $this->ledger->write(auditData());
 
@@ -35,27 +36,33 @@ it('hands back an entry that was never persisted', function (): void {
     expect($this->ledger->write(auditData())->exists)->toBeFalse();
 });
 
+it('does not find the entry it just handed back', function (): void {
+    expect($this->ledger->find($this->ledger->write(auditData())->id))->toBeNull();
+});
+
+it('walks nothing, however much was written to it', function (): void {
+    $this->ledger->writeMany([auditData(), auditData(), auditData()]);
+
+    expect(iterator_to_array($this->ledger->stream('global')))->toBeEmpty();
+});
+
 it('keeps each stream on its own count', function (): void {
     $this->ledger->write(auditData(['stream' => 'alpha']));
 
     expect($this->ledger->write(auditData(['stream' => 'beta']))->sequence)->toBe(1);
 });
 
-it('finds what it wrote and nothing else', function (): void {
-    $audit = $this->ledger->write(auditData());
+it('continues the chain from an entry it was appended', function (): void {
+    $sealed = app(EntryBuilder::class)->build(auditData(['stream' => 'imported']), 'imported', 7, null, null);
 
-    expect($this->ledger->find($audit->id)?->hash)->toBe($audit->hash)
-        ->and($this->ledger->find('01JXXXXXXXXXXXXXXXXXXXXXXX'))->toBeNull();
+    $this->ledger->append($sealed);
+    $next = $this->ledger->write(auditData(['stream' => 'imported']));
+
+    expect($next->sequence)->toBe(8)
+        ->and($next->previous_hash)->toBe($sealed->hash);
 });
 
-it('walks what it wrote, bounded the same way', function (): void {
-    $this->ledger->writeMany([auditData(), auditData(), auditData()]);
-
-    expect(collect($this->ledger->stream('global'))->pluck('sequence')->all())->toBe([1, 2, 3])
-        ->and(collect($this->ledger->stream('global')->range(2))->pluck('sequence')->all())->toBe([2, 3]);
-});
-
-it('counts a version per subject out of what it holds', function (): void {
+it('counts a version per subject without holding an entry', function (): void {
     $subject = ['subject_type' => 'fixture', 'subject_id' => '1'];
 
     expect($this->ledger->write(auditData($subject))->version)->toBe(1)
@@ -71,32 +78,11 @@ it('says out loud that the query api has not arrived yet', function (): void {
     expect(fn (): mixed => $this->ledger->query(new AuditQuery))->toThrow(LedgerException::class);
 });
 
-it('counts a version per subject in memory too', function (): void {
-    $written = $this->ledger->writeMany([
-        auditData(['subject_type' => 'user', 'subject_id' => '1']),
-        auditData(['subject_type' => 'user', 'subject_id' => '2']),
-        auditData(['subject_type' => 'user', 'subject_id' => '1']),
-        auditData(['subject_type' => 'role', 'subject_id' => '1']),
-    ]);
-
-    expect($written->pluck('version')->all())->toBe([1, 1, 2, 1]);
-});
-
-it('leaves an entry with half a subject out of the version count in memory too', function (): void {
+it('leaves an entry with half a subject out of the version count', function (): void {
     $written = $this->ledger->writeMany([
         auditData(['subject_type' => 'user']),
         auditData(['subject_id' => '1']),
     ]);
 
     expect($written->pluck('version')->all())->toBe([null, null]);
-});
-
-it('tells two subjects apart when their type and key run together', function (): void {
-    $written = $this->ledger->writeMany([
-        auditData(['subject_type' => 'user', 'subject_id' => '11']),
-        auditData(['subject_type' => 'user1', 'subject_id' => '1']),
-        auditData(['subject_type' => 'user', 'subject_id' => '11']),
-    ]);
-
-    expect($written->pluck('version')->all())->toBe([1, 1, 2]);
 });

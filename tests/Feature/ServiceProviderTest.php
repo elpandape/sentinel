@@ -9,6 +9,7 @@ use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
 use ElPandaPe\Sentinel\Facades\Sentinel as SentinelFacade;
 use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
 use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
+use ElPandaPe\Sentinel\Ledger\MemoryLedger;
 use ElPandaPe\Sentinel\Ledger\NullLedger;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Sentinel;
@@ -179,6 +180,7 @@ it('resolves the ledger the configuration names', function (string $driver, stri
     expect(app(Ledger::class))->toBeInstanceOf($expected);
 })->with([
     ['database', DatabaseLedger::class],
+    ['memory', MemoryLedger::class],
     ['null', NullLedger::class],
 ]);
 

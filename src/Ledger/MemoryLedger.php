@@ -14,21 +14,21 @@ use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 
 /**
- * Turns writing off without taking the code path apart. The entry is still built, sealed and
- * chained, so what an application measures with this driver is what the package costs minus
- * the store — but nothing is kept: find() answers nothing and stream() walks nothing.
+ * The reference implementation: the whole contract over plain arrays, chaining with the same
+ * algorithm DatabaseLedger uses. It exists so the contract has a second implementation to be
+ * read against — an interface that assumes its only backend is one nobody has questioned —
+ * and so a suite that only needs entries back does not pay for a database.
  *
- * What survives a write is the tail of each stream and a version counter per subject, because
- * both are sealed into the next entry and a chain cannot be continued without them. That is a
- * counter per stream and per subject, never one per entry: turning auditing off is not a
- * reason to grow with the traffic it is refusing to record.
+ * It keeps everything it is given and nothing survives the instance, which is why it is not
+ * reachable as a default driver: a ledger with no durability that looks like it works is
+ * worse than one that fails.
  */
-final class NullLedger implements Ledger
+final class MemoryLedger implements Ledger
 {
     /**
-     * @var array<string, StreamTail>
+     * @var array<string, list<Audit>>
      */
-    private array $tails = [];
+    private array $streams = [];
 
     /**
      * @var array<string, int>
@@ -43,17 +43,20 @@ final class NullLedger implements Ledger
     public function write(AuditData $audit): Audit
     {
         $stream = $this->stream->resolve($audit);
-        $tail = $this->tails[$stream] ?? StreamTail::empty();
+        $entries = $this->streams[$stream] ?? [];
+        $last = end($entries);
 
         $written = $this->builder->build(
             $audit,
             $stream,
-            $tail->sequence + 1,
-            $tail->hash,
+            count($entries) + 1,
+            $last === false ? null : $last->hash,
             $this->version($audit),
         );
 
-        return $this->remember($written);
+        $this->streams[$stream][] = $written;
+
+        return $written;
     }
 
     public function writeMany(array $audits): AuditCollection
@@ -63,11 +66,21 @@ final class NullLedger implements Ledger
 
     public function append(Audit $audit): Audit
     {
-        return $this->remember($audit);
+        $this->streams[$audit->stream][] = $audit;
+
+        return $audit;
     }
 
     public function find(string $id): ?Audit
     {
+        foreach ($this->streams as $entries) {
+            foreach ($entries as $audit) {
+                if ($audit->id === $id) {
+                    return $audit;
+                }
+            }
+        }
+
         return null;
     }
 
@@ -78,14 +91,7 @@ final class NullLedger implements Ledger
 
     public function stream(string $stream): LedgerStream
     {
-        return new ArrayStream($stream, []);
-    }
-
-    private function remember(Audit $audit): Audit
-    {
-        $this->tails[$audit->stream] = new StreamTail($audit->sequence, $audit->hash);
-
-        return $audit;
+        return new ArrayStream($stream, $this->streams[$stream] ?? []);
     }
 
     private function version(AuditData $audit): ?int

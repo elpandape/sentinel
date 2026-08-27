@@ -16,7 +16,7 @@ final class NullLedgerContractTest extends LedgerContractTestCase
         return $this->ledger ??= app(NullLedger::class);
     }
 
-    protected function persists(): bool
+    protected function retains(): bool
     {
         return false;
     }

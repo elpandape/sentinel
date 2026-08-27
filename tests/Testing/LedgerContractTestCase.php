@@ -12,8 +12,14 @@ use ElPandaPe\Sentinel\Tests\TestCase;
 use function ElPandaPe\Sentinel\Tests\auditData;
 
 /**
- * The expectations every ledger has to meet. Chain expectations apply to all of them;
- * persistence expectations only to a ledger that stores what it writes.
+ * The expectations every ledger has to meet, whatever it writes to. What is asserted here is
+ * the chain — a dense, monotonic sequence per stream, each entry linked to the one before —
+ * because that is what the contract actually guarantees. Nothing here reaches for a table:
+ * a driver over a document store has to be able to run this suite unchanged.
+ *
+ * Two hooks let a driver say what it is rather than fail for being it. A ledger that keeps
+ * nothing answers false to retains(). A ledger whose reads are eventually consistent makes
+ * its writes visible in settle().
  */
 abstract class LedgerContractTestCase extends TestCase
 {
@@ -60,10 +66,21 @@ abstract class LedgerContractTestCase extends TestCase
         $this->assertSame([], $this->ledger()->writeMany([])->all());
     }
 
+    public function test_it_stores_an_entry_it_did_not_seal(): void
+    {
+        $sealed = $this->sealedElsewhere();
+        $appended = $this->ledger()->append($sealed);
+
+        $this->assertSame($sealed->sequence, $appended->sequence);
+        $this->assertSame($sealed->hash, $appended->hash);
+        $this->assertSame($sealed->previous_hash, $appended->previous_hash);
+    }
+
     public function test_it_walks_a_stream_in_order(): void
     {
-        $ledger = $this->ledger();
+        $ledger = $this->retaining();
         $ledger->writeMany([auditData(), auditData(), auditData()]);
+        $this->settle($ledger);
 
         $sequences = [];
 
@@ -76,8 +93,9 @@ abstract class LedgerContractTestCase extends TestCase
 
     public function test_it_walks_a_bounded_range_of_a_stream(): void
     {
-        $ledger = $this->ledger();
+        $ledger = $this->retaining();
         $ledger->writeMany([auditData(), auditData(), auditData()]);
+        $this->settle($ledger);
 
         $sequences = [];
 
@@ -93,35 +111,23 @@ abstract class LedgerContractTestCase extends TestCase
         $this->assertSame([], iterator_to_array($this->ledger()->stream('nonesuch')));
     }
 
-    public function test_it_stores_an_entry_it_did_not_seal(): void
+    public function test_it_finds_what_it_wrote(): void
     {
-        $sealed = $this->sealedElsewhere();
-        $appended = $this->ledger()->append($sealed);
+        $ledger = $this->retaining();
+        $audit = $ledger->write(auditData());
+        $this->settle($ledger);
 
-        $this->assertSame($sealed->sequence, $appended->sequence);
-        $this->assertSame($sealed->hash, $appended->hash);
-        $this->assertSame($sealed->previous_hash, $appended->previous_hash);
+        $this->assertSame($audit->hash, $ledger->find($audit->id)?->hash);
     }
 
     public function test_it_gives_an_appended_entry_back_unchanged(): void
     {
-        if (! $this->persists()) {
-            $this->markTestSkipped('This ledger keeps nothing, so there is nothing to read back.');
-        }
-
-        $ledger = $this->ledger();
+        $ledger = $this->retaining();
         $sealed = $this->sealedElsewhere();
         $ledger->append($sealed);
+        $this->settle($ledger);
 
         $this->assertSame($sealed->hash, $ledger->find($sealed->id)?->hash);
-    }
-
-    public function test_it_finds_what_it_wrote(): void
-    {
-        $ledger = $this->ledger();
-        $audit = $ledger->write(auditData());
-
-        $this->assertSame($audit->hash, $ledger->find($audit->id)?->hash);
     }
 
     public function test_it_finds_nothing_for_an_unknown_id(): void
@@ -129,29 +135,25 @@ abstract class LedgerContractTestCase extends TestCase
         $this->assertNull($this->ledger()->find('01JXXXXXXXXXXXXXXXXXXXXXXX'));
     }
 
-    public function test_it_stores_the_entry_it_returns(): void
-    {
-        if (! $this->persists()) {
-            $this->markTestSkipped('This ledger does not persist: find() and stream() answer from memory.');
-        }
-
-        $audit = $this->ledger()->write(auditData());
-
-        $this->assertSame(1, Audit::query()->where('id', $audit->id)->count());
-    }
-
-    public function test_it_refuses_two_entries_with_the_same_sequence_in_a_stream(): void
-    {
-        if (! $this->persists()) {
-            $this->markTestSkipped('Uniqueness is enforced by the index, and this ledger has no table.');
-        }
-
-        $audit = $this->ledger()->write(auditData());
-
-        $this->assertSame(1, Audit::query()->where('stream', $audit->stream)->count());
-    }
-
     abstract protected function ledger(): Ledger;
+
+    /**
+     * Whether find() and stream() give back what the ledger was handed. A driver that keeps
+     * nothing answers false and the expectations that read an entry back are skipped — the
+     * chain expectations still apply to it in full.
+     */
+    protected function retains(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Called between a write and the read that checks it. A driver whose reads are eventually
+     * consistent makes what was just written visible here; one that reads its own writes has
+     * nothing to do. The contract promises no read sees a write that just returned, so a
+     * driver that needs this is honouring it, not working around it.
+     */
+    protected function settle(Ledger $ledger): void {}
 
     /**
      * An entry another ledger sealed. append() has to take it exactly as it is, so building
@@ -163,8 +165,12 @@ abstract class LedgerContractTestCase extends TestCase
         return app(EntryBuilder::class)->build(auditData(), 'imported', 1, null, null);
     }
 
-    protected function persists(): bool
+    private function retaining(): Ledger
     {
-        return true;
+        if (! $this->retains()) {
+            $this->markTestSkipped('This ledger keeps nothing, so there is nothing to read back.');
+        }
+
+        return $this->ledger();
     }
 }

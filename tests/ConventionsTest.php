@@ -27,3 +27,7 @@ it('keeps the two language files carrying the same keys', function (): void {
     expect(translationKeys($es))->toBe(translationKeys($en))
         ->and(translationKeys($en))->not->toBeEmpty();
 });
+
+it('ships a default ledger that outlives the request that wrote to it', function (): void {
+    expect(config('sentinel.ledger.default'))->toBe('database');
+});

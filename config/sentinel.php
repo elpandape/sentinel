@@ -33,6 +33,9 @@ return [
                 'path' => 'sentinel',
                 'compress' => true,
             ],
+            // Keeps every entry on the instance and nothing past it: a reference
+            // implementation and a test double, never a store.
+            'memory' => [],
             'null' => [],
         ],
     ],
