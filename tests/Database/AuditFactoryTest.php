@@ -48,7 +48,6 @@ it('builds the model the configuration names', function (): void {
     expect(new AuditFactory()->modelName())->toBe(CustomAudit::class);
 });
 
-it('is publishable under its own tag', function (): void {
-    expect(ServiceProvider::publishableGroups())->toContain('sentinel-factories')
-        ->and(ServiceProvider::pathsToPublish(null, 'sentinel-factories'))->not->toBeEmpty();
+it('ships with the package instead of being published into an application', function (): void {
+    expect(ServiceProvider::publishableGroups())->not->toContain('sentinel-factories');
 });

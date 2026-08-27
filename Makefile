@@ -66,7 +66,12 @@ mutation: ## Mutation testing over the core, one pass per path
 			vendor/bin/pest --mutate --parallel --covered-only --path=$$path || exit 1; \
 	done
 
-test-dbs: ## Suite against MySQL & Postgres (waits for healthchecks)
+# A pass cut in half leaves fixture tables behind and the next one fails on them, with a
+# QueryException that has nothing to do with the code. The schema is recreated here rather
+# than trusted to whoever ran it last.
+test-dbs: ## Suite against MySQL & Postgres (recreates the schema, waits for healthchecks)
 	$(DC) up -d --wait mysql postgres
+	$(DC) exec -T mysql mysql -uroot -psecret -e "drop database if exists sentinel; create database sentinel"
+	$(DC) exec -T postgres psql -q -U postgres -d sentinel -c "drop schema public cascade" -c "create schema public"
 	$(PHP) sh -c "DB_CONNECTION=mysql DB_HOST=mysql DB_PORT=3306 DB_USERNAME=root DB_PASSWORD=secret DB_DATABASE=sentinel vendor/bin/pest --ci"
 	$(PHP) sh -c "DB_CONNECTION=pgsql DB_HOST=postgres DB_PORT=5432 DB_USERNAME=postgres DB_PASSWORD=secret DB_DATABASE=sentinel vendor/bin/pest --ci"

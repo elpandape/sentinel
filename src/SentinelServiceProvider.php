@@ -95,10 +95,6 @@ final class SentinelServiceProvider extends ServiceProvider
             $this->publishesMigrations([
                 __DIR__.'/../database/migrations' => $this->app->databasePath('migrations'),
             ], 'sentinel-migrations');
-
-            $this->publishes([
-                __DIR__.'/../database/factories' => $this->app->databasePath('factories'),
-            ], 'sentinel-factories');
         }
     }
 
