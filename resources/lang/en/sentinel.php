@@ -10,6 +10,10 @@ return [
         'unspecified' => 'Stage :stage discarded the :event entry for :type :id before it reached the ledger.',
     ],
 
+    'ledger' => [
+        'destination_failed' => 'Destination :destination did not take audit :id at sequence :sequence of stream :stream: :reason',
+    ],
+
     'integrity' => [
         'hash_mismatch' => 'Audit :id no longer reproduces its own hash at sequence :sequence of stream :stream.',
         'link_mismatch' => 'Audit :id does not link to the entry before it at sequence :sequence of stream :stream.',

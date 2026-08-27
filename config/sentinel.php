@@ -37,6 +37,16 @@ return [
             // implementation and a test double, never a store.
             'memory' => [],
             'null' => [],
+            /*
+             * One entry, several destinations. The first is the primary: it assigns the
+             * sequence and seals the hash, and the rest are handed what it sealed. Under
+             * strict a destination refusing the entry fails the write; under primary only
+             * the first one does, and the rest raise LedgerDestinationFailed.
+             */
+            'fanout' => [
+                'destinations' => ['database'],
+                'on_failure' => 'strict',
+            ],
         ],
     ],
 

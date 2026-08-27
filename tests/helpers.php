@@ -7,13 +7,16 @@ namespace ElPandaPe\Sentinel\Tests;
 use DateTimeImmutable;
 use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Context\Runtime;
+use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Diff\Diff;
+use ElPandaPe\Sentinel\Enums\FanoutPolicy;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Integrity\Hasher;
 use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
 use ElPandaPe\Sentinel\Integrity\Stream;
 use ElPandaPe\Sentinel\Integrity\Verifier;
+use ElPandaPe\Sentinel\Ledger\FanoutLedger;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Pipeline\Discard;
 use ElPandaPe\Sentinel\Pipeline\Pipeline;
@@ -208,6 +211,17 @@ function auditData(array $overrides = []): AuditData
         'occurred_at' => new DateTimeImmutable('2026-08-26 10:00:00.000000'),
         ...$overrides,
     ]);
+}
+
+/**
+ * @param  list<Ledger>  $secondaries
+ */
+function fanout(Ledger $primary, array $secondaries, FanoutPolicy $policy = FanoutPolicy::Strict): FanoutLedger
+{
+    /** @var Dispatcher $events */
+    $events = app(Dispatcher::class);
+
+    return new FanoutLedger($primary, $secondaries, $policy, $events);
 }
 
 /**

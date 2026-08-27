@@ -9,6 +9,7 @@ use ElPandaPe\Sentinel\Contracts\Masker;
 use ElPandaPe\Sentinel\Contracts\Resolver;
 use ElPandaPe\Sentinel\Contracts\Transformer;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
+use ElPandaPe\Sentinel\Enums\FanoutPolicy;
 use ElPandaPe\Sentinel\Enums\Mode;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
@@ -17,6 +18,8 @@ use Illuminate\Contracts\Config\Repository;
 
 final readonly class Config
 {
+    private const string FANOUT_DESTINATIONS = 'ledger.ledgers.fanout.destinations';
+
     public function __construct(private Repository $repository) {}
 
     public function enabled(): bool
@@ -67,6 +70,55 @@ final readonly class Config
     public function ledger(): string
     {
         return $this->string('ledger.default');
+    }
+
+    /**
+     * A fanout cannot name a fanout: composing one into itself is a loop with no bottom,
+     * and the error worth reading is this one rather than a stack overflow.
+     *
+     * @return non-empty-list<string>
+     */
+    public function fanoutDestinations(): array
+    {
+        $value = $this->repository->get('sentinel.ledger.ledgers.fanout.destinations');
+
+        if ($value === null) {
+            return ['database'];
+        }
+
+        if (! is_array($value) || $value === []) {
+            throw ConfigurationException::expected(self::FANOUT_DESTINATIONS, 'a non-empty list of ledger drivers', get_debug_type($value));
+        }
+
+        $destinations = [];
+
+        foreach ($value as $destination) {
+            if (! is_string($destination) || $destination === '') {
+                throw ConfigurationException::expected(self::FANOUT_DESTINATIONS, 'a non-empty list of ledger drivers', get_debug_type($destination));
+            }
+
+            $destinations[] = $destination === 'fanout'
+                ? throw ConfigurationException::unknown(self::FANOUT_DESTINATIONS, $destination, 'a driver other than fanout')
+                : $destination;
+        }
+
+        return $destinations;
+    }
+
+    public function fanoutPolicy(): FanoutPolicy
+    {
+        $value = $this->repository->get('sentinel.ledger.ledgers.fanout.on_failure');
+
+        if ($value === null) {
+            return FanoutPolicy::Strict;
+        }
+
+        if (! is_string($value)) {
+            throw ConfigurationException::expected('ledger.ledgers.fanout.on_failure', 'a string or null', get_debug_type($value));
+        }
+
+        return FanoutPolicy::tryFrom($value)
+            ?? throw ConfigurationException::unknown('ledger.ledgers.fanout.on_failure', $value, $this->accepted(FanoutPolicy::class));
     }
 
     public function defaultSeverity(AuditEvent|string $event): Severity

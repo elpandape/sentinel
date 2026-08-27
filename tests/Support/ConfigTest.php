@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Enums\AuditEvent;
+use ElPandaPe\Sentinel\Enums\FanoutPolicy;
 use ElPandaPe\Sentinel\Enums\Mode;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
@@ -27,6 +28,33 @@ it('reads the defaults shipped with the package', function (): void {
         ->and($config->complianceEnabled())->toBeFalse()
         ->and($config->retention())->toBeEmpty();
 });
+
+it('falls back in code when a published configuration never heard of the fanout', function (): void {
+    $config = sentinelConfig(['ledger.ledgers' => []]);
+
+    expect($config->fanoutDestinations())->toBe(['database'])
+        ->and($config->fanoutPolicy())->toBe(FanoutPolicy::Strict);
+});
+
+it('reads the destinations and the policy the configuration declares', function (): void {
+    $config = sentinelConfig([
+        'ledger.ledgers.fanout.destinations' => ['database', 'null'],
+        'ledger.ledgers.fanout.on_failure' => 'primary',
+    ]);
+
+    expect($config->fanoutDestinations())->toBe(['database', 'null'])
+        ->and($config->fanoutPolicy())->toBe(FanoutPolicy::Primary);
+});
+
+it('refuses a destination list that names nothing to write to', function (mixed $destinations): void {
+    expect(fn (): array => sentinelConfig(['ledger.ledgers.fanout.destinations' => $destinations])->fanoutDestinations())
+        ->toThrow(ConfigurationException::class, 'ledger.ledgers.fanout.destinations');
+})->with([[[]], ['database'], [[null]], [['']]]);
+
+it('refuses a fanout policy it does not know', function (mixed $policy): void {
+    expect(fn (): FanoutPolicy => sentinelConfig(['ledger.ledgers.fanout.on_failure' => $policy])->fanoutPolicy())
+        ->toThrow(ConfigurationException::class, 'ledger.ledgers.fanout.on_failure');
+})->with([['nonesuch'], [1]]);
 
 it('prefixes table names', function (): void {
     expect(sentinelConfig()->table('audits'))->toBe('sentinel_audits')

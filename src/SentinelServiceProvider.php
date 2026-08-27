@@ -12,6 +12,7 @@ use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
 use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
 use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
+use ElPandaPe\Sentinel\Ledger\FanoutLedger;
 use ElPandaPe\Sentinel\Ledger\MemoryLedger;
 use ElPandaPe\Sentinel\Ledger\NullLedger;
 use ElPandaPe\Sentinel\Models\Audit;
@@ -55,16 +56,11 @@ final class SentinelServiceProvider extends ServiceProvider
         });
 
         // Scoped like the manager: a ledger with no store keeps its chain on the instance.
-        $this->app->scoped(Ledger::class, static function (Application $app): Ledger {
-            $driver = $app->make(Config::class)->ledger();
-
-            return match ($driver) {
-                'database' => $app->make(DatabaseLedger::class),
-                'memory' => $app->make(MemoryLedger::class),
-                'null' => $app->make(NullLedger::class),
-                default => throw ConfigurationException::unknown('ledger.default', $driver, 'database, memory, null'),
-            };
-        });
+        $this->app->scoped(Ledger::class, fn (Application $app): Ledger => $this->driver(
+            $app,
+            $app->make(Config::class)->ledger(),
+            'ledger.default',
+        ));
 
         // Scoped: execution context and recording state belong to one request or job, not to the worker.
         $this->app->scoped(ContextEngine::class);
@@ -144,6 +140,35 @@ final class SentinelServiceProvider extends ServiceProvider
         $events->listen(JobProcessed::class, static function () use ($runtime): void {
             $runtime()->leftJob();
         });
+    }
+
+    private function driver(Application $app, string $name, string $key): Ledger
+    {
+        return match ($name) {
+            'database' => $app->make(DatabaseLedger::class),
+            'memory' => $app->make(MemoryLedger::class),
+            'null' => $app->make(NullLedger::class),
+            'fanout' => $this->fanout($app),
+            default => throw ConfigurationException::unknown($key, $name, 'database, fanout, memory, null'),
+        };
+    }
+
+    /**
+     * The first destination is the primary and the only one that seals: the rest are built
+     * the same way but only ever receive what it sealed.
+     */
+    private function fanout(Application $app): FanoutLedger
+    {
+        $config = $app->make(Config::class);
+        $destinations = $config->fanoutDestinations();
+        $key = 'ledger.ledgers.fanout.destinations';
+
+        return new FanoutLedger(
+            $this->driver($app, array_shift($destinations), $key),
+            array_map(fn (string $name): Ledger => $this->driver($app, $name, $key), $destinations),
+            $config->fanoutPolicy(),
+            $app->make(Dispatcher::class),
+        );
     }
 
     private function publishedMigration(): PublishedMigration
