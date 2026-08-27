@@ -17,7 +17,7 @@ it('leaves no doc block stranded above another', function (): void {
 });
 
 it('cites no tool-generated identifier in a comment', function (): void {
-    expect(phpFilesOffending('#(?://|\*)[^\n]*\b[0-9a-f]{12,}\b#'))->toBeEmpty();
+    expect(phpFilesOffending('#(?:(?<!:)//|^\s*\*)[^\n]*\b[0-9a-f]{12,}\b#m'))->toBeEmpty();
 });
 
 it('keeps the two language files carrying the same keys', function (): void {

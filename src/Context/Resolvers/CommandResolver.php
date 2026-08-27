@@ -74,6 +74,6 @@ final readonly class CommandResolver implements Resolver
      */
     private function isSensitive(string $key, array $needles): bool
     {
-        return array_any($needles, fn ($needle) => stripos($key, $needle) !== false);
+        return array_any($needles, static fn (string $needle): bool => stripos($key, $needle) !== false);
     }
 }

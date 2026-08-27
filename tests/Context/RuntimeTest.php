@@ -5,6 +5,8 @@ declare(strict_types=1);
 use ElPandaPe\Sentinel\Tests\Fixtures\FakeQueueJob;
 use Illuminate\Console\Events\CommandFinished;
 use Illuminate\Console\Events\CommandStarting;
+use Illuminate\Console\Events\ScheduledTaskStarting;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Route;
@@ -109,4 +111,10 @@ it('latches the job the worker picked up and lets go when it is done', function 
     event(new JobProcessed('redis', $job));
 
     expect(runtime()->job())->toBeNull();
+});
+
+it('latches the task the scheduler started', function (): void {
+    event(new ScheduledTaskStarting(app(Schedule::class)->command('invoices:close')));
+
+    expect(runtime()->scheduled())->toBeTrue();
 });
