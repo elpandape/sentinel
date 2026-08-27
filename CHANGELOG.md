@@ -2,6 +2,82 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.7.0 — Pipeline & data security (2026-08-27)
+
+### Added
+
+- **The write pipeline.** Every entry now travels capture → pipeline → ledger. The `pipeline` config
+  key is the ordered list of stages, not a set of flags: reorder them, replace one, or slot your own
+  in between by implementing `Contracts\Transformer`. The shipped order is `FilterUnchanged` →
+  `ResolveContext` → `NormalizeData` → `MaskSensitiveData` → `EncryptSensitiveData` →
+  `EnforcePolicies`. The pipeline runs during the capture, inside the request, never behind the
+  queue or the buffer — whatever gets queued has already been transformed.
+- **Field-level protection**, four mechanisms declared per model and reaching five containers each:
+  `before`, `after`, both sides of every entry in `changes`, `metadata` and `context`. Matching goes
+  by key name at any depth, so one declaration covers a field wherever it surfaces. `$auditExclude`
+  keeps the field out entirely, `$auditRedact` leaves a mask, `$auditHash` leaves a salted digest,
+  `$auditEncrypt` leaves ciphertext. A protected field that changed still shows its path.
+- **`Security\PartialMasker`**, the default masker: it keeps the shape and both ends of each run and
+  masks a fixed width, so the length of a secret is not part of what survives. Replaceable for every
+  field through `security.redaction.masker`, or one field at a time through
+  `security.redaction.maskers`.
+- **`Security\Keyring`**, keys addressed by identifier. Every encrypted entry records which key wrote
+  it in `encryption`, which is what makes rotation possible without invalidating anything already
+  written. `security.encryption.keys.default` falls back to `APP_KEY`.
+- **`Security\Rekeyer`**, rotation that writes instead of rewriting. The original entry stays byte
+  for byte where it was — same `hash`, `previous_hash` and `sequence` — and a new `rekeyed` entry
+  carries the same values under the new key and points back at it with `source_audit_id`.
+- **`Events\AuditDiscarded`**, carrying the subject, the event, the stage and the reason, and nothing
+  else. `Sentinel::filter()` registers a policy that `EnforcePolicies` applies as the last word on
+  whether an entry settles.
+- **`security.redaction.fields`, `security.hashing.fields` and `security.encryption.fields`**, which
+  add to what each model declared and are the only way to name a key no model owns — an address, a
+  session identifier, a console argument.
+- Second frozen golden entry, this one protected by all three mechanisms, with its ciphertext frozen
+  literally and verified with an empty keyring.
+- `make test-quiet` and `make verify` for automated callers; `Pipeline/` and `Security/` enter the
+  nightly mutation run with a floor of 90, closing at 100 % and 92 %.
+
+### Changed
+
+- **An update whose comparison found nothing writes no entry.** A `touch()`, or a column that moved
+  but is excluded from the snapshot, used to produce a row saying nothing happened. The discard
+  consumes no `sequence`, so the chain it never joined has no gap.
+- **The hash covers the ciphertext, never the plaintext.** `verifyIntegrity()` runs in an environment
+  holding no key at all and still proves the row was not touched. The trade is stated rather than
+  hidden: the chain proves the row is the one that was written, not what the value said. Because
+  `encryption` is part of the canonical payload, altering the `key_id` of a stored row breaks its
+  hash.
+- **`payload_version` stays at `1`.** Protecting a value changes what is hashed, never how. Every
+  entry frozen before this version reproduces its hash byte for byte.
+- `ResolveContext` wraps the context engine rather than reimplementing it, and the capture stops
+  calling it directly. The behaviour is identical; the position is now reorderable.
+- `security.encryption.enabled` is gone. Declaring a field is what turns encryption on for it.
+- `AuditEvent` gains `rekeyed`, shipping as a `notice`.
+- `require` gains `illuminate/encryption`, which the package would otherwise use without asking
+  for it.
+
+### Upgrade notes
+
+- **Empty updates stop being recorded.** If your application relies on an entry existing for an
+  update that changed nothing audited, remove `FilterUnchanged` from the `pipeline` list. Only
+  updates are filtered: a creation with no comparable fields and a restore whose one moved column is
+  not audited both still write.
+- **A published config keeps working without being republished.** `pipeline` published as an empty
+  array falls back to the shipped order rather than to no pipeline at all, and every new key under
+  `security` has its default in code.
+- **`security.encryption.enabled` is ignored.** If you had it set to `true`, nothing changes: what
+  turns encryption on is declaring fields. If you had it set to `false` and also declared fields,
+  those fields now encrypt — which is what declaring them meant.
+- **Protection is not retroactive.** Entries written before the upgrade keep whatever they stored, in
+  the clear if that is how they were written. Rewriting them would break the chain; clearing history
+  already written is a retention problem and lands in `v0.19.0`.
+- **A field you redact or hash cannot be restored.** `v0.14.0` restores an entry into a model and can
+  only restore what was written down. If a value has to come back, encrypt it.
+- **The digest salt is stable by definition.** `security.hashing.salt` derives from `APP_KEY` when
+  unset. Rotating either breaks no chain and makes every digest written before it incomparable with
+  every digest written after.
+
 ## v0.6.0 — Context engine (2026-08-27)
 
 ### Added

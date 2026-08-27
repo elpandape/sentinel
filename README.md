@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.6.0-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.7.0-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -20,7 +20,7 @@ the state was before, what it is now — and whether the record itself can be pr
 
 ```json
 "repositories": [{ "type": "vcs", "url": "https://github.com/elpandape/sentinel" }],
-"require": { "elpandape/sentinel": "v0.6.0" }
+"require": { "elpandape/sentinel": "v0.7.0" }
 ```
 
 ```bash
@@ -37,6 +37,7 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.4.0` | Model auditing, full snapshots, the `Auditable` trait, the write-path baseline |
 | `v0.5.0` | Structured diffs, `$audit->diff()`, JSON Patch import and export |
 | `v0.6.0` | Resolved context: actor, impersonator, tenant, request, trace, source, host, job, command |
+| `v0.7.0` | The write pipeline, field-level redaction, hashing and encryption, key rotation, discards |
 
 Everything else is on the roadmap: relationship auditing, business transactions, custom events,
 state transitions, restore, advanced verification (checkpoints and signatures), retention and
@@ -45,7 +46,8 @@ compliance, performance modes and distributed tracing.
 `v0.4.0` is the version that starts auditing: a model with the trait writes its own chained entries.
 `v0.5.0` is the one that answers what changed, instead of leaving you two states to compare.
 `v0.6.0` is the one that answers who did it and from where, instead of every entry claiming it came
-from nowhere.
+from nowhere. `v0.7.0` is the one that stops the answer from being a leak: no declared value reaches
+the ledger in the clear, and nothing writes an entry that says nothing happened.
 
 ## Quick start
 
@@ -320,10 +322,251 @@ $middleware->append(ElPandaPe\Sentinel\Http\Middleware\AssignRequestId::class);
 The header is `X-Request-Id` by default and configurable at `resolvers.request.header`. An incoming
 value is honoured when it is printable and fits the 64-character column; otherwise one is generated.
 
-> **Context carries sensitive data.** Addresses, user agents, urls, session identifiers and command
-> arguments now sit in `context`. `CommandResolver` masks any argument whose name matches
-> `resolvers.command.redact` — `password`, `token` and `secret` by default — and nothing else is
-> redacted until `v0.7.0`.
+> **Context carries sensitive data**, and since `v0.7.0` there is a mechanism for it. Addresses, user
+> agents, urls, session identifiers and command arguments sit in `context`; name the keys you do not
+> want readable in `security.redaction.fields` or `security.hashing.fields`. `CommandResolver` keeps
+> its own list, `resolvers.command.redact` — `password`, `token` and `secret` by default — for the
+> arguments of a console command. See [Protecting sensitive data](#protecting-sensitive-data).
+
+## The write pipeline
+
+Every entry travels **capture → pipeline → ledger**. The pipeline is an ordered list of stages, and
+the list is configuration — not a set of flags:
+
+```php
+// config/sentinel.php
+'pipeline' => [
+    ElPandaPe\Sentinel\Pipeline\Stages\FilterUnchanged::class,
+    ElPandaPe\Sentinel\Pipeline\Stages\ResolveContext::class,
+    ElPandaPe\Sentinel\Pipeline\Stages\NormalizeData::class,
+    ElPandaPe\Sentinel\Pipeline\Stages\MaskSensitiveData::class,
+    ElPandaPe\Sentinel\Pipeline\Stages\EncryptSensitiveData::class,
+    ElPandaPe\Sentinel\Pipeline\Stages\EnforcePolicies::class,
+],
+```
+
+| Stage | What it does |
+|---|---|
+| `FilterUnchanged` | Drops an update whose comparison found nothing |
+| `ResolveContext` | Runs the context engine of `v0.6.0` |
+| `NormalizeData` | Sorts the keys of every stored container, all the way down |
+| `MaskSensitiveData` | Applies `$auditRedact` (a mask) and `$auditHash` (a digest) |
+| `EncryptSensitiveData` | Applies `$auditEncrypt` and fills the `encryption` column |
+| `EnforcePolicies` | Gives your own policies the last word on whether the entry settles |
+
+Reorder them, replace one, or slot your own in between. A stage implements one method:
+
+```php
+use Closure;
+use ElPandaPe\Sentinel\Contracts\Transformer;
+use ElPandaPe\Sentinel\Data\AuditData;
+
+final class TagWithRelease implements Transformer
+{
+    public function handle(AuditData $audit, Closure $next): ?AuditData
+    {
+        $audit->metadata = [...$audit->metadata ?? [], 'release' => config('app.release')];
+
+        return $next($audit);
+    }
+}
+```
+
+**An empty list means the shipped order**, not an empty pipeline. The config published before this
+version ships `'pipeline' => []` and the merge is shallow, so treating that as "no stages" would
+leave those installations transforming nothing and saying nothing about it. To drop a stage, declare
+the list without it.
+
+The pipeline runs **during the capture**, inside the request — never behind the queue or the buffer.
+That is deliberate and `v0.16.0` inherits it: whatever gets queued has already been transformed.
+
+### Discarding an entry
+
+A stage returns `null` to discard, and gives a reason so the event can carry one:
+
+```php
+public function handle(AuditData $audit, Closure $next): ?AuditData
+{
+    if ($audit->severity === Severity::Info) {
+        app(ElPandaPe\Sentinel\Pipeline\Discard::class)->because('info entries are not kept');
+
+        return null;
+    }
+
+    return $next($audit);
+}
+```
+
+`Events\AuditDiscarded` is dispatched with the subject, the event, the stage and the reason — and
+**nothing else**. `FilterUnchanged` runs before redaction and encryption, so an event carrying the
+payload would be the exact route by which the plaintext escaped the pipeline that exists to
+transform it.
+
+A discard costs no `sequence`, so the chain the entry never joined has no gap in it. Discarding
+after the ledger has assigned one is a usage error and throws: the chain admits no holes, and
+pretending otherwise would make `verifyIntegrity()` lie.
+
+For a policy you do not want to write a stage for:
+
+```php
+Sentinel::filter(fn (AuditData $audit): bool => $audit->subject_type !== Session::class);
+```
+
+### Updates that changed nothing
+
+An `updated` whose diff came back empty writes no entry. It happens more than you would think — a
+`touch()`, or a column that moved but is excluded from the snapshot — and the ecosystem generally
+leaves those rows in the table.
+
+```php
+$post->update(['view_count' => $post->view_count]);   // ✅ no entry, no sequence, no gap
+$post->update(['internal_flag' => true]);             // ✅ no entry if internal_flag is excluded
+$post->update(['title' => 'A new title']);            // ✅ entry written
+```
+
+If you want those entries, take `FilterUnchanged` out of the list. Only updates are filtered: a
+creation with no comparable fields still happened, and a restore whose one moved column is not
+audited is still a restore.
+
+## Protecting sensitive data
+
+Four mechanisms, declared per model. They are not interchangeable — each gives up something
+different:
+
+| Mechanism | Declared as | What lands in the entry | Reversible |
+|---|---|---|---|
+| **Exclusion** | `$auditExclude` | Nothing. The field never reaches the pipeline | — |
+| **Redaction** | `$auditRedact` | A mask: `c****s@e****e.c****m` | ❌ Never |
+| **Hashing** | `$auditHash` | A digest, salted per installation | ❌ Never |
+| **Encryption** | `$auditEncrypt` | Ciphertext, plus `{fields, key_id}` in `encryption` | ✅ With the key |
+
+```php
+final class User extends Model
+{
+    use Auditable;
+
+    protected array $auditExclude = ['remember_token'];
+    protected array $auditRedact = ['email'];
+    protected array $auditHash = ['card_number'];
+    protected array $auditEncrypt = ['national_id'];
+}
+```
+
+Protection reaches **five containers**, not two — `before`, `after`, both sides of every entry in
+`changes`, `metadata` and `context` — and matches by key name at any depth. Declare `email` once and
+it is covered wherever it surfaces, including inside the arguments of a console command.
+
+A protected field that changed **still shows its path**, so the entry proves something moved while
+saying nothing about what it was:
+
+```json
+{ "path": "/national_id", "op": "replace", "old": "eyJpdiI6...", "new": "eyJpdiI6..." }
+```
+
+### What each one does and does not promise
+
+```php
+// ✅ Redaction keeps a value queryable and unreadable
+'email' => 'c****s@e****e.c****m'
+
+// ❌ Redaction is not anonymisation
+// On a small domain a mask can still identify someone. The masker is replaceable per field,
+// and the package promises a mask, not anonymity.
+
+// ✅ Hashing answers "did it change" without keeping either state
+'card_number' => '557a4675b2f1...'
+
+// ❌ A digest cannot be restored, and neither can a mask
+// v0.14.0 restores an entry into a model. It cannot restore what was never written down.
+// If a field has to come back, encrypt it — do not redact or hash it.
+
+// ✅ Encryption keeps the value recoverable by whoever holds the key
+'national_id' => 'eyJpdiI6...'
+
+// ❌ Losing the key loses the value
+// The entry keeps verifying and stops being readable. The keyring belongs to your application
+// and lives outside the database the entries do.
+
+// ❌ A listener on a pre-pipeline hook sees the plaintext
+// The guarantee covers the ledger and everything the pipeline dispatches after it.
+```
+
+### The hash covers the ciphertext
+
+Not the plaintext. `verifyIntegrity()` has to run in an environment that holds **no key at all** — an
+external auditor, an isolated verification job — and still prove the row was not touched.
+
+```php
+config(['sentinel.security.encryption.keys' => []]);
+
+Sentinel::verifyIntegrity('tenant:acme')->isIntact();   // ✅ true
+```
+
+The trade is stated rather than hidden: **the chain proves the row is the one that was written, not
+what the value said.** In exchange, `encryption` is part of the canonical payload, so altering the
+`key_id` of a stored row breaks its hash. A forged rotation is not something that can be done
+quietly.
+
+### The keyring and rotation
+
+```php
+// config/sentinel.php
+'security' => [
+    'encryption' => [
+        'cipher' => 'aes-256-gcm',
+        'key_id' => 'default',                          // what new entries are written with
+        'keys' => [
+            'default' => env('SENTINEL_ENCRYPTION_KEY'), // falls back to APP_KEY
+            '2025' => env('SENTINEL_ENCRYPTION_KEY_2025'),
+        ],
+    ],
+],
+```
+
+There is **no on/off switch**. Declaring a field is what turns encryption on for it; a separate flag
+exists only so someone can believe they are encrypting when they are not.
+
+Rotation writes, it never rewrites:
+
+```php
+app(ElPandaPe\Sentinel\Security\Rekeyer::class)->rekey($audit, 'default');
+```
+
+The original stays byte for byte where it was — same `hash`, same `previous_hash`, same `sequence` —
+and keeps verifying. A **new entry** carries the same values under the new key and points back at the
+one it stands in for, so the rotation is part of the history rather than something that happened to
+it. Keep the old key on the keyring for as long as the entries it wrote matter.
+
+`php artisan sentinel:rekey` arrives in `v0.19.0`; for now the rotation is a service you call.
+
+### Protecting what no model owns
+
+`context` carries addresses, user agents, urls, session identifiers and console arguments, and no
+model declares any of those. Name them in configuration instead — the lists there **add to** what
+each model declared:
+
+```php
+'security' => [
+    'redaction' => [
+        'mask' => '*',
+        'fields' => ['ip', 'user_agent'],
+        'masker' => null,                                  // the package default for every field
+        'maskers' => ['ip' => App\Sentinel\IpMasker::class],   // per field
+    ],
+    'hashing' => [
+        'algorithm' => 'sha256',
+        'salt' => env('SENTINEL_HASH_SALT'),               // derived from APP_KEY when null
+        'fields' => ['session_id'],
+    ],
+],
+```
+
+The salt is **stable by definition**. Rotating it breaks no chain and destroys the comparability of
+every digest written before it, which is the whole reason a digest is worth keeping.
+
+> **Anything you push into the execution context is audited.** `Sentinel::withContext()` merges into
+> the entry, which is what it is for — so do not put there what you would not want written down, or
+> name the key in `security.redaction.fields`.
 
 ## Actor & impersonator
 
@@ -364,6 +607,14 @@ impersonation package stores something else.
 
 `config/sentinel.php` ships every section the package will use through 1.0, with future features
 turned off. Read it once and you know what is coming.
+
+Three sections are live today beyond the basics: `resolvers` decides who and where an entry came
+from, `pipeline` is the ordered list of stages every entry travels through, and `security` holds the
+redaction mask and field lists, the encryption keyring and the hashing salt.
+
+Every one of those keys also has its default **in code**. Laravel merges a published config file one
+level deep, so an installation that published `sentinel.php` before a subtree existed would
+otherwise silently win over the package and end up with nothing configured at all.
 
 ## Schema & models
 
