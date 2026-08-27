@@ -125,10 +125,25 @@ function createFixtureTables(): void
 
     Schema::create('fixture_uuid_subjects', static function (Blueprint $table): void {
         $table->uuid('id')->primary();
+        $table->string('name')->nullable();
     });
 
     Schema::create('fixture_ulid_subjects', static function (Blueprint $table): void {
         $table->ulid('id')->primary();
+        $table->string('name')->nullable();
+    });
+
+    Schema::create('fixture_audited_subjects', static function (Blueprint $table): void {
+        $table->id();
+        $table->string('name')->nullable();
+        $table->string('email')->nullable();
+        $table->string('secret')->nullable();
+        $table->string('status')->nullable();
+        $table->string('price')->nullable();
+        $table->dateTime('published_at', 6)->nullable();
+        $table->json('options')->nullable();
+        $table->boolean('active')->nullable();
+        $table->softDeletes();
     });
 }
 
