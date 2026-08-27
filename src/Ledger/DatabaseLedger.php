@@ -8,11 +8,15 @@ use Closure;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Contracts\LedgerStream;
 use ElPandaPe\Sentinel\Data\AuditData;
-use ElPandaPe\Sentinel\Exceptions\LedgerException;
+use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Integrity\Stream;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Query\AuditQuery;
+use ElPandaPe\Sentinel\Query\Period;
 use ElPandaPe\Sentinel\Support\AuditCollection;
+use ElPandaPe\Sentinel\Support\Reference;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
 
 final readonly class DatabaseLedger implements Ledger
@@ -50,9 +54,37 @@ final readonly class DatabaseLedger implements Ledger
         return $this->model->newQuery()->find($id);
     }
 
+    /**
+     * Every criterion arrives as a binding against a column this class names itself: nothing
+     * the caller passes is ever a column, an operator or a direction. The order is the ledger's
+     * own clock with the identifier behind it, which is the tail two of the composite indexes
+     * carry and the only order that is total.
+     */
     public function query(AuditQuery $query): AuditCollection
     {
-        throw LedgerException::queryNotImplemented();
+        $direction = $query->newestFirst ? 'desc' : 'asc';
+
+        /** @var AuditCollection $entries */
+        $entries = $this->model->newQuery()
+            ->when($query->subject, static fn (Builder $entries, Reference $subject): Builder => $entries
+                ->where('subject_type', $subject->type)
+                ->where('subject_id', $subject->id))
+            ->when($query->actor, static fn (Builder $entries, Reference $actor): Builder => $entries
+                ->where('actor_type', $actor->type)
+                ->where('actor_id', $actor->id))
+            ->when($query->event, static fn (Builder $entries, string $event): Builder => $entries->where('event', $event))
+            ->when($query->severity, static fn (Builder $entries, Severity $severity): Builder => $entries->where('severity', $severity->value))
+            ->when($query->source, static fn (Builder $entries, Source $source): Builder => $entries->where('source', $source->value))
+            ->when($query->tenantId, static fn (Builder $entries, string $tenant): Builder => $entries->where('tenant_id', $tenant))
+            ->when($query->transactionId, static fn (Builder $entries, string $transaction): Builder => $entries->where('transaction_id', $transaction))
+            ->when($query->traceId, static fn (Builder $entries, string $trace): Builder => $entries->where('trace_id', $trace))
+            ->when($query->period, static fn (Builder $entries, Period $period): Builder => $entries
+                ->whereBetween('created_at', [$period->from, $period->to]))
+            ->orderBy('created_at', $direction)
+            ->orderBy('id', $direction)
+            ->get();
+
+        return $entries;
     }
 
     public function stream(string $stream): LedgerStream

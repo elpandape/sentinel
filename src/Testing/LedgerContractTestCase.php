@@ -4,14 +4,18 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Testing;
 
+use Closure;
 use DateTimeImmutable;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Ledger\EntryBuilder;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\SentinelServiceProvider;
 use Orchestra\Testbench\TestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
  * The expectations every ledger has to meet, whatever it writes to. Extend it, return your
@@ -143,6 +147,131 @@ abstract class LedgerContractTestCase extends TestCase
     }
 
     /**
+     * @param  Closure(AuditQuery): AuditQuery  $narrow
+     */
+    #[DataProvider('publishedFilters')]
+    public function test_it_answers_with_what_a_filter_matches_and_nothing_else(Closure $narrow): void
+    {
+        $ledger = $this->ledger();
+        $ledger->write($this->auditData());
+        $wanted = $ledger->write($this->narrowedAuditData());
+        $this->settle($ledger);
+
+        $found = $ledger->query($narrow($this->asking()));
+
+        $this->assertSame($this->retains() ? [$wanted->id] : [], $found->pluck('id')->all());
+    }
+
+    /**
+     * @return array<string, array{Closure(AuditQuery): AuditQuery}>
+     */
+    public static function publishedFilters(): array
+    {
+        return [
+            'subject' => [static fn (AuditQuery $query): AuditQuery => $query->for('invoice', 500)],
+            'actor' => [static fn (AuditQuery $query): AuditQuery => $query->by('user', 1)],
+            'event' => [static fn (AuditQuery $query): AuditQuery => $query->whereEvent('approved')],
+            'severity' => [static fn (AuditQuery $query): AuditQuery => $query->whereSeverity(Severity::Critical)],
+            'source' => [static fn (AuditQuery $query): AuditQuery => $query->whereSource(Source::Queue)],
+            'tenant' => [static fn (AuditQuery $query): AuditQuery => $query->forTenant('acme')],
+            'transaction' => [static fn (AuditQuery $query): AuditQuery => $query->inTransaction('01JTRANSACTION000000000000')],
+            'trace' => [static fn (AuditQuery $query): AuditQuery => $query->withTrace('4bf92f3577b34da6a3ce929d0e0e4736')],
+        ];
+    }
+
+    public function test_it_answers_an_unnarrowed_query_with_everything_it_kept(): void
+    {
+        $ledger = $this->ledger();
+        $written = [
+            $ledger->write($this->auditData())->id,
+            $ledger->write($this->auditData('beta'))->id,
+            $ledger->write($this->auditData())->id,
+        ];
+        $this->settle($ledger);
+
+        $found = $ledger->query($this->asking());
+
+        $this->assertSame($this->retains() ? $written : [], $found->pluck('id')->all());
+    }
+
+    public function test_it_gives_the_oldest_entry_first_and_the_newest_first_on_request(): void
+    {
+        $ledger = $this->ledger();
+        $written = $ledger->writeMany([$this->auditData(), $this->auditData(), $this->auditData()]);
+        $this->settle($ledger);
+
+        $ids = $written->pluck('id')->all();
+
+        $this->assertSame(
+            $this->retains() ? array_reverse($ids) : [],
+            $ledger->query($this->asking()->latest())->pluck('id')->all(),
+        );
+    }
+
+    public function test_it_bounds_a_period_by_both_of_its_ends(): void
+    {
+        $ledger = $this->ledger();
+
+        $this->travelTo('2026-08-01 10:00:00');
+        $ledger->write($this->auditData());
+        $this->travelTo('2026-08-15 10:00:00');
+        $inside = $ledger->write($this->auditData());
+        $this->travelTo('2026-08-31 10:00:00');
+        $ledger->write($this->auditData());
+        $this->settle($ledger);
+
+        $found = $ledger->query($this->asking()->between(
+            new DateTimeImmutable('2026-08-15 10:00:00'),
+            new DateTimeImmutable('2026-08-20 00:00:00'),
+        ));
+
+        $this->assertSame($this->retains() ? [$inside->id] : [], $found->pluck('id')->all());
+    }
+
+    public function test_it_narrows_to_one_subject_inside_a_period_newest_first(): void
+    {
+        $ledger = $this->ledger();
+
+        $this->travelTo('2026-08-15 10:00:00');
+        $ledger->write($this->auditData());
+        $first = $ledger->write($this->narrowedAuditData());
+        $second = $ledger->write($this->narrowedAuditData());
+        $this->settle($ledger);
+
+        $found = $ledger->query($this->asking()
+            ->for('invoice', 500)
+            ->between(new DateTimeImmutable('2026-08-01 00:00:00'), new DateTimeImmutable('2026-08-31 23:59:59'))
+            ->latest());
+
+        $this->assertSame($this->retains() ? [$second->id, $first->id] : [], $found->pluck('id')->all());
+    }
+
+    public function test_it_narrows_by_a_tenant_and_a_severity_at_once(): void
+    {
+        $ledger = $this->ledger();
+        $ledger->write($this->narrowedAuditData(severity: Severity::Info));
+        $wanted = $ledger->write($this->narrowedAuditData());
+        $this->settle($ledger);
+
+        $found = $ledger->query($this->asking()->forTenant('acme')->whereSeverity(Severity::Critical));
+
+        $this->assertSame($this->retains() ? [$wanted->id] : [], $found->pluck('id')->all());
+    }
+
+    public function test_it_walks_one_transaction_newest_first(): void
+    {
+        $ledger = $this->ledger();
+        $first = $ledger->write($this->narrowedAuditData());
+        $second = $ledger->write($this->narrowedAuditData());
+        $ledger->write($this->auditData());
+        $this->settle($ledger);
+
+        $found = $ledger->query($this->asking()->inTransaction('01JTRANSACTION000000000000')->latest());
+
+        $this->assertSame($this->retains() ? [$second->id, $first->id] : [], $found->pluck('id')->all());
+    }
+
+    /**
      * @return list<class-string>
      */
     protected function getPackageProviders($app): array
@@ -188,6 +317,34 @@ abstract class LedgerContractTestCase extends TestCase
     protected function sealedElsewhere(): Audit
     {
         return app(EntryBuilder::class)->build($this->auditData(), 'imported', 1, null, null);
+    }
+
+    protected function asking(): AuditQuery
+    {
+        return new AuditQuery($this->ledger());
+    }
+
+    /**
+     * The capture the query expectations narrow to: every published filter matches it and
+     * none of them matches the plain one, so a filter that quietly stopped narrowing shows up
+     * as an entry nobody asked for rather than as a passing test.
+     */
+    protected function narrowedAuditData(Severity $severity = Severity::Critical): AuditData
+    {
+        return new AuditData(
+            audit_type: 'model',
+            event: 'approved',
+            severity: $severity,
+            occurred_at: new DateTimeImmutable('2026-08-26 10:00:00.000000'),
+            source: Source::Queue,
+            subject_type: 'invoice',
+            subject_id: '500',
+            actor_type: 'user',
+            actor_id: '1',
+            tenant_id: 'acme',
+            transaction_id: '01JTRANSACTION000000000000',
+            trace_id: '4bf92f3577b34da6a3ce929d0e0e4736',
+        );
     }
 
     /**

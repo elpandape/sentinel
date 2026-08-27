@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
-use ElPandaPe\Sentinel\Exceptions\LedgerException;
 use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
 use ElPandaPe\Sentinel\Ledger\EntryBuilder;
 use ElPandaPe\Sentinel\Models\Audit;
@@ -165,8 +164,19 @@ it('hands back a stream that walks what it wrote', function (): void {
         ->and($this->ledger->stream('global')->name())->toBe('global');
 });
 
-it('says out loud that the query api has not arrived yet', function (): void {
-    expect(fn (): mixed => $this->ledger->query(auditQuery($this->ledger)))->toThrow(LedgerException::class);
+it('binds every criterion instead of splicing it into the statement', function (): void {
+    $this->ledger->write(auditData(['tenant_id' => 'acme']));
+
+    expect($this->ledger->query(auditQuery($this->ledger)->forTenant("acme' or '1'='1")))->toBeEmpty();
+});
+
+it('reads the whole table when nothing narrows the query', function (): void {
+    $written = [
+        $this->ledger->write(auditData(['stream' => 'alpha']))->id,
+        $this->ledger->write(auditData(['stream' => 'beta']))->id,
+    ];
+
+    expect($this->ledger->query(auditQuery($this->ledger))->pluck('id')->all())->toBe($written);
 });
 
 it('retries when the unique index says another writer got there first', function (): void {
