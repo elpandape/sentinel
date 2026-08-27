@@ -180,3 +180,13 @@ it('refuses a configured field name that is not a name', function (): void {
 
     pipeline()->process(auditData(protectedEntry()));
 })->throws(ConfigurationException::class, 'a list of field names');
+
+it('names the fields it protected in a stable order, whatever order it met them in', function (): void {
+    config()->set('sentinel.security.redaction.fields', ['alpha', 'zulu']);
+
+    $audit = pipeline()->process(auditData(protectedEntry([
+        'after' => ['zulu' => 'first', 'alpha' => 'second'],
+    ])));
+
+    expect($audit?->after)->toBe(['zulu' => BlanketMasker::MASK, 'alpha' => BlanketMasker::MASK]);
+});

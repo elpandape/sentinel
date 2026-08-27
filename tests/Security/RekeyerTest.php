@@ -137,3 +137,25 @@ it('leaves a value that is not a ciphertext exactly as it found it', function ()
 
     expect(rekeyer()->rekey($original, 'rotated')?->after)->toBe(['secret' => 42]);
 });
+
+it('keeps the metadata the original carried alongside the note it adds', function (): void {
+    $subject = EncryptedSubject::query()->create(['secret' => 'launch codes']);
+    $original = auditsOf($subject)->firstOrFail();
+    $original->metadata = ['reason' => 'quarterly rotation'];
+
+    expect(rekeyer()->rekey($original, 'rotated')?->metadata)->toBe([
+        'reason' => 'quarterly rotation',
+        'rekeyed' => ['audit_id' => $original->id, 'from' => 'default', 'to' => 'rotated'],
+    ]);
+});
+
+it('carries over only the field names, as a list', function (): void {
+    $subject = EncryptedSubject::query()->create(['secret' => 'launch codes']);
+    $original = auditsOf($subject)->firstOrFail();
+    $original->encryption = ['fields' => [42, 'secret'], 'key_id' => 'default'];
+
+    expect(rekeyer()->rekey($original, 'rotated')?->encryption)->toBe([
+        'fields' => ['secret'],
+        'key_id' => 'rotated',
+    ]);
+});

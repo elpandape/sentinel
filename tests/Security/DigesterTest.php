@@ -48,3 +48,13 @@ it('says what to do when there is no salt and no application key to derive one f
 
     digester(['security.hashing.salt' => null])->digest('secret');
 })->throws(ConfigurationException::class, 'key:generate');
+
+it('separates the salt from the value, so two pairs that concatenate alike disagree', function (): void {
+    expect(digester(['security.hashing.salt' => 'abc'])->digest('de'))
+        ->not->toBe(digester(['security.hashing.salt' => 'ab'])->digest('cde'));
+});
+
+it('salts the value rather than being salted by it', function (): void {
+    expect(digester(['security.hashing.salt' => 'pepper'])->digest('secret'))
+        ->not->toBe(digester(['security.hashing.salt' => 'secret'])->digest('pepper'));
+});

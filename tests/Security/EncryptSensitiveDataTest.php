@@ -182,3 +182,26 @@ it('falls back to the package cipher and key identifier when the published confi
     expect($audit?->encryption['key_id'] ?? null)->toBe('default')
         ->and(keyring()->for('default')->decrypt((string) ($audit?->after['secret'] ?? '')))->toBe('launch codes');
 });
+
+it('needs no key at all from an installation that encrypts nothing', function (): void {
+    config()->set('sentinel.security.encryption.keys');
+    config()->set('app.key');
+
+    $data = auditData(['after' => ['secret' => 'launch codes']]);
+
+    expect(pipeline()->process($data))->toBe($data);
+});
+
+it('names the encrypted fields in a stable order, because that list is part of the hash', function (): void {
+    config()->set('sentinel.security.encryption.fields', ['zulu', 'alpha']);
+
+    $audit = pipeline()->process(auditData(['after' => ['zulu' => 'one', 'alpha' => 'two']]));
+
+    expect($audit?->encryption)->toBe(['fields' => ['alpha', 'zulu'], 'key_id' => 'default']);
+});
+
+it('refuses a base64 key whose payload is not base64', function (): void {
+    config()->set('sentinel.security.encryption.keys', ['default' => 'base64:not valid base64!!']);
+
+    keyring()->for('default');
+})->throws(EncryptionException::class, 'aes-256-gcm');
