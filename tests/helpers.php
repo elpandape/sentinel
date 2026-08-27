@@ -139,6 +139,11 @@ function createFixtureTables(): void
         $table->string('name')->nullable();
     });
 
+    Schema::create('fixture_actors', static function (Blueprint $table): void {
+        $table->id();
+        $table->string('name')->nullable();
+    });
+
     Schema::create('fixture_audited_subjects', static function (Blueprint $table): void {
         $table->id();
         $table->string('name')->nullable();
