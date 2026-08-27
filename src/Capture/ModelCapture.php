@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Capture;
 
 use Carbon\CarbonImmutable;
+use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Diff\Diff;
@@ -27,6 +28,7 @@ final readonly class ModelCapture
         private Ledger $ledger,
         private SnapshotBuilder $snapshots,
         private Config $config,
+        private ContextEngine $context,
     ) {}
 
     /**
@@ -41,7 +43,7 @@ final readonly class ModelCapture
         $pair = $this->snapshots->pair($model, $event, $restorePoint);
         $retained = $this->snapshots->retains($model);
 
-        return $this->ledger->write(new AuditData(
+        return $this->ledger->write(($this->context)(new AuditData(
             audit_type: self::AUDIT_TYPE,
             event: $event->value,
             severity: $this->severity($model, $event),
@@ -51,7 +53,7 @@ final readonly class ModelCapture
             before: $retained ? $pair->before : null,
             after: $retained ? $pair->after : null,
             changes: $this->changes($pair),
-        ));
+        )));
     }
 
     /**
