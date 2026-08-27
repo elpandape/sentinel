@@ -13,6 +13,7 @@ use ElPandaPe\Sentinel\Enums\Filter;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Exceptions\LedgerException;
+use ElPandaPe\Sentinel\Exceptions\QueryException;
 use ElPandaPe\Sentinel\Support\Reference;
 
 /**
@@ -44,9 +45,7 @@ final class AuditQuery
 
     public private(set) ?string $traceId = null;
 
-    public private(set) ?DateTimeImmutable $from = null;
-
-    public private(set) ?DateTimeImmutable $to = null;
+    public private(set) ?Period $period = null;
 
     public private(set) bool $newestFirst = false;
 
@@ -136,9 +135,15 @@ final class AuditQuery
 
     public function between(DateTimeInterface $from, DateTimeInterface $to): self
     {
+        if ($to < $from) {
+            throw QueryException::backwardsPeriod();
+        }
+
         $query = $this->accepting(Filter::Period);
-        $query->from = DateTimeImmutable::createFromInterface($from);
-        $query->to = DateTimeImmutable::createFromInterface($to);
+        $query->period = new Period(
+            DateTimeImmutable::createFromInterface($from),
+            DateTimeImmutable::createFromInterface($to),
+        );
 
         return $query;
     }

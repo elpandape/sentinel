@@ -2,10 +2,13 @@
 
 declare(strict_types=1);
 
-use ElPandaPe\Sentinel\Exceptions\LedgerException;
+use ElPandaPe\Sentinel\Enums\AuditEvent;
+use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Ledger\EntryBuilder;
 use ElPandaPe\Sentinel\Ledger\MemoryLedger;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Query\AuditQuery;
 
 use function ElPandaPe\Sentinel\Tests\auditData;
 use function ElPandaPe\Sentinel\Tests\auditQuery;
@@ -77,8 +80,101 @@ it('writes nothing for an empty batch', function (): void {
     expect($this->ledger->writeMany([])->all())->toBeEmpty();
 });
 
-it('says out loud that the query api has not arrived yet', function (): void {
-    expect(fn (): mixed => $this->ledger->query(auditQuery($this->ledger)))->toThrow(LedgerException::class);
+it('answers a query by walking what it holds, across every stream', function (): void {
+    $this->ledger->write(auditData(['stream' => 'alpha', 'tenant_id' => 'acme']));
+    $this->ledger->write(auditData(['stream' => 'beta', 'tenant_id' => 'globex']));
+    $this->ledger->write(auditData(['stream' => 'beta', 'tenant_id' => 'acme']));
+
+    expect($this->ledger->query(auditQuery($this->ledger)->forTenant('acme'))->pluck('stream')->all())
+        ->toBe(['alpha', 'beta']);
+});
+
+it('narrows on each published criterion and leaves the rest of the trail out', function (
+    Closure $narrow,
+    array $matching,
+): void {
+    $this->ledger->write(auditData());
+    $wanted = $this->ledger->write(auditData($matching));
+
+    $found = $this->ledger->query($narrow(auditQuery($this->ledger)));
+
+    expect($found)->toHaveCount(1)
+        ->and($found->firstOrFail()->id)->toBe($wanted->id);
+})->with([
+    'subject' => [
+        fn (AuditQuery $query): AuditQuery => $query->for('invoice', 500),
+        ['subject_type' => 'invoice', 'subject_id' => '500'],
+    ],
+    'actor' => [
+        fn (AuditQuery $query): AuditQuery => $query->by('user', 1),
+        ['actor_type' => 'user', 'actor_id' => '1'],
+    ],
+    'event' => [
+        fn (AuditQuery $query): AuditQuery => $query->whereEvent(AuditEvent::Deleted),
+        ['event' => 'deleted'],
+    ],
+    'severity' => [
+        fn (AuditQuery $query): AuditQuery => $query->whereSeverity(Severity::Critical),
+        ['severity' => Severity::Critical],
+    ],
+    'source' => [
+        fn (AuditQuery $query): AuditQuery => $query->whereSource(Source::Queue),
+        ['source' => Source::Queue],
+    ],
+    'tenant' => [
+        fn (AuditQuery $query): AuditQuery => $query->forTenant('acme'),
+        ['tenant_id' => 'acme'],
+    ],
+    'transaction' => [
+        fn (AuditQuery $query): AuditQuery => $query->inTransaction('01JTRANSACTION000000000000'),
+        ['transaction_id' => '01JTRANSACTION000000000000'],
+    ],
+    'trace' => [
+        fn (AuditQuery $query): AuditQuery => $query->withTrace('4bf92f3577b34da6a3ce929d0e0e4736'),
+        ['trace_id' => '4bf92f3577b34da6a3ce929d0e0e4736'],
+    ],
+]);
+
+it('tells an entry with half a reference apart from one with the whole of it', function (): void {
+    $this->ledger->write(auditData(['subject_type' => 'invoice', 'subject_id' => '499']));
+    $this->ledger->write(auditData(['subject_type' => 'order', 'subject_id' => '500']));
+
+    expect($this->ledger->query(auditQuery($this->ledger)->for('invoice', 500)))->toBeEmpty();
+});
+
+it('bounds a period by both ends of the ledger clock', function (): void {
+    $this->travelTo('2026-08-01 10:00:00');
+    $this->ledger->write(auditData(['event' => 'early']));
+    $this->travelTo('2026-08-15 10:00:00');
+    $this->ledger->write(auditData(['event' => 'inside']));
+    $this->travelTo('2026-08-31 10:00:00');
+    $this->ledger->write(auditData(['event' => 'late']));
+
+    $found = $this->ledger->query(auditQuery($this->ledger)->between(
+        new DateTimeImmutable('2026-08-10 00:00:00'),
+        new DateTimeImmutable('2026-08-20 00:00:00'),
+    ));
+
+    expect($found->pluck('event')->all())->toBe(['inside']);
+});
+
+it('gives the oldest entry first, and the newest first on request', function (): void {
+    $this->ledger->write(auditData(['stream' => 'beta', 'event' => 'first']));
+    $this->ledger->write(auditData(['stream' => 'alpha', 'event' => 'second']));
+    $this->ledger->write(auditData(['stream' => 'beta', 'event' => 'third']));
+
+    expect($this->ledger->query(auditQuery($this->ledger))->pluck('event')->all())
+        ->toBe(['first', 'second', 'third'])
+        ->and($this->ledger->query(auditQuery($this->ledger)->latest())->pluck('event')->all())
+        ->toBe(['third', 'second', 'first']);
+});
+
+it('orders entries stamped in the same microsecond by the ulid that carries the instant', function (): void {
+    $this->travelTo('2026-08-15 10:00:00');
+    $written = $this->ledger->writeMany([auditData(), auditData(), auditData()]);
+
+    expect($this->ledger->query(auditQuery($this->ledger))->pluck('id')->all())
+        ->toBe($written->pluck('id')->all());
 });
 
 it('counts a version per subject in memory too', function (): void {

@@ -7,7 +7,6 @@ namespace ElPandaPe\Sentinel\Ledger;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Contracts\LedgerStream;
 use ElPandaPe\Sentinel\Data\AuditData;
-use ElPandaPe\Sentinel\Exceptions\LedgerException;
 use ElPandaPe\Sentinel\Integrity\Stream;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Query\AuditQuery;
@@ -38,6 +37,7 @@ final class MemoryLedger implements Ledger
     public function __construct(
         private readonly Stream $stream,
         private readonly EntryBuilder $builder,
+        private readonly ArrayQuery $queries,
     ) {}
 
     public function write(AuditData $audit): Audit
@@ -86,7 +86,7 @@ final class MemoryLedger implements Ledger
 
     public function query(AuditQuery $query): AuditCollection
     {
-        throw LedgerException::queryNotImplemented();
+        return new AuditCollection($this->queries->resolve(array_merge([], ...array_values($this->streams)), $query));
     }
 
     public function stream(string $stream): LedgerStream

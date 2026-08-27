@@ -40,4 +40,9 @@ final readonly class Reference
 
         throw QueryException::unreferenceable($target::class);
     }
+
+    public function matches(?string $type, ?string $id): bool
+    {
+        return $this->type === $type && $this->id === $id;
+    }
 }

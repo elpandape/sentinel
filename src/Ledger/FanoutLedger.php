@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Ledger;
 
+use ElPandaPe\Sentinel\Contracts\DeclaresFilters;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Contracts\LedgerStream;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Enums\FanoutPolicy;
+use ElPandaPe\Sentinel\Enums\Filter;
 use ElPandaPe\Sentinel\Events\LedgerDestinationFailed;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Query\AuditQuery;
@@ -23,7 +25,7 @@ use Throwable;
  * produce two different truths about one fact. For the same reason every read goes to the
  * primary: it is the destination whose chain the sequence belongs to.
  */
-final readonly class FanoutLedger implements Ledger
+final readonly class FanoutLedger implements DeclaresFilters, Ledger
 {
     /**
      * @param  list<Ledger>  $secondaries
@@ -64,6 +66,11 @@ final readonly class FanoutLedger implements Ledger
     public function query(AuditQuery $query): AuditCollection
     {
         return $this->primary->query($query);
+    }
+
+    public function supportedFilters(): array
+    {
+        return $this->primary instanceof DeclaresFilters ? $this->primary->supportedFilters() : Filter::cases();
     }
 
     public function stream(string $stream): LedgerStream

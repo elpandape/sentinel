@@ -18,6 +18,11 @@ final class QueryException extends InvalidArgumentException
         return new self("Querying by the recorded type \"{$type}\" needs the key it was recorded with as the second argument.");
     }
 
+    public static function backwardsPeriod(): self
+    {
+        return new self('A period that ends before it starts can only ever answer with nothing; pass the earlier moment first.');
+    }
+
     public static function unreferenceable(string $type): self
     {
         return new self("Cannot query for {$type}: pass an Eloquent model, or the type and key the entry recorded.");

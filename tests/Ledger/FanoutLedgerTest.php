@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Enums\FanoutPolicy;
+use ElPandaPe\Sentinel\Enums\Filter;
 use ElPandaPe\Sentinel\Events\LedgerDestinationFailed;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
-use ElPandaPe\Sentinel\Exceptions\LedgerException;
 use ElPandaPe\Sentinel\Ledger\FanoutLedger;
 use ElPandaPe\Sentinel\Ledger\MemoryLedger;
 use ElPandaPe\Sentinel\Ledger\NullLedger;
 use ElPandaPe\Sentinel\Tests\Fixtures\FailingLedger;
+use ElPandaPe\Sentinel\Tests\Fixtures\LimitedLedger;
 use Illuminate\Support\Facades\Event;
 
 use function ElPandaPe\Sentinel\Tests\auditData;
@@ -57,8 +58,15 @@ it('reads from the primary, which is whose chain the sequence belongs to', funct
 });
 
 it('sends a query to the primary, which is the only one that answers for the chain', function (): void {
-    expect(fn (): mixed => fanout(app(MemoryLedger::class), [app(NullLedger::class)])->query(auditQuery()))
-        ->toThrow(LedgerException::class);
+    $ledger = fanout(app(MemoryLedger::class), [app(NullLedger::class)]);
+    $ledger->write(auditData(['tenant_id' => 'acme']));
+
+    expect($ledger->query(auditQuery($ledger)->forTenant('acme')))->toHaveCount(1);
+});
+
+it('answers for the filters its primary can translate, not for the ones it cannot', function (): void {
+    expect(fanout(app(MemoryLedger::class), [])->supportedFilters())->toBe(Filter::cases())
+        ->and(fanout(new LimitedLedger, [])->supportedFilters())->toBe([Filter::Subject]);
 });
 
 it('fails the whole write under strict when any destination refuses', function (): void {

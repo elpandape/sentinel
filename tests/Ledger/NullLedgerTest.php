@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use ElPandaPe\Sentinel\Exceptions\LedgerException;
 use ElPandaPe\Sentinel\Ledger\EntryBuilder;
 use ElPandaPe\Sentinel\Ledger\NullLedger;
 use ElPandaPe\Sentinel\Models\Audit;
@@ -74,8 +73,11 @@ it('writes nothing for an empty batch', function (): void {
     expect($this->ledger->writeMany([])->all())->toBeEmpty();
 });
 
-it('says out loud that the query api has not arrived yet', function (): void {
-    expect(fn (): mixed => $this->ledger->query(auditQuery($this->ledger)))->toThrow(LedgerException::class);
+it('answers a query with nothing, however narrow it was', function (): void {
+    $this->ledger->write(auditData(['tenant_id' => 'acme']));
+
+    expect($this->ledger->query(auditQuery($this->ledger)))->toBeEmpty()
+        ->and($this->ledger->query(auditQuery($this->ledger)->forTenant('acme')))->toBeEmpty();
 });
 
 it('tells seven subjects apart however their type and key run together', function (): void {

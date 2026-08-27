@@ -7,6 +7,7 @@ use ElPandaPe\Sentinel\Enums\Filter;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Exceptions\LedgerException;
+use ElPandaPe\Sentinel\Exceptions\QueryException;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Tests\Fixtures\ActingUser;
 use ElPandaPe\Sentinel\Tests\Fixtures\AuditedSubject;
@@ -25,8 +26,7 @@ it('starts with nothing to filter by and the oldest entry first', function (): v
         ->and($query->tenantId)->toBeNull()
         ->and($query->transactionId)->toBeNull()
         ->and($query->traceId)->toBeNull()
-        ->and($query->from)->toBeNull()
-        ->and($query->to)->toBeNull()
+        ->and($query->period)->toBeNull()
         ->and($query->newestFirst)->toBeFalse();
 });
 
@@ -93,9 +93,28 @@ it('keeps a period as an immutable pair whatever kind of date it was given', fun
         new DateTimeImmutable('2026-08-31 23:59:59'),
     );
 
-    expect($query->from)->toBeInstanceOf(DateTimeImmutable::class)
-        ->and($query->from?->format('Y-m-d H:i:s'))->toBe('2026-08-01 00:00:00')
-        ->and($query->to?->format('Y-m-d H:i:s'))->toBe('2026-08-31 23:59:59');
+    expect($query->period?->from)->toBeInstanceOf(DateTimeImmutable::class)
+        ->and($query->period?->from->format('Y-m-d H:i:s'))->toBe('2026-08-01 00:00:00')
+        ->and($query->period?->to->format('Y-m-d H:i:s'))->toBe('2026-08-31 23:59:59');
+});
+
+it('covers both ends of the period it was given', function (): void {
+    $period = auditQuery()->between(
+        new DateTimeImmutable('2026-08-01 00:00:00'),
+        new DateTimeImmutable('2026-08-31 23:59:59'),
+    )->period;
+
+    expect($period?->covers(new DateTimeImmutable('2026-08-01 00:00:00')))->toBeTrue()
+        ->and($period?->covers(new DateTimeImmutable('2026-08-31 23:59:59')))->toBeTrue()
+        ->and($period?->covers(new DateTimeImmutable('2026-07-31 23:59:59')))->toBeFalse()
+        ->and($period?->covers(new DateTimeImmutable('2026-09-01 00:00:00')))->toBeFalse();
+});
+
+it('refuses a period that ends before it starts', function (): void {
+    expect(fn (): AuditQuery => auditQuery()->between(
+        new DateTimeImmutable('2026-08-31 23:59:59'),
+        new DateTimeImmutable('2026-08-01 00:00:00'),
+    ))->toThrow(QueryException::class, 'can only ever answer with nothing');
 });
 
 it('turns the order around on request', function (): void {

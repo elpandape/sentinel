@@ -7,7 +7,6 @@ namespace ElPandaPe\Sentinel\Ledger;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Contracts\LedgerStream;
 use ElPandaPe\Sentinel\Data\AuditData;
-use ElPandaPe\Sentinel\Exceptions\LedgerException;
 use ElPandaPe\Sentinel\Integrity\Stream;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Query\AuditQuery;
@@ -16,7 +15,8 @@ use ElPandaPe\Sentinel\Support\AuditCollection;
 /**
  * Turns writing off without taking the code path apart. The entry is still built, sealed and
  * chained, so what an application measures with this driver is what the package costs minus
- * the store — but nothing is kept: find() answers nothing and stream() walks nothing.
+ * the store — but nothing is kept: find() answers nothing, stream() walks nothing, and a query
+ * comes back empty however narrow it was.
  *
  * What survives a write is the tail of each stream and a version counter per subject, because
  * both are sealed into the next entry and a chain cannot be continued without them. That is a
@@ -73,7 +73,7 @@ final class NullLedger implements Ledger
 
     public function query(AuditQuery $query): AuditCollection
     {
-        throw LedgerException::queryNotImplemented();
+        return new AuditCollection([]);
     }
 
     public function stream(string $stream): LedgerStream
