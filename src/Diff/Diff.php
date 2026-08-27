@@ -24,6 +24,11 @@ final readonly class Diff implements Countable, IteratorAggregate
      */
     private function __construct(private array $changes) {}
 
+    public static function between(mixed $before, mixed $after): self
+    {
+        return new self(Comparator::compare(Normalizer::value($before), Normalizer::value($after)));
+    }
+
     /**
      * @param  list<Change>  $changes
      */

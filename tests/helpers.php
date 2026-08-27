@@ -6,6 +6,7 @@ namespace ElPandaPe\Sentinel\Tests;
 
 use DateTimeImmutable;
 use ElPandaPe\Sentinel\Data\AuditData;
+use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Integrity\Hasher;
@@ -294,4 +295,12 @@ function raceTheGate(string $rival): void
             DB::connection($rival)->table(auditsTable())->insert(auditRow(['sequence' => 1]));
         }, report: false);
     });
+}
+
+/**
+ * @return list<array{path: string, op: string, old?: mixed, new: mixed}>
+ */
+function diffEntries(mixed $before, mixed $after): array
+{
+    return Diff::between($before, $after)->toArray();
 }
