@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Support;
 
 use Closure;
+use ElPandaPe\Sentinel\Contracts\Masker;
 use ElPandaPe\Sentinel\Contracts\Resolver;
 use ElPandaPe\Sentinel\Contracts\Transformer;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
@@ -275,6 +276,92 @@ final readonly class Config
         return $needles;
     }
 
+    /**
+     * The declared list and the configured one are a union, not a fallback. The config list
+     * is the only way to name a key that no model owns — an address, a session id, a console
+     * argument — so it has to apply to entries a model never declared anything about.
+     *
+     * @param  list<string>  $declared
+     * @return list<string>
+     */
+    public function redactedFields(array $declared): array
+    {
+        return $this->union($declared, 'security.redaction.fields');
+    }
+
+    /**
+     * @param  list<string>  $declared
+     * @return list<string>
+     */
+    public function hashedFields(array $declared): array
+    {
+        return $this->union($declared, 'security.hashing.fields');
+    }
+
+    /**
+     * @param  class-string<Masker>  $default
+     * @return class-string<Masker>
+     */
+    public function maskerClass(string $field, string $default): string
+    {
+        foreach (["security.redaction.maskers.{$field}", 'security.redaction.masker'] as $key) {
+            $value = $this->repository->get("sentinel.{$key}");
+
+            if ($value === null) {
+                continue;
+            }
+
+            if (! is_string($value)) {
+                throw ConfigurationException::expected($key, 'a class-string or null', get_debug_type($value));
+            }
+
+            if (! class_exists($value) || ! is_a($value, Masker::class, true)) {
+                throw ConfigurationException::invalidClass($key, $value, Masker::class);
+            }
+
+            /** @var class-string<Masker> $value */
+            return $value;
+        }
+
+        return $default;
+    }
+
+    public function hashingAlgorithm(): string
+    {
+        $algorithm = $this->repository->get('sentinel.security.hashing.algorithm') ?? 'sha256';
+
+        if (! is_string($algorithm)) {
+            throw ConfigurationException::expected('security.hashing.algorithm', 'a string', get_debug_type($algorithm));
+        }
+
+        return in_array($algorithm, hash_algos(), true)
+            ? $algorithm
+            : throw ConfigurationException::unknown('security.hashing.algorithm', $algorithm, implode(', ', hash_algos()));
+    }
+
+    /**
+     * Derived from the application key when none is declared, so a digest is comparable
+     * across every entry of one installation and across none of two.
+     */
+    public function hashingSalt(): string
+    {
+        $salt = $this->repository->get('sentinel.security.hashing.salt');
+
+        if (is_string($salt) && $salt !== '') {
+            return $salt;
+        }
+
+        if ($salt !== null && $salt !== '') {
+            throw ConfigurationException::expected('security.hashing.salt', 'a non-empty string or null', get_debug_type($salt));
+        }
+
+        $key = $this->repository->get('app.key');
+
+        return is_string($key) && $key !== ''
+            ? hash_hmac('sha256', 'sentinel:hashing', $key)
+            : throw ConfigurationException::missingApplicationKey('security.hashing.salt');
+    }
+
     public function redactionMask(): string
     {
         $value = $this->repository->get('sentinel.security.redaction.mask');
@@ -284,6 +371,33 @@ final readonly class Config
             is_string($value) => $value,
             default => throw ConfigurationException::expected('security.redaction.mask', 'a string', get_debug_type($value)),
         };
+    }
+
+    /**
+     * @param  list<string>  $declared
+     * @return list<string>
+     */
+    private function union(array $declared, string $key): array
+    {
+        $value = $this->repository->get("sentinel.{$key}");
+
+        if ($value === null) {
+            return $declared;
+        }
+
+        if (! is_array($value)) {
+            throw ConfigurationException::expected($key, 'a list of field names', get_debug_type($value));
+        }
+
+        $fields = $declared;
+
+        foreach ($value as $field) {
+            $fields[] = is_string($field)
+                ? $field
+                : throw ConfigurationException::expected($key, 'a list of field names', get_debug_type($field));
+        }
+
+        return array_values(array_unique($fields));
     }
 
     private function resolverString(string $key, string $default): string

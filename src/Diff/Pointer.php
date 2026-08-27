@@ -15,6 +15,19 @@ final class Pointer
         return str_replace(['~', '/'], ['~0', '~1'], $segment);
     }
 
+    public static function unescape(string $segment): string
+    {
+        return str_replace(['~1', '~0'], ['/', '~'], $segment);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function segments(string $path): array
+    {
+        return array_values(array_map(self::unescape(...), array_filter(explode('/', $path), static fn (string $segment): bool => $segment !== '')));
+    }
+
     /**
      * A literal pointer passes through; anything else is read as dot notation, which is
      * what a caller writing `profile.address.city` means.

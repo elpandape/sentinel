@@ -15,7 +15,9 @@ use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
 use ElPandaPe\Sentinel\Ledger\NullLedger;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Pipeline\Discard;
+use ElPandaPe\Sentinel\Security\Maskers;
 use ElPandaPe\Sentinel\Support\Config;
+use ElPandaPe\Sentinel\Support\PolicyRegistry;
 use ElPandaPe\Sentinel\Support\PublishedMigration;
 use Illuminate\Console\Events\CommandFinished;
 use Illuminate\Console\Events\CommandStarting;
@@ -60,6 +62,8 @@ final class SentinelServiceProvider extends ServiceProvider
         // Scoped: execution context and recording state belong to one request or job, not to the worker.
         $this->app->scoped(ContextEngine::class);
         $this->app->scoped(Discard::class);
+        $this->app->scoped(Maskers::class);
+        $this->app->scoped(PolicyRegistry::class);
         $this->app->scoped(ExecutionContext::class);
         $this->app->scoped(Runtime::class);
         $this->app->scoped(Sentinel::class);

@@ -19,24 +19,38 @@ final readonly class AuditPolicy
     /**
      * @param  list<string>  $included
      * @param  list<string>  $excluded
+     * @param  list<string>  $redacted
+     * @param  list<string>  $encrypted
+     * @param  list<string>  $hashed
      */
     private function __construct(
         public array $included,
         public array $excluded,
+        public array $redacted,
+        public array $encrypted,
+        public array $hashed,
         public bool $snapshots,
         public ?Severity $severity,
     ) {}
 
+    public static function none(): self
+    {
+        return new self([], [], [], [], [], true, null);
+    }
+
     public static function of(Model $model): self
     {
         if (! self::answers($model)) {
-            return new self([], [], true, null);
+            return self::none();
         }
 
         /** @var Model&Auditable $model */
         return new self(
             $model->auditIncluded(),
             $model->auditExcluded(),
+            $model->auditRedacted(),
+            $model->auditEncrypted(),
+            $model->auditHashed(),
             $model->auditSnapshotsEnabled(),
             $model->auditSeverity(),
         );

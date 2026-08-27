@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Diff\DiffException;
+use ElPandaPe\Sentinel\Diff\Pointer;
 
 it('emits a strict patch with a test in front of what it overwrites', function (): void {
     $diff = Diff::between(['a' => 1, 'b' => 2], ['a' => 9, 'c' => 3]);
@@ -99,4 +100,13 @@ it('names the unreadable operation by its position too', function (): void {
 
     expect(fn (): Diff => Diff::fromJsonPatch($patch))
         ->toThrow(DiffException::class, 'at index 1');
+});
+
+it('reads a pointer back into the segments it was built from', function (): void {
+    expect(Pointer::segments('/profile/email'))->toBe(['profile', 'email'])
+        ->and(Pointer::segments(''))->toBeEmpty();
+});
+
+it('unescapes a segment that carried a slash or a tilde', function (): void {
+    expect(Pointer::segments('/a~1b/c~0d'))->toBe(['a/b', 'c~d']);
 });

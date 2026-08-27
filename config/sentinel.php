@@ -88,6 +88,7 @@ return [
         ElPandaPe\Sentinel\Pipeline\Stages\FilterUnchanged::class,
         ElPandaPe\Sentinel\Pipeline\Stages\ResolveContext::class,
         ElPandaPe\Sentinel\Pipeline\Stages\NormalizeData::class,
+        ElPandaPe\Sentinel\Pipeline\Stages\MaskSensitiveData::class,
     ],
 
     /*
@@ -99,9 +100,18 @@ return [
         'include_hidden' => true,
     ],
 
+    /*
+     * What never reaches the ledger in the clear. A model declares its own fields with
+     * $auditRedact, $auditEncrypt and $auditHash; the lists here add to those and are the
+     * only way to name a key no model owns, like an address or a console argument.
+     */
     'security' => [
         'redaction' => [
             'mask' => '*',
+            'fields' => [],
+            // Default masker for every field, and overrides keyed by field name.
+            'masker' => null,
+            'maskers' => [],
         ],
         'encryption' => [
             'enabled' => false,
@@ -109,7 +119,10 @@ return [
         ],
         'hashing' => [
             'algorithm' => 'sha256',
+            // Derived from APP_KEY when null. Stable by definition: rotating it keeps the
+            // chain intact and destroys the comparability of every digest written before.
             'salt' => env('SENTINEL_HASH_SALT'),
+            'fields' => [],
         ],
     ],
 

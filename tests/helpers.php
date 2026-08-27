@@ -17,9 +17,12 @@ use ElPandaPe\Sentinel\Integrity\Verifier;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Pipeline\Discard;
 use ElPandaPe\Sentinel\Pipeline\Pipeline;
+use ElPandaPe\Sentinel\Security\Digester;
+use ElPandaPe\Sentinel\Security\Maskers;
 use ElPandaPe\Sentinel\Snapshot\SnapshotBuilder;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Config;
+use ElPandaPe\Sentinel\Tests\Fixtures\ProtectedSubject;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Events\QueryExecuted;
@@ -350,6 +353,35 @@ function stagedPipeline(array $stages): void
     $repository = app(Repository::class);
 
     $repository->set('sentinel.pipeline', $stages);
+}
+
+/**
+ * @param  array<string, mixed>  $overrides
+ * @return array<string, mixed>
+ */
+function protectedEntry(array $overrides = []): array
+{
+    return [
+        'subject_type' => ProtectedSubject::class,
+        'subject_id' => '7',
+        ...$overrides,
+    ];
+}
+
+/**
+ * @param  array<string, mixed>  $overrides
+ */
+function digester(array $overrides = []): Digester
+{
+    return new Digester(sentinelConfig($overrides), new JsonCanonicalizer);
+}
+
+/**
+ * @param  array<string, mixed>  $overrides
+ */
+function maskers(array $overrides = []): Maskers
+{
+    return new Maskers(app(), sentinelConfig($overrides));
 }
 
 function pipeline(): Pipeline

@@ -9,6 +9,7 @@ use ElPandaPe\Sentinel\Contracts\Transformer;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Events\AuditDiscarded;
 use ElPandaPe\Sentinel\Pipeline\Stages\FilterUnchanged;
+use ElPandaPe\Sentinel\Pipeline\Stages\MaskSensitiveData;
 use ElPandaPe\Sentinel\Pipeline\Stages\NormalizeData;
 use ElPandaPe\Sentinel\Pipeline\Stages\ResolveContext;
 use ElPandaPe\Sentinel\Support\Config;
@@ -29,6 +30,7 @@ final readonly class Pipeline
         FilterUnchanged::class,
         ResolveContext::class,
         NormalizeData::class,
+        MaskSensitiveData::class,
     ];
 
     public function __construct(

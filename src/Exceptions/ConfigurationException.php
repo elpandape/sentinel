@@ -28,6 +28,14 @@ final class ConfigurationException extends InvalidArgumentException
         return new self("Sentinel configuration key [sentinel.{$key}] must be {$expected} or a subclass of it, [{$value}] given.");
     }
 
+    public static function missingApplicationKey(string $key): self
+    {
+        return new self(
+            "Sentinel needs [sentinel.{$key}] or an application key to derive it from, and found neither. "
+            .'Run `php artisan key:generate`, or declare the value yourself.',
+        );
+    }
+
     public static function streamTooLong(string $name): self
     {
         return new self(sprintf(
