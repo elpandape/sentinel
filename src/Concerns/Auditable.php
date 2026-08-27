@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Concerns;
 
+use ElPandaPe\Sentinel\Capture\ModelObserver;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
 use ElPandaPe\Sentinel\Models\Audit;
@@ -12,6 +13,23 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 trait Auditable
 {
+    /**
+     * The eloquent events the package listens to. Not five: a force delete fires
+     * `deleted` on its way to `forceDeleted`, and by the time `restored` fires the
+     * original is already synced, so both are derived from the four below.
+     *
+     * @var list<string>
+     */
+    private const array AUDITED_EVENTS = ['created', 'updated', 'deleted', 'forceDeleted'];
+
+    public static function bootAuditable(): void
+    {
+        // Model::observe() instantiates the model, which cannot happen while it is booting.
+        foreach (self::AUDITED_EVENTS as $event) {
+            static::registerModelEvent($event, [ModelObserver::class, $event]);
+        }
+    }
+
     /**
      * @return MorphMany<Audit, $this>
      */

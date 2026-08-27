@@ -12,9 +12,12 @@ use ElPandaPe\Sentinel\Integrity\Hasher;
 use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
 use ElPandaPe\Sentinel\Integrity\Stream;
 use ElPandaPe\Sentinel\Integrity\Verifier;
+use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Snapshot\SnapshotBuilder;
+use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -196,6 +199,24 @@ function auditData(array $overrides = []): AuditData
 function stream(array $overrides = []): Stream
 {
     return new Stream(sentinelConfig($overrides), app());
+}
+
+/**
+ * The entries of a subject, read straight from the ledger: after a hard delete the
+ * model is gone and its relation cannot be walked any more.
+ *
+ * @return AuditCollection<int, Audit>
+ */
+function auditsOf(Model $subject): AuditCollection
+{
+    /** @var AuditCollection<int, Audit> $audits */
+    $audits = Audit::query()
+        ->where('subject_type', $subject->getMorphClass())
+        ->where('subject_id', (string) $subject->getKey())
+        ->orderBy('id')
+        ->get();
+
+    return $audits;
 }
 
 function verifier(): Verifier

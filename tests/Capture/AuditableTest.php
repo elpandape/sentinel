@@ -5,6 +5,7 @@ declare(strict_types=1);
 use ElPandaPe\Sentinel\Contracts\Auditable;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
+use ElPandaPe\Sentinel\Facades\Sentinel;
 use ElPandaPe\Sentinel\Tests\Fixtures\AuditedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\PolicySubject;
 
@@ -52,7 +53,7 @@ it('takes a severity as the enum or as the value behind it', function (Severity|
 })->with([Severity::Warning, 'warning']);
 
 it('reaches the entries of its own subject, oldest first', function (): void {
-    $subject = AuditedSubject::query()->create(['name' => 'Ada']);
+    $subject = Sentinel::withoutAuditing(fn (): AuditedSubject => AuditedSubject::query()->create(['name' => 'Ada']));
 
     insertAudit(['sequence' => 900, 'event' => 'created', 'subject_type' => $subject->getMorphClass(), 'subject_id' => (string) $subject->getKey()]);
     insertAudit(['sequence' => 901, 'event' => 'updated', 'subject_type' => $subject->getMorphClass(), 'subject_id' => (string) $subject->getKey()]);
@@ -62,7 +63,9 @@ it('reaches the entries of its own subject, oldest first', function (): void {
 });
 
 it('has no latest entry before anything happened', function (): void {
-    expect(AuditedSubject::query()->create(['name' => 'Ada'])->latestAudit())->toBeNull();
+    $subject = Sentinel::withoutAuditing(fn (): AuditedSubject => AuditedSubject::query()->create(['name' => 'Ada']));
+
+    expect($subject->latestAudit())->toBeNull();
 });
 
 it('refuses a field policy that is not a list', function (): void {
