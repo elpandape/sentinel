@@ -7,6 +7,7 @@ use ElPandaPe\Sentinel\Contracts\Ledger;
 use function ElPandaPe\Sentinel\Tests\auditData;
 use function ElPandaPe\Sentinel\Tests\contextEngine;
 use function ElPandaPe\Sentinel\Tests\httpRequest;
+use function ElPandaPe\Sentinel\Tests\withSortedKeys;
 
 beforeEach(function (): void {
     httpRequest('/api/invoices', ['User-Agent' => 'Sentinel/1.0']);
@@ -15,10 +16,10 @@ beforeEach(function (): void {
     $this->written = $this->ledger->write(contextEngine()(auditData()));
 });
 
-it('reads back the resolved context the way it wrote it', function (): void {
+it('reads back every value of the resolved context, whatever the engine does to the key order', function (): void {
     $read = $this->ledger->find($this->written->id);
 
-    expect($read?->context)->toBe($this->written->context)
+    expect(withSortedKeys($read?->context ?? []))->toBe(withSortedKeys($this->written->context))
         ->and($read?->source)->toBe($this->written->source)
         ->and($read?->request_id)->toBe($this->written->request_id);
 });
