@@ -2,6 +2,49 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.5.0 — Diff engine (2026-08-26)
+
+### Added
+
+- `Diff\Diff`: `Diff::between($before, $after)` compares two structures and returns
+  `{path, op, old, new}` entries, with `path` as an RFC 6901 JSON Pointer so a key holding a `.` or
+  a `/` stays unambiguous. It depends on nothing else in the package and on nothing in
+  `Illuminate\Database` — an arch test forbids it, and a second test runs the comparison in a php
+  process that loads nothing but the autoloader.
+- `old` travels next to `new`, which RFC 6902 cannot do. Interoperability is an export:
+  `toJsonPatch()` emits strict RFC 6902 with an optional `test` guarding every `remove` and
+  `replace`, and `Diff::fromJsonPatch()` reads one back. Without the tests the previous value is
+  genuinely lost, so the rebuilt entry omits it rather than reporting `null` as if it were data.
+- Lists are matched by identity when every element carries a unique scalar `id` or `uuid`, and by
+  position otherwise: an insertion in the middle is one addition and a reordering is no change.
+- `$audit->diff()` and `$audit->diffFor('profile.address.city')`, which takes dot notation or a
+  literal pointer. An entry written before this version computes its diff on read from the states it
+  stored; no row is rewritten.
+- Fifth frozen entry in the golden dataset, this one carrying the diff of its own change.
+
+### Changed
+
+- Model entries populate `changes`. A creation is all additions, a deletion all removals, and an
+  update that changed nothing writes `[]` — `null` still means the event had nothing to compare.
+- `payload_version` stays at **1**: `changes` has been part of the canonical payload since `v0.3.0`,
+  and populating a declared field does not change the format. The four entries frozen in `v0.4.0`
+  still reproduce their hashes byte for byte.
+- `$auditSnapshots = false` and `snapshots.enabled = false` now govern **retention**, not the
+  comparison. The pair is built either way — without it there is nothing to diff — so such an entry
+  keeps its diff and drops its two states. The flag saves storage, not time.
+- `mutation-nightly.yml` gains a threshold for `Diff/` (90), and `make bench` gains a row that
+  measures the comparator with nothing around it.
+
+### Notes
+
+- The diff **duplicates** sensitive data: what lives in `before` and `after` now also lives in
+  `changes`. Redaction and encryption land in `v0.7.0`; `$auditExclude` is still the only lever.
+- A round trip through mysql or postgres keeps every value of a diff but not the key order inside
+  each entry — both engines reorder object keys. Nothing depends on that order: entries are read by
+  key, and the chain hashes the canonical form, never the text the engine stored.
+- No user-facing strings in this version. The new exceptions are developer-facing and stay in plain
+  English, as Laravel itself does.
+
 ## v0.4.0 — Snapshots and the Auditable trait (2026-08-26)
 
 ### Added

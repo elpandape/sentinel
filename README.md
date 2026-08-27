@@ -35,12 +35,14 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.2.0` | `sentinel_audits` schema, `Audit` model, `AuditData`, package contracts, factory |
 | `v0.3.0` | `DatabaseLedger`, `NullLedger`, the hash chain, verification, immutability guards |
 | `v0.4.0` | Model auditing, full snapshots, the `Auditable` trait, the write-path baseline |
+| `v0.5.0` | Structured diffs, `$audit->diff()`, JSON Patch import and export |
 
-Everything else is on the roadmap: structured diffs, resolved context, relationship auditing,
-business transactions, custom events, state transitions, restore, advanced verification
-(checkpoints and signatures), retention and compliance, performance modes and distributed tracing.
+Everything else is on the roadmap: resolved context, relationship auditing, business transactions,
+custom events, state transitions, restore, advanced verification (checkpoints and signatures),
+retention and compliance, performance modes and distributed tracing.
 
 `v0.4.0` is the version that starts auditing: a model with the trait writes its own chained entries.
+`v0.5.0` is the one that answers what changed, instead of leaving you two states to compare.
 
 ## Quick start
 
@@ -147,12 +149,59 @@ For a wide table where two copies per write do not pay for themselves:
 protected bool $auditSnapshots = false;
 ```
 
-The entry is still written, still chained and still verifies — the chain never depended on an entry
-carrying content. Until `v0.5.0` ships the diff, though, such an entry carries nothing but the
-event, the subject, the version and the link: verifiable, not yet informative.
+The entry is still written, still chained and still verifies, and it carries the diff: the two states
+are dropped, the change is not. The comparison runs either way, so the flag saves storage, not the
+microseconds it takes to compare.
 
 `version` is a counter per subject, assigned by the ledger in the same operation that assigns
 `sequence`, so you can talk about *v3 of Invoice #500* without counting rows at query time.
+
+### Diffs
+
+An entry says what changed. You do not compare two JSON blobs by hand:
+
+```php
+$audit->diff();                      // ElPandaPe\Sentinel\Diff\Diff — countable and iterable
+$audit->diffFor('profile.address');  // the same, narrowed to a subtree
+```
+
+```php
+[
+    ['path' => '/profile/address/city', 'op' => 'replace', 'old' => 'Lima', 'new' => 'Arequipa'],
+    ['path' => '/roles/1',              'op' => 'remove',  'old' => 'editor', 'new' => null],
+]
+```
+
+`path` is an RFC 6901 JSON Pointer, so a key holding a `.` or a `/` is still unambiguous.
+`diffFor()` accepts dot notation as well, for the common case where no key contains a dot; when one
+does, the literal pointer is the form that always means what it says.
+
+`old` travels next to `new` because the previous value is the point of an audit, and RFC 6902 has no
+place for it. Interoperability is offered as an export instead:
+
+```php
+$audit->diff()->toJsonPatch();   // strict RFC 6902, with a `test` guarding what it overwrites
+Diff::fromJsonPatch($patch);     // and back — without the tests, `old` is absent, not null
+```
+
+Lists are matched by identity when every element carries a unique `id` or `uuid`, and by position
+when they do not. Inserting in the middle of an identified list is one addition, not *everything
+changed from here down*, and reordering one is no change at all.
+
+`created` produces only additions, `deleted` only removals, and an update that changed nothing
+writes `[]` — an empty list means the comparison ran and found nothing, `null` means the event had
+nothing to compare. Entries written before this version keep `changes = null` and are never
+rewritten: `$audit->diff()` computes theirs on read from the states they stored.
+
+> **The diff duplicates sensitive data.** What lives in `before` and `after` now also lives in
+> `changes`. Redaction and encryption land in `v0.7.0`; until then `$auditExclude` is the only lever.
+
+The entries keep the order the comparison emitted them in. The keys *inside* an entry do not survive
+a round trip through MySQL or PostgreSQL — both reorder the keys of a JSON object — and nothing
+depends on them: entries are read by key, and the chain hashes the canonical form.
+
+`Diff` knows nothing about eloquent or about the rest of the package — `Diff::between($a, $b)` works
+on any two structures, inside an audit or outside one.
 
 ## Configuration
 
