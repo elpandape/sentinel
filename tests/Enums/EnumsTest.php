@@ -9,7 +9,8 @@ use ElPandaPe\Sentinel\Enums\Source;
 
 it('exposes the audit events the engine records', function (): void {
     expect(AuditEvent::from('force_deleted'))->toBe(AuditEvent::ForceDeleted)
-        ->and(AuditEvent::cases())->toHaveCount(10);
+        ->and(AuditEvent::from('rekeyed'))->toBe(AuditEvent::Rekeyed)
+        ->and(AuditEvent::cases())->toHaveCount(11);
 });
 
 it('exposes every execution source', function (): void {

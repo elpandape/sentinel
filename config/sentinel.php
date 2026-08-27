@@ -158,6 +158,7 @@ return [
         'events' => [
             'deleted' => 'notice',
             'force_deleted' => 'warning',
+            'rekeyed' => 'notice',
         ],
     ],
 

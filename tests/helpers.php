@@ -20,6 +20,7 @@ use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Security\Digester;
 use ElPandaPe\Sentinel\Security\Keyring;
 use ElPandaPe\Sentinel\Security\Maskers;
+use ElPandaPe\Sentinel\Security\Rekeyer;
 use ElPandaPe\Sentinel\Snapshot\SnapshotBuilder;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Config;
@@ -401,6 +402,14 @@ function keyring(): Keyring
     $keyring = app(Keyring::class);
 
     return $keyring;
+}
+
+function rekeyer(): Rekeyer
+{
+    /** @var Rekeyer $rekeyer */
+    $rekeyer = app(Rekeyer::class);
+
+    return $rekeyer;
 }
 
 function pipeline(): Pipeline
