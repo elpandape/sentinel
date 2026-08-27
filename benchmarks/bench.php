@@ -100,6 +100,21 @@ foreach ($variants as $label => $model) {
     $offset += ITERATIONS;
 }
 
+// A second destination, taking the entry the first one sealed. Against a null destination
+// the row is the fanout machinery on its own; against a memory one it also carries a
+// destination that actually keeps what it is handed.
+foreach (['null' => 'a null destination', 'memory' => 'a memory destination'] as $secondary => $description) {
+    $app->make('config')->set('sentinel.ledger.default', 'fanout');
+    $app->make('config')->set('sentinel.ledger.ledgers.fanout.destinations', ['database', $secondary]);
+    $app->forgetScopedInstances();
+
+    $run(BenchAudited::class, WARMUP, $offset);
+    $offset += WARMUP;
+
+    $results['audited, fanout to '.$description] = $run(BenchAudited::class, ITERATIONS, $offset);
+    $offset += ITERATIONS;
+}
+
 // The null ledger canonicalizes and hashes without touching the table, which is what
 // separates the cost of the chain from the cost of the write it lands in.
 $app->make('config')->set('sentinel.ledger.default', 'null');
