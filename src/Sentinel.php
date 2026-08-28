@@ -13,6 +13,7 @@ use ElPandaPe\Sentinel\Integrity\Verifier;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Support\Policies;
+use ElPandaPe\Sentinel\Transactions\TransactionScope;
 
 final class Sentinel
 {
@@ -24,6 +25,7 @@ final class Sentinel
         private readonly Verifier $verifier,
         private readonly Policies $policies,
         private readonly Ledger $ledger,
+        private readonly TransactionScope $transactions,
     ) {}
 
     /**
@@ -44,6 +46,20 @@ final class Sentinel
     public function timeline(): AuditQuery
     {
         return $this->audits()->byOccurrence();
+    }
+
+    /**
+     * One business operation, one identifier. Every entry captured inside takes it, and the
+     * operation gets a header of its own with what it was called, who ran it and how much it
+     * wrote — so a payment that touched an invoice, a payment record and two relations reads as
+     * the one thing it was.
+     *
+     * It does not open a database transaction. Correlating and atomising are different
+     * decisions, and combining them is the application's.
+     */
+    public function transaction(string $name, Closure $callback): mixed
+    {
+        return $this->isRecording() ? $this->transactions->run($name, $callback) : $callback();
     }
 
     /**

@@ -24,6 +24,7 @@ use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Support\PackageMigrations;
 use ElPandaPe\Sentinel\Support\Policies;
 use ElPandaPe\Sentinel\Support\PolicyRegistry;
+use ElPandaPe\Sentinel\Transactions\TransactionScope;
 use Illuminate\Console\Events\CommandFinished;
 use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Console\Events\ScheduledTaskStarting;
@@ -77,6 +78,7 @@ final class SentinelServiceProvider extends ServiceProvider
         $this->app->scoped(PolicyRegistry::class);
         $this->app->scoped(ExecutionContext::class);
         $this->app->scoped(Runtime::class);
+        $this->app->scoped(TransactionScope::class);
         $this->app->scoped(Sentinel::class);
     }
 

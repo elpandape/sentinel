@@ -8,6 +8,7 @@ use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Pipeline\Pipeline;
+use ElPandaPe\Sentinel\Transactions\TransactionScope;
 
 /**
  * The one door from a capture to the ledger. Capture decides what happened; this decides what
@@ -23,10 +24,18 @@ final readonly class Recorder
     public function __construct(
         private Pipeline $pipeline,
         private Ledger $ledger,
+        private TransactionScope $transactions,
     ) {}
 
+    /**
+     * The correlation is sealed here and not in a pipeline stage, because the pipeline is not
+     * guaranteed to run while the scope is still open — a Sentinel::transaction() inside a
+     * DB::transaction() closes before the commit that releases the entries.
+     */
     public function record(AuditData $audit): ?Audit
     {
+        $this->transactions->stamp($audit);
+
         $transformed = $this->pipeline->process($audit);
 
         return $transformed instanceof AuditData ? $this->ledger->write($transformed) : null;
