@@ -10,6 +10,7 @@ use ElPandaPe\Sentinel\Tests\Fixtures\AuditedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\MaskedTransitionSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\NarrowTransitionSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\TransitioningSubject;
+use ElPandaPe\Sentinel\Tests\Fixtures\TwoStateSubject;
 
 beforeEach(function (): void {
     $this->invoice = TransitioningSubject::query()->create(['name' => 'invoice', 'status' => 'draft']);
@@ -107,3 +108,30 @@ it('refuses a state column that is redacted, because a masked lifeline answers n
 it('refuses a state column that a declared include list leaves out', function (): void {
     NarrowTransitionSubject::query()->create(['name' => 'invoice', 'status' => 'draft']);
 })->throws(ConfigurationException::class, 'auditInclude');
+
+it('refuses to guess which column moved when the model declares more than one', function (): void {
+    $subject = TwoStateSubject::query()->create(['name' => 'invoice', 'status' => 'draft', 'price' => '1']);
+
+    Sentinel::transition($subject, from: 'draft', to: 'published')->record();
+})->throws(ConfigurationException::class, 'status and price');
+
+it('takes the column the call names even when the model declares several', function (): void {
+    $subject = TwoStateSubject::query()->create(['name' => 'invoice', 'status' => 'draft', 'price' => '1']);
+    Audit::query()->delete();
+
+    Sentinel::transition($subject, from: 'draft', to: 'published')->on('status')->record();
+
+    expect(Audit::query()->firstOrFail()->metadata['transition']['attribute'] ?? null)->toBe('status');
+});
+
+it('writes a transition for whichever declared column an update moved', function (): void {
+    $subject = TwoStateSubject::query()->create(['name' => 'invoice', 'status' => 'draft', 'price' => '1']);
+    Audit::query()->delete();
+
+    $subject->update(['price' => '2']);
+
+    $audit = Audit::query()->firstOrFail();
+
+    expect($audit->audit_type)->toBe('transition')
+        ->and($audit->metadata['transition']['attribute'] ?? null)->toBe('price');
+});

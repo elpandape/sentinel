@@ -78,6 +78,19 @@ final class ConfigurationException extends InvalidArgumentException
         );
     }
 
+    /**
+     * @param  list<string>  $columns
+     */
+    public static function ambiguousTransition(string $model, array $columns): self
+    {
+        return new self(sprintf(
+            'Sentinel cannot tell which column [%s] moved: it declares %s as state columns, so the call has to name one with ->on(). '
+            .'Guessing would file the change under a column that did not move.',
+            $model,
+            implode(' and ', $columns),
+        ));
+    }
+
     public static function notAParent(string $model, string $relation): self
     {
         return new self(

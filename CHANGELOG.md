@@ -23,7 +23,8 @@ long the record had been where it was.
 - **The two states are filed as a diff line** under the column that moved, so
   `whereFieldChanged('status')` finds them with no new filter and no new index. The column is named
   by `->on()`, inferred from `$auditTransitions` when it declares exactly one, or taken from the new
-  `transitions.attribute` config key, which ships as `status`.
+  `transitions.attribute` config key, which ships as `status`. A model declaring more than one and a
+  call naming none is refused, not guessed.
 - **`Contracts\DeclaresTransitions`**, optional: a model that implements it can refuse a move it
   does not make. The refusal raises `Transitions\IllegalTransition` **before the save**, so neither
   the row nor the trail moves — refusing after the update was announced would leave the record
@@ -36,6 +37,8 @@ long the record had been where it was.
   covered. An application is free to call its own stated fact `updated`, and only the type tells it
   apart from a model change. It rides the `(audit_type, created_at)` index the table already had.
 - **The presenter and the timeline render a transition as `from → to`**, in both languages.
+- **`LedgerContractTestCase` covers the new filter**, so a third-party driver that declares
+  `Filter::Type` is held to it like every other published filter.
 - README: *State transitions*.
 
 ### Changed

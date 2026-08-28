@@ -1258,7 +1258,9 @@ $invoice->update(['total' => 90_00]);         // audit_type = model, event = upd
   `whereFieldChanged('status')` finds a transition like any other change to that column, with no
   new index.
 - **The column is named** by `->on('phase')`, or inferred from `$auditTransitions` when it declares
-  exactly one, or taken from `transitions.attribute` in the config, which ships as `status`.
+  exactly one, or taken from `transitions.attribute` in the config, which ships as `status`. A model
+  that declares more than one and a call that names none is refused rather than guessed: falling
+  through to the default would file the change under a column that did not move.
 - **`reason` travels in `metadata`**, under a `transition` key alongside the column, so your own
   `->metadata(['reason' => …])` stays yours.
 - **One save is one entry.** An `update` that moves the state *and* three other columns writes a

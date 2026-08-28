@@ -11,6 +11,7 @@ use ElPandaPe\Sentinel\Diff\Change;
 use ElPandaPe\Sentinel\Diff\Pointer;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
 use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
 use ElPandaPe\Sentinel\Exceptions\QueryException;
 use ElPandaPe\Sentinel\Sentinel;
 use ElPandaPe\Sentinel\Support\AuditPolicy;
@@ -156,15 +157,21 @@ final class TransitionBuilder
     }
 
     /**
-     * A model that declares one state column has named it already, and repeating it at every
-     * call site would be a second place to get it wrong. Two or more and there is nothing to
-     * infer: the call has to say which one moved.
+     * A model that declares one state column has named it already, and repeating it at every call
+     * site would be a second place to get it wrong. Two or more and there is nothing to infer: the
+     * call has to say which one moved, because falling through to the configured default would
+     * file the change under a column that did not move — silently, and on a model that had gone to
+     * the trouble of declaring its own.
      */
     private function declared(): ?string
     {
         $columns = AuditPolicy::of($this->subject)->transitions;
 
-        return count($columns) === 1 ? $columns[0] : null;
+        return match (count($columns)) {
+            0 => null,
+            1 => $columns[0],
+            default => throw ConfigurationException::ambiguousTransition($this->subject::class, $columns),
+        };
     }
 
     /**

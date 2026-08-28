@@ -192,6 +192,7 @@ abstract class LedgerContractTestCase extends TestCase
             'changed field' => [Filter::FieldChanged, static fn (AuditQuery $query): AuditQuery => $query->whereFieldChanged('total')],
             'changed field beneath a parent' => [Filter::FieldChanged, static fn (AuditQuery $query): AuditQuery => $query->whereFieldChanged('profile')],
             'version' => [Filter::Version, static fn (AuditQuery $query): AuditQuery => $query->whereVersion(1)],
+            'kind of entry' => [Filter::Type, static fn (AuditQuery $query): AuditQuery => $query->whereType('transition')],
         ];
     }
 
@@ -471,7 +472,7 @@ abstract class LedgerContractTestCase extends TestCase
     protected function narrowedAuditData(Severity $severity = Severity::Critical): AuditData
     {
         return new AuditData(
-            audit_type: 'model',
+            audit_type: 'transition',
             event: 'approved',
             severity: $severity,
             occurred_at: new DateTimeImmutable('2026-08-26 10:00:00.000000'),
