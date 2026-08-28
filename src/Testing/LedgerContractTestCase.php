@@ -190,6 +190,7 @@ abstract class LedgerContractTestCase extends TestCase
             'any label' => [Filter::Tag, static fn (AuditQuery $query): AuditQuery => $query->whereAnyTag(['refund', 'absent'])],
             'changed field' => [Filter::FieldChanged, static fn (AuditQuery $query): AuditQuery => $query->whereFieldChanged('total')],
             'changed field beneath a parent' => [Filter::FieldChanged, static fn (AuditQuery $query): AuditQuery => $query->whereFieldChanged('profile')],
+            'version' => [Filter::Version, static fn (AuditQuery $query): AuditQuery => $query->whereVersion(1)],
         ];
     }
 

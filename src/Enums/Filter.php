@@ -27,6 +27,8 @@ enum Filter: string
 
     case FieldChanged = 'field';
 
+    case Version = 'version';
+
     /**
      * @return list<self>
      */
@@ -73,6 +75,7 @@ enum Filter: string
             self::Period => 'between',
             self::Tag => 'whereTag',
             self::FieldChanged => 'whereFieldChanged',
+            self::Version => 'whereVersion',
         };
     }
 }

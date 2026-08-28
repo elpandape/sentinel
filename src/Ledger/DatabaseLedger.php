@@ -105,6 +105,7 @@ final readonly class DatabaseLedger implements DeclaresFilters, Ledger
                 ->whereBetween('created_at', [$period->from, $period->to]))
             ->when($query->tags, fn (Builder $entries, TagCriteria $tags): Builder => $this->narrowByLabel($entries, $tags))
             ->when($query->changedField, fn (Builder $entries, string $pointer): Builder => $this->narrowByField($entries, $pointer))
+            ->when($query->versions, static fn (Builder $entries, array $versions): Builder => $entries->whereIn('version', $versions))
             ->orderBy('created_at', $direction)
             ->orderBy('id', $direction)
             ->when($query->offset, static fn (Builder $entries, int $offset): Builder => $entries->offset($offset))

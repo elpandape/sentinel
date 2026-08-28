@@ -30,6 +30,7 @@ use ElPandaPe\Sentinel\Security\Rekeyer;
 use ElPandaPe\Sentinel\Snapshot\SnapshotBuilder;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Config;
+use ElPandaPe\Sentinel\Tests\Fixtures\AuditedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\EncryptedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\EventLog;
 use ElPandaPe\Sentinel\Tests\Fixtures\GoldenLedger;
@@ -663,5 +664,17 @@ function changing(string $event, string ...$paths): array
             static fn (string $path): array => ['path' => $path, 'op' => 'replace', 'old' => 'a', 'new' => 'b'],
             $paths,
         ),
+    ];
+}
+
+/**
+ * @return array{subject_type: string, subject_id: string, after: array{total: int, status: string}}
+ */
+function versioned(int $total, string $subject = '7'): array
+{
+    return [
+        'subject_type' => AuditedSubject::class,
+        'subject_id' => $subject,
+        'after' => ['total' => $total, 'status' => 'open'],
     ];
 }

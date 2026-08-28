@@ -13,6 +13,7 @@ use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Exceptions\ImmutableAuditException;
 use ElPandaPe\Sentinel\Integrity\Verifier;
 use ElPandaPe\Sentinel\Ledger\ChangedFieldPredicate;
+use ElPandaPe\Sentinel\Query\Comparison;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Database\Eloquent\Attributes\CollectedBy;
@@ -137,6 +138,16 @@ class Audit extends Model
         $after = $this->getAttribute('after');
 
         return Diff::between($before ?? [], $after ?? []);
+    }
+
+    /**
+     * What changed between this entry and another about the same subject. Comparing entries of
+     * different subjects is refused where the comparison is built, rather than answered with an
+     * empty diff that would read as agreement.
+     */
+    public function comparedTo(self $other): Comparison
+    {
+        return Comparison::between($this, $other);
     }
 
     public function diffFor(string $path): Diff

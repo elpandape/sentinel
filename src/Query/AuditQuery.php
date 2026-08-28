@@ -12,8 +12,10 @@ use ElPandaPe\Sentinel\Enums\AuditEvent;
 use ElPandaPe\Sentinel\Enums\Filter;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
+use ElPandaPe\Sentinel\Exceptions\ComparisonException;
 use ElPandaPe\Sentinel\Exceptions\LedgerException;
 use ElPandaPe\Sentinel\Exceptions\QueryException;
+use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Reference;
 
@@ -58,6 +60,11 @@ final class AuditQuery
     public private(set) ?TagCriteria $tags = null;
 
     public private(set) ?string $changedField = null;
+
+    /**
+     * @var list<int>
+     */
+    public private(set) array $versions = [];
 
     public private(set) bool $newestFirst = false;
 
@@ -210,6 +217,18 @@ final class AuditQuery
         return $query;
     }
 
+    /**
+     * The entries a subject carried at these version numbers. A refiner: the counter is not
+     * indexed and this narrows a set that another filter has already found.
+     */
+    public function whereVersion(int ...$versions): self
+    {
+        $query = $this->accepting(Filter::Version);
+        $query->versions = array_values(array_unique([...$this->versions, ...$versions]));
+
+        return $query;
+    }
+
     public function latest(): self
     {
         $query = clone $this;
@@ -249,6 +268,31 @@ final class AuditQuery
             $perPage,
             $entries->count() > $perPage,
         );
+    }
+
+    /**
+     * What changed for one subject between two of its versions. Two versions rather than two
+     * adjacent ones is the whole point, and it costs one read: prior art does this with a loop
+     * in the host language, or documents it as out of reach.
+     *
+     * A version is not unique — the ledger assigns it without a lock — so a repeated number
+     * resolves to the newest entry carrying it.
+     */
+    public function compare(int $from, int $to): Comparison
+    {
+        if (! $this->subject instanceof Reference) {
+            throw ComparisonException::withoutSubject();
+        }
+
+        $entries = $this->whereVersion($from, $to)->latest()->get();
+
+        return Comparison::between($this->at($entries, $from), $this->at($entries, $to));
+    }
+
+    private function at(AuditCollection $entries, int $version): Audit
+    {
+        return $entries->firstWhere('version', $version)
+            ?? throw ComparisonException::missingVersion($version);
     }
 
     /**
