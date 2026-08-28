@@ -188,6 +188,8 @@ abstract class LedgerContractTestCase extends TestCase
             'trace' => [Filter::Trace, static fn (AuditQuery $query): AuditQuery => $query->withTrace('4bf92f3577b34da6a3ce929d0e0e4736')],
             'every label' => [Filter::Tag, static fn (AuditQuery $query): AuditQuery => $query->whereTag(['billing', 'refund'])],
             'any label' => [Filter::Tag, static fn (AuditQuery $query): AuditQuery => $query->whereAnyTag(['refund', 'absent'])],
+            'changed field' => [Filter::FieldChanged, static fn (AuditQuery $query): AuditQuery => $query->whereFieldChanged('total')],
+            'changed field beneath a parent' => [Filter::FieldChanged, static fn (AuditQuery $query): AuditQuery => $query->whereFieldChanged('profile')],
         ];
     }
 
@@ -425,6 +427,10 @@ abstract class LedgerContractTestCase extends TestCase
             tenant_id: 'acme',
             transaction_id: '01JTRANSACTION000000000000',
             trace_id: '4bf92f3577b34da6a3ce929d0e0e4736',
+            changes: [
+                ['path' => '/total', 'op' => 'replace', 'old' => 100, 'new' => 250],
+                ['path' => '/profile/address/city', 'op' => 'replace', 'old' => 'Lima', 'new' => 'Arequipa'],
+            ],
             tags: ['billing', 'refund'],
         );
     }

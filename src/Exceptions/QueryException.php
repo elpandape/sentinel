@@ -28,6 +28,11 @@ final class QueryException extends InvalidArgumentException
         return new self('Narrowing by an empty list of labels asks nothing of an entry, so it would hand back the whole trail; name at least one label.');
     }
 
+    public static function noField(): self
+    {
+        return new self('Narrowing by an empty field name asks nothing of an entry; name the attribute whose history you want.');
+    }
+
     public static function unreachablePage(int $perPage, int $page): self
     {
         return new self("A page of {$perPage} entries numbered {$page} is not a page: both have to be at least one.");

@@ -29,6 +29,15 @@ final class Pointer
     }
 
     /**
+     * Whether a pointer reaches a path: the path itself, or anything beneath it. The slash is
+     * what keeps /email from reaching /email_verified_at.
+     */
+    public static function covers(string $pointer, string $path): bool
+    {
+        return $path === $pointer || str_starts_with($path, $pointer.'/');
+    }
+
+    /**
      * A literal pointer passes through; anything else is read as dot notation, which is
      * what a caller writing `profile.address.city` means.
      */

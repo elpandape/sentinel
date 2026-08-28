@@ -33,6 +33,7 @@ final readonly class DatabaseLedger implements DeclaresFilters, Ledger
         private AuditTag $labels,
         private Stream $stream,
         private EntryBuilder $builder,
+        private ChangedFieldPredicate $fields,
     ) {}
 
     public function write(AuditData $audit): Audit
@@ -103,6 +104,7 @@ final readonly class DatabaseLedger implements DeclaresFilters, Ledger
             ->when($query->period, static fn (Builder $entries, Period $period): Builder => $entries
                 ->whereBetween('created_at', [$period->from, $period->to]))
             ->when($query->tags, fn (Builder $entries, TagCriteria $tags): Builder => $this->narrowByLabel($entries, $tags))
+            ->when($query->changedField, fn (Builder $entries, string $pointer): Builder => $this->narrowByField($entries, $pointer))
             ->orderBy('created_at', $direction)
             ->orderBy('id', $direction)
             ->when($query->offset, static fn (Builder $entries, int $offset): Builder => $entries->offset($offset))
@@ -173,6 +175,25 @@ final readonly class DatabaseLedger implements DeclaresFilters, Ledger
         }
 
         return $entries;
+    }
+
+    /**
+     * @param  Builder<Audit>  $entries
+     * @return Builder<Audit>
+     */
+    private function narrowByField(Builder $entries, string $pointer): Builder
+    {
+        $connection = $this->model->getConnection();
+
+        [$sql, $bindings] = $this->fields->for(
+            $connection->getDriverName(),
+            $connection->getQueryGrammar()->wrap($this->model->qualifyColumn('changes')),
+            $pointer,
+        );
+
+        // The only value interpolated into that SQL is the column name the grammar just escaped.
+        /** @phpstan-ignore argument.type */
+        return $entries->whereRaw($sql, $bindings);
     }
 
     private function carrying(QueryBuilder $labels): QueryBuilder

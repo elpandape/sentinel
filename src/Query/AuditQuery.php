@@ -7,6 +7,7 @@ namespace ElPandaPe\Sentinel\Query;
 use DateTimeImmutable;
 use DateTimeInterface;
 use ElPandaPe\Sentinel\Contracts\Ledger;
+use ElPandaPe\Sentinel\Diff\Pointer;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
 use ElPandaPe\Sentinel\Enums\Filter;
 use ElPandaPe\Sentinel\Enums\Severity;
@@ -55,6 +56,8 @@ final class AuditQuery
     public private(set) ?Period $period = null;
 
     public private(set) ?TagCriteria $tags = null;
+
+    public private(set) ?string $changedField = null;
 
     public private(set) bool $newestFirst = false;
 
@@ -184,6 +187,25 @@ final class AuditQuery
     {
         $query = $this->accepting(Filter::Tag);
         $query->tags = ($this->tags ?? new TagCriteria)->including($this->labels($tag));
+
+        return $query;
+    }
+
+    /**
+     * Entries whose diff touched this field. Dot notation is read as a JSON Pointer, and a
+     * pointer matches itself or anything beneath it — the same thing $audit->diffFor() means by
+     * touching a field, so the package has one answer to that question and not two.
+     */
+    public function whereFieldChanged(string $path): self
+    {
+        $pointer = Pointer::of($path);
+
+        if ($pointer === '') {
+            throw QueryException::noField();
+        }
+
+        $query = $this->accepting(Filter::FieldChanged);
+        $query->changedField = $pointer;
 
         return $query;
     }

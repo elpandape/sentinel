@@ -7,13 +7,17 @@ namespace ElPandaPe\Sentinel\Models;
 use Carbon\CarbonImmutable;
 use ElPandaPe\Sentinel\Database\Factories\AuditFactory;
 use ElPandaPe\Sentinel\Diff\Diff;
+use ElPandaPe\Sentinel\Diff\Pointer;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Exceptions\ImmutableAuditException;
 use ElPandaPe\Sentinel\Integrity\Verifier;
+use ElPandaPe\Sentinel\Ledger\ChangedFieldPredicate;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Database\Eloquent\Attributes\CollectedBy;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -170,6 +174,29 @@ class Audit extends Model
     public function getGuarded(): array
     {
         return [];
+    }
+
+    /**
+     * The same reading of "touched this field" the query surface publishes, reachable from the
+     * relation a model already has: $user->audits()->field('email')->get(). One implementation,
+     * so the two cannot drift.
+     *
+     * @param  Builder<$this>  $query
+     */
+    #[Scope]
+    protected function field(Builder $query, string $path): void
+    {
+        $connection = $query->getModel()->getConnection();
+
+        [$sql, $bindings] = app(ChangedFieldPredicate::class)->for(
+            $connection->getDriverName(),
+            $connection->getQueryGrammar()->wrap($query->getModel()->qualifyColumn('changes')),
+            Pointer::of($path),
+        );
+
+        // The only value interpolated into that SQL is the column name the grammar just escaped.
+        /** @phpstan-ignore argument.type */
+        $query->whereRaw($sql, $bindings);
     }
 
     protected static function booted(): void

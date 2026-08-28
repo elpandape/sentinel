@@ -125,8 +125,7 @@ final readonly class Diff implements Countable, IteratorAggregate
 
         return new self(array_values(array_filter(
             $this->changes,
-            static fn (Change $change): bool => $change->path === $pointer
-                || str_starts_with($change->path, $pointer.'/'),
+            static fn (Change $change): bool => Pointer::covers($pointer, $change->path),
         )));
     }
 

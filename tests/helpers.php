@@ -651,3 +651,17 @@ function discardMigrationDirectories(string $root): void
 
     rmdir($root);
 }
+
+/**
+ * @return array{event: string, changes: list<array{path: string, op: string, old: string, new: string}>}
+ */
+function changing(string $event, string ...$paths): array
+{
+    return [
+        'event' => $event,
+        'changes' => array_map(
+            static fn (string $path): array => ['path' => $path, 'op' => 'replace', 'old' => 'a', 'new' => 'b'],
+            $paths,
+        ),
+    ];
+}

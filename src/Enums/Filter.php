@@ -25,6 +25,8 @@ enum Filter: string
 
     case Tag = 'tag';
 
+    case FieldChanged = 'field';
+
     /**
      * @return list<self>
      */
@@ -70,6 +72,7 @@ enum Filter: string
             self::Trace => 'withTrace',
             self::Period => 'between',
             self::Tag => 'whereTag',
+            self::FieldChanged => 'whereFieldChanged',
         };
     }
 }

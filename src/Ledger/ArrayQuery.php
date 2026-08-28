@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Ledger;
 
+use ElPandaPe\Sentinel\Diff\Pointer;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Models\AuditTag;
 use ElPandaPe\Sentinel\Query\AuditQuery;
@@ -45,12 +46,28 @@ final readonly class ArrayQuery
             && ($query->actor?->matches($audit->actor_type, $audit->actor_id) ?? true)
             && ($query->period?->covers($audit->created_at) ?? true)
             && ($query->tags?->matches($this->labelsOf($audit)) ?? true)
+            && ($query->changedField === null || $this->touches($audit, $query->changedField))
             && $this->equals($query->event, $audit->event)
             && $this->equals($query->severity?->value, $audit->severity->value)
             && $this->equals($query->source?->value, $audit->source->value)
             && $this->equals($query->tenantId, $audit->tenant_id)
             && $this->equals($query->transactionId, $audit->transaction_id)
             && $this->equals($query->traceId, $audit->trace_id);
+    }
+
+    private function touches(Audit $audit, string $pointer): bool
+    {
+        $changes = $audit->getAttribute('changes');
+
+        foreach (is_array($changes) ? $changes : [] as $change) {
+            $path = is_array($change) ? ($change['path'] ?? null) : null;
+
+            if (is_string($path) && Pointer::covers($pointer, $path)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
