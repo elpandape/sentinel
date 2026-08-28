@@ -2,7 +2,7 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
-## v0.10.0 — Field history, labels and timeline (2026-08-27)
+## v0.10.0 — Field history, labels and timeline (2026-08-28)
 
 ### Added
 
