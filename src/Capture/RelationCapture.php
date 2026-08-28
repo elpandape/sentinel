@@ -5,13 +5,11 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Capture;
 
 use Carbon\CarbonImmutable;
-use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Data\RelationLine;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Models\Audit;
-use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Sentinel;
 use ElPandaPe\Sentinel\Support\AuditPolicy;
 use ElPandaPe\Sentinel\Support\Config;
@@ -35,9 +33,8 @@ final readonly class RelationCapture
 
     public function __construct(
         private Sentinel $sentinel,
-        private Ledger $ledger,
+        private Recorder $recorder,
         private Config $config,
-        private Pipeline $pipeline,
     ) {}
 
     /**
@@ -55,7 +52,7 @@ final readonly class RelationCapture
      */
     public function record(Model $parent, string $api, AuditEvent $event, array $lines): ?Audit
     {
-        $audit = $this->pipeline->process(new AuditData(
+        return $this->recorder->record(new AuditData(
             audit_type: self::AUDIT_TYPE,
             event: $event->value,
             severity: $this->severity($parent, $event),
@@ -65,8 +62,6 @@ final readonly class RelationCapture
             changes: RelationLine::canonical($lines),
             metadata: ['api' => $api],
         ));
-
-        return $audit instanceof AuditData ? $this->ledger->write($audit) : null;
     }
 
     private function key(Model $parent): ?string
