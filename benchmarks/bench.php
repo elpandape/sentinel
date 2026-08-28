@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Benchmarks\BenchAudited;
+use ElPandaPe\Sentinel\Benchmarks\BenchLabelled;
 use ElPandaPe\Sentinel\Benchmarks\BenchPlain;
 use ElPandaPe\Sentinel\Benchmarks\BenchProtected;
 use ElPandaPe\Sentinel\Benchmarks\BenchSnapshotless;
@@ -87,6 +88,7 @@ $variants = [
     'audited, snapshots on' => BenchAudited::class,
     'audited, snapshots off' => BenchSnapshotless::class,
     'audited, two fields protected' => BenchProtected::class,
+    'audited, two labels' => BenchLabelled::class,
 ];
 
 $offset = 0;
