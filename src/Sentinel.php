@@ -17,6 +17,7 @@ use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Support\Policies;
 use ElPandaPe\Sentinel\Transactions\TransactionScope;
 use ElPandaPe\Sentinel\Transitions\TransitionBuilder;
+use ElPandaPe\Sentinel\Transitions\TransitionQuery;
 use Illuminate\Database\Eloquent\Model;
 use UnitEnum;
 
@@ -93,6 +94,15 @@ final class Sentinel
     public function transition(Model $subject, bool|float|int|string|UnitEnum|null $from, bool|float|int|string|UnitEnum|null $to): TransitionBuilder
     {
         return new TransitionBuilder($subject, $from, $to, $this, $this->recorder, $this->config);
+    }
+
+    /**
+     * The lifeline: every state a record has moved through, in the order it moved through them,
+     * with how long it spent in each. One read of the trail, not a reconstruction from diffs.
+     */
+    public function transitions(): TransitionQuery
+    {
+        return new TransitionQuery($this->audits()->whereType(TransitionBuilder::AUDIT_TYPE));
     }
 
     /**

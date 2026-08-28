@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static \ElPandaPe\Sentinel\Query\AuditQuery audits()
  * @method static \ElPandaPe\Sentinel\Query\AuditQuery timeline()
  * @method static \ElPandaPe\Sentinel\Capture\PendingEvent event(string $name)
+ * @method static \ElPandaPe\Sentinel\Transitions\TransitionQuery transitions()
  * @method static \ElPandaPe\Sentinel\Transitions\TransitionBuilder transition(\Illuminate\Database\Eloquent\Model $subject, bool|float|int|string|\UnitEnum|null $from, bool|float|int|string|\UnitEnum|null $to)
  * @method static \ElPandaPe\Sentinel\Support\Config config()
  * @method static \ElPandaPe\Sentinel\Context\ExecutionContext context()
