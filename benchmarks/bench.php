@@ -19,6 +19,7 @@ use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Pipeline\Pipeline;
+use ElPandaPe\Sentinel\Sentinel;
 use ElPandaPe\Sentinel\SentinelServiceProvider;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
@@ -307,6 +308,98 @@ $handoverChild = $handover(BenchLooseArticle::class, 2, HANDOVER_ITERATIONS);
 $handover(BenchArticle::class, 3, WARMUP);
 $handoverParents = $handover(BenchArticle::class, 3, HANDOVER_ITERATIONS);
 
+// What waiting for the commit costs, and what naming the operation costs on top. Deferral is not
+// a performance feature — it is what stops the ledger claiming a fact a rollback undid — so the
+// number that matters is that it is not expensive, not that it is fast.
+const DEFERRED_ITERATIONS = 500;
+
+/**
+ * @param  class-string<Model>  $model
+ */
+$transacted = static function (string $model, int $times, int $offset): float {
+    $start = hrtime(true);
+
+    for ($i = 0; $i < $times; $i++) {
+        $n = $offset + $i;
+
+        DB::transaction(static function () use ($model, $n): void {
+            $model::query()->create([  // @phpstan-ignore-line staticMethod.dynamicName
+                'name' => 'subject-'.$n,
+                'email' => 'subject-'.$n.'@example.com',
+                'role' => $n % 2 === 0 ? 'admin' : 'editor',
+                'score' => $n % 100,
+                'active' => $n % 3 !== 0,
+            ]);
+        });
+    }
+
+    return (hrtime(true) - $start) / 1_000_000;
+};
+
+/**
+ * A header costs an insert, an update and one pass of the context resolvers, and that is per
+ * operation rather than per entry. Measured at one entry per operation it is the worst case
+ * there is; the second size is what says how fast it amortises.
+ *
+ * @param  class-string<Model>  $model
+ */
+$correlated = static function (string $model, int $writes, int $operations, int $offset) use ($app): float {
+    $sentinel = $app->make(Sentinel::class);
+    $start = hrtime(true);
+
+    for ($i = 0; $i < $operations; $i++) {
+        $n = $offset + $i * $writes;
+
+        $sentinel->transaction('bench-operation', static function () use ($model, $n, $writes): void {
+            for ($w = 0; $w < $writes; $w++) {
+                $model::query()->create([  // @phpstan-ignore-line staticMethod.dynamicName
+                    'name' => 'subject-'.($n + $w),
+                    'email' => 'subject-'.($n + $w).'@example.com',
+                    'role' => ($n + $w) % 2 === 0 ? 'admin' : 'editor',
+                    'score' => ($n + $w) % 100,
+                    'active' => ($n + $w) % 3 !== 0,
+                ]);
+            }
+        });
+    }
+
+    return (hrtime(true) - $start) / 1_000_000;
+};
+
+$app->make('config')->set('sentinel.ledger.default', 'database');
+$app->make('config')->set('sentinel.transactions.after_commit', true);
+$app->forgetScopedInstances();
+
+$transacted(BenchPlain::class, WARMUP, $offset);
+$offset += WARMUP;
+$deferredPlain = $transacted(BenchPlain::class, DEFERRED_ITERATIONS, $offset);
+$offset += DEFERRED_ITERATIONS;
+
+$transacted(BenchAudited::class, WARMUP, $offset);
+$offset += WARMUP;
+$deferredOn = $transacted(BenchAudited::class, DEFERRED_ITERATIONS, $offset);
+$offset += DEFERRED_ITERATIONS;
+
+$app->make('config')->set('sentinel.transactions.after_commit', false);
+$app->forgetScopedInstances();
+
+$transacted(BenchAudited::class, WARMUP, $offset);
+$offset += WARMUP;
+$deferredOff = $transacted(BenchAudited::class, DEFERRED_ITERATIONS, $offset);
+$offset += DEFERRED_ITERATIONS;
+
+$app->make('config')->set('sentinel.transactions.after_commit', true);
+$app->forgetScopedInstances();
+
+$correlated(BenchAudited::class, 1, WARMUP, $offset);
+$offset += WARMUP;
+$correlatedAlone = $correlated(BenchAudited::class, 1, DEFERRED_ITERATIONS, $offset);
+$offset += DEFERRED_ITERATIONS;
+
+$correlated(BenchAudited::class, 5, WARMUP / 5, $offset);
+$offset += WARMUP;
+$correlatedFive = $correlated(BenchAudited::class, 5, DEFERRED_ITERATIONS / 5, $offset);
+
 $baseline = $results['plain (not audited)'];
 
 echo '| Variant | Writes | Total (ms) | Per write (µs) | Δ vs plain |', PHP_EOL;
@@ -363,6 +456,29 @@ foreach ($handovers as $label => $total) {
         $total,
         $total * 1000 / HANDOVER_ITERATIONS,
         $total === $handoverBaseline ? '—' : sprintf('%+.1f%%', ($total / $handoverBaseline - 1) * 100),
+        PHP_EOL,
+    );
+}
+
+echo PHP_EOL, '| Deferral variant | Writes | Total (ms) | Per write (µs) | Δ vs plain |', PHP_EOL;
+echo '|---|---|---|---|---|', PHP_EOL;
+
+$deferrals = [
+    'inside a transaction, not audited' => $deferredPlain,
+    'inside a transaction, audited, after_commit on' => $deferredOn,
+    'inside a transaction, audited, after_commit off' => $deferredOff,
+    'inside a named business operation, one entry each' => $correlatedAlone,
+    'inside a named business operation, five entries each' => $correlatedFive,
+];
+
+foreach ($deferrals as $label => $total) {
+    printf(
+        '| %s | %d | %.1f | %.1f | %s |%s',
+        $label,
+        DEFERRED_ITERATIONS,
+        $total,
+        $total * 1000 / DEFERRED_ITERATIONS,
+        $total === $deferredPlain ? '—' : sprintf('%+.1f%%', ($total / $deferredPlain - 1) * 100),
         PHP_EOL,
     );
 }
