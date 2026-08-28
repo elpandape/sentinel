@@ -14,6 +14,34 @@ return [
         'destination_failed' => 'Destination :destination did not take audit :id at sequence :sequence of stream :stream: :reason',
     ],
 
+    'presenter' => [
+        'entry' => ':actor :event :subject',
+        'impersonated' => ':impersonator acting as :actor :event :subject',
+        'reference' => ':type #:id',
+        'someone' => 'Someone',
+        'something' => 'something',
+        'field' => 'v:version  :value',
+        'timeline' => ':time  :line',
+        'nothing' => 'nothing',
+        'yes' => 'yes',
+        'no' => 'no',
+        'structure' => 'a structure',
+    ],
+
+    'events' => [
+        'created' => 'created',
+        'updated' => 'changed',
+        'deleted' => 'deleted',
+        'restored' => 'restored',
+        'force_deleted' => 'permanently deleted',
+        'attached' => 'attached',
+        'detached' => 'detached',
+        'synced' => 'synced',
+        'transition' => 'moved',
+        'rekeyed' => 're-keyed',
+        'custom' => 'recorded',
+    ],
+
     'integrity' => [
         'hash_mismatch' => 'Audit :id no longer reproduces its own hash at sequence :sequence of stream :stream.',
         'link_mismatch' => 'Audit :id does not link to the entry before it at sequence :sequence of stream :stream.',

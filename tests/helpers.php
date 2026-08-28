@@ -22,6 +22,7 @@ use ElPandaPe\Sentinel\Ledger\MemoryLedger;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Pipeline\Discard;
 use ElPandaPe\Sentinel\Pipeline\Pipeline;
+use ElPandaPe\Sentinel\Presentation\AuditPresenter;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Security\Digester;
 use ElPandaPe\Sentinel\Security\Keyring;
@@ -680,4 +681,43 @@ function versioned(int $total, string $subject = '7'): array
         'subject_id' => $subject,
         'after' => ['total' => $total, 'status' => 'open'],
     ];
+}
+
+/**
+ * Every leaf key with the set of :placeholders its line carries. Two languages agreeing on keys
+ * but not on holes renders a literal colon-word to whoever reads the second one, and nothing
+ * else in the suite would notice.
+ *
+ * @param  array<array-key, mixed>  $lines
+ * @return array<string, list<string>>
+ */
+function placeholders(array $lines, string $prefix = ''): array
+{
+    $found = [];
+
+    foreach ($lines as $key => $line) {
+        $path = $prefix === '' ? (string) $key : "{$prefix}.{$key}";
+
+        if (is_array($line)) {
+            $found = [...$found, ...placeholders($line, $path)];
+
+            continue;
+        }
+
+        preg_match_all('/:([a-z_]+)/', is_string($line) ? $line : '', $matches);
+        $names = $matches[1];
+        sort($names);
+
+        $found[$path] = array_values($names);
+    }
+
+    return $found;
+}
+
+function presenter(): AuditPresenter
+{
+    /** @var AuditPresenter $presenter */
+    $presenter = app(AuditPresenter::class);
+
+    return $presenter;
 }

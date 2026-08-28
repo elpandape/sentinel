@@ -14,6 +14,34 @@ return [
         'destination_failed' => 'El destino :destination no aceptó el asiento :id en la secuencia :sequence del stream :stream: :reason',
     ],
 
+    'presenter' => [
+        'entry' => ':actor :event :subject',
+        'impersonated' => ':impersonator en nombre de :actor :event :subject',
+        'reference' => ':type #:id',
+        'someone' => 'Alguien',
+        'something' => 'algo',
+        'field' => 'v:version  :value',
+        'timeline' => ':time  :line',
+        'nothing' => 'nada',
+        'yes' => 'sí',
+        'no' => 'no',
+        'structure' => 'una estructura',
+    ],
+
+    'events' => [
+        'created' => 'creó',
+        'updated' => 'cambió',
+        'deleted' => 'borró',
+        'restored' => 'restauró',
+        'force_deleted' => 'borró definitivamente',
+        'attached' => 'vinculó',
+        'detached' => 'desvinculó',
+        'synced' => 'sincronizó',
+        'transition' => 'movió',
+        'rekeyed' => 'recifró',
+        'custom' => 'registró',
+    ],
+
     'integrity' => [
         'hash_mismatch' => 'El asiento :id ya no reproduce su propio hash en la secuencia :sequence del stream :stream.',
         'link_mismatch' => 'El asiento :id no enlaza con el anterior en la secuencia :sequence del stream :stream.',

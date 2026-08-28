@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use function ElPandaPe\Sentinel\Tests\phpFilesOffending;
+use function ElPandaPe\Sentinel\Tests\placeholders;
 use function ElPandaPe\Sentinel\Tests\translationKeys;
 
 it('holds no mutable static state in the source', function (): void {
@@ -26,6 +27,13 @@ it('keeps the two language files carrying the same keys', function (): void {
 
     expect(translationKeys($es))->toBe(translationKeys($en))
         ->and(translationKeys($en))->not->toBeEmpty();
+});
+
+it('keeps the two language files filling the same holes', function (): void {
+    $en = require dirname(__DIR__).'/resources/lang/en/sentinel.php';
+    $es = require dirname(__DIR__).'/resources/lang/es/sentinel.php';
+
+    expect(placeholders($es))->toBe(placeholders($en));
 });
 
 it('ships a default ledger that outlives the request that wrote to it', function (): void {
