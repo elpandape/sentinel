@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Models;
 
 use Carbon\CarbonImmutable;
+use ElPandaPe\Sentinel\Capture\RelationCapture;
+use ElPandaPe\Sentinel\Data\RelationLine;
 use ElPandaPe\Sentinel\Database\Factories\AuditFactory;
 use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Diff\Pointer;
@@ -144,7 +146,9 @@ class Audit extends Model
         $changes = $this->getAttribute('changes');
 
         if ($changes !== null) {
-            return Diff::fromEntries($changes);
+            return $this->audit_type === RelationCapture::AUDIT_TYPE
+                ? RelationLine::asDiff($changes)
+                : Diff::fromEntries($changes);
         }
 
         /** @var array<string, mixed>|null $before */
@@ -180,7 +184,7 @@ class Audit extends Model
             'impersonator' => $this->reference($this->impersonator_type, $this->impersonator_id),
             'tenant_id' => $this->tenant_id,
             'version' => $this->version,
-            'changes' => $this->getAttribute('changes') === null ? null : $this->diff()->toArray(),
+            'changes' => $this->serialized(),
             'before' => $this->before,
             'after' => $this->after,
             'metadata' => $this->metadata,
@@ -313,6 +317,29 @@ class Audit extends Model
     protected static function newFactory(): AuditFactory
     {
         return AuditFactory::new();
+    }
+
+    /**
+     * A relation entry's changes are its lines, and they go out as they are stored. Reading them
+     * through the diff would hand back a presentation of the lines rather than the lines, and this
+     * is the serialised entry, not a rendering of it.
+     *
+     * @return list<array<array-key, mixed>>|null
+     */
+    private function serialized(): ?array
+    {
+        /** @var array<array-key, mixed>|null $changes */
+        $changes = $this->getAttribute('changes');
+
+        if ($changes === null) {
+            return null;
+        }
+
+        if ($this->audit_type !== RelationCapture::AUDIT_TYPE) {
+            return $this->diff()->toArray();
+        }
+
+        return array_values(array_filter($changes, is_array(...)));
     }
 
     /**
