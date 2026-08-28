@@ -53,6 +53,14 @@ final class ConfigurationException extends InvalidArgumentException
         ));
     }
 
+    public static function notAParent(string $model, string $relation): self
+    {
+        return new self(
+            "Sentinel cannot audit the parent side of [{$model}::{$relation}()]: \$auditParents names "
+            .'belongsTo relations, and a morphTo is not one of them.',
+        );
+    }
+
     public static function streamEmpty(): self
     {
         return new self('Sentinel resolved an empty stream name; every entry belongs to a named chain.');

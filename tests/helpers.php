@@ -242,6 +242,21 @@ function createFixtureTables(): void
         $table->id();
     });
 
+    Schema::create('fixture_authors', static function (Blueprint $table): void {
+        $table->id();
+        $table->string('name')->nullable();
+        $table->string('code')->nullable();
+    });
+
+    Schema::create('fixture_articles', static function (Blueprint $table): void {
+        $table->id();
+        $table->string('title')->nullable();
+        $table->unsignedBigInteger('author_id')->nullable();
+        $table->string('editor_code')->nullable();
+        $table->string('subject_type')->nullable();
+        $table->unsignedBigInteger('subject_id')->nullable();
+    });
+
     Schema::create('fixture_labels', static function (Blueprint $table): void {
         $table->id();
         $table->string('name')->nullable();

@@ -12,6 +12,7 @@ final readonly class ModelObserver
 {
     public function __construct(
         private ModelCapture $capture,
+        private ParentCapture $parents,
         private SnapshotBuilder $snapshots,
     ) {}
 
@@ -31,6 +32,8 @@ final readonly class ModelObserver
             $restorePoint === null ? AuditEvent::Updated : AuditEvent::Restored,
             $restorePoint,
         );
+
+        $this->parents->record($model);
     }
 
     // A force delete fires `deleted` on its way to `forceDeleted`. Only the second one is the entry.
