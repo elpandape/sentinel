@@ -94,6 +94,14 @@ final class AuditableSubject extends Model implements Auditable
     }
 
     /**
+     * @return list<string>
+     */
+    public function auditTransitions(): array
+    {
+        return [];
+    }
+
+    /**
      * @return array<string, string>
      */
     public function auditParents(): array

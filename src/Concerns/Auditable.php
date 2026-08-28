@@ -114,6 +114,19 @@ trait Auditable
     }
 
     /**
+     * The columns whose movement is a state change rather than an edit. A column named here
+     * cannot also be excluded, redacted, encrypted, hashed or left out of a declared include
+     * list — Support\AuditPolicy is where that is refused, because it is the one place that
+     * sees every list at once.
+     *
+     * @return list<string>
+     */
+    public function auditTransitions(): array
+    {
+        return $this->auditFields('auditTransitions');
+    }
+
+    /**
      * A map and not a list: the entry hangs off the parent, so its line needs the name the parent
      * gives that collection, and a list would have to invent it.
      *

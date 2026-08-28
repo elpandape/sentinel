@@ -50,6 +50,13 @@ interface Auditable
     public function auditTags(): array;
 
     /**
+     * The columns whose movement is a state change rather than an edit.
+     *
+     * @return list<string>
+     */
+    public function auditTransitions(): array;
+
+    /**
      * The belongsTo relations whose parent gets an entry when this model changes hands, keyed by
      * the relation on this model and naming the collection on the parent.
      *

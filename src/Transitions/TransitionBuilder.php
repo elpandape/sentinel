@@ -13,6 +13,7 @@ use ElPandaPe\Sentinel\Enums\AuditEvent;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Exceptions\QueryException;
 use ElPandaPe\Sentinel\Sentinel;
+use ElPandaPe\Sentinel\Support\AuditPolicy;
 use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Support\Reference;
 use Illuminate\Database\Eloquent\Model;
@@ -133,7 +134,7 @@ final class TransitionBuilder
             return;
         }
 
-        $attribute = $this->attribute ?? $this->config->transitionAttribute();
+        $attribute = $this->attribute ?? $this->declared() ?? $this->config->transitionAttribute();
 
         $this->recorder->record(
             new AuditData(
@@ -150,6 +151,18 @@ final class TransitionBuilder
             $this->subject,
             $this->actor,
         );
+    }
+
+    /**
+     * A model that declares one state column has named it already, and repeating it at every
+     * call site would be a second place to get it wrong. Two or more and there is nothing to
+     * infer: the call has to say which one moved.
+     */
+    private function declared(): ?string
+    {
+        $columns = AuditPolicy::of($this->subject)->transitions;
+
+        return count($columns) === 1 ? $columns[0] : null;
     }
 
     /**

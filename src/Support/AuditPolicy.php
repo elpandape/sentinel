@@ -7,6 +7,7 @@ namespace ElPandaPe\Sentinel\Support;
 use ElPandaPe\Sentinel\Concerns\Auditable as AuditableConcern;
 use ElPandaPe\Sentinel\Contracts\Auditable;
 use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -23,6 +24,7 @@ final readonly class AuditPolicy
      * @param  list<string>  $encrypted
      * @param  list<string>  $hashed
      * @param  list<string>  $tags
+     * @param  list<string>  $transitions
      * @param  array<string, string>  $parents
      */
     private function __construct(
@@ -32,14 +34,17 @@ final readonly class AuditPolicy
         public array $encrypted,
         public array $hashed,
         public array $tags,
+        public array $transitions,
         public array $parents,
         public bool $snapshots,
         public ?Severity $severity,
-    ) {}
+    ) {
+        $this->readable();
+    }
 
     public static function none(): self
     {
-        return new self([], [], [], [], [], [], [], true, null);
+        return new self([], [], [], [], [], [], [], [], true, null);
     }
 
     public static function of(Model $model): self
@@ -56,10 +61,31 @@ final readonly class AuditPolicy
             $model->auditEncrypted(),
             $model->auditHashed(),
             $model->auditTags(),
+            $model->auditTransitions(),
             $model->auditParents(),
             $model->auditSnapshotsEnabled(),
             $model->auditSeverity(),
         );
+    }
+
+    /**
+     * A lifeline the entry cannot show is not a lifeline. A state column that is dropped,
+     * masked, hashed or encrypted answers the question the feature exists for with a row of
+     * asterisks, so the combination is refused where both lists are visible at once rather
+     * than discovered by reading an entry months later.
+     */
+    private function readable(): void
+    {
+        foreach ($this->transitions as $column) {
+            match (true) {
+                in_array($column, $this->excluded, true) => throw ConfigurationException::unreadableTransition($column, 'auditExclude'),
+                in_array($column, $this->redacted, true) => throw ConfigurationException::unreadableTransition($column, 'auditRedact'),
+                in_array($column, $this->encrypted, true) => throw ConfigurationException::unreadableTransition($column, 'auditEncrypt'),
+                in_array($column, $this->hashed, true) => throw ConfigurationException::unreadableTransition($column, 'auditHash'),
+                $this->included !== [] && ! in_array($column, $this->included, true) => throw ConfigurationException::omittedTransition($column),
+                default => null,
+            };
+        }
     }
 
     private static function answers(Model $model): bool

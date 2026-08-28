@@ -9,6 +9,40 @@ before `1.0.0`.
 
 ---
 
+## v0.12.1 → v0.13.0
+
+One published contract changes. Nothing to migrate.
+
+### `Contracts\Auditable` gains `auditTransitions()`
+
+**Before:** eleven methods.
+
+**After:** twelve. `auditTransitions(): array` returns the columns whose movement is a state change
+rather than an edit. An `update` that moves one of them is written as `audit_type = transition`
+instead of `model`/`updated`.
+
+Nothing to do if your model uses the `Concerns\Auditable` trait: the trait implements it, and
+declaring `protected array $auditTransitions = ['status'];` on the model is all it reads. A model
+that declares nothing keeps auditing exactly as before.
+
+If you implement the interface by hand, add the method:
+
+```php
+/**
+ * @return list<string>
+ */
+public function auditTransitions(): array
+{
+    return [];
+}
+```
+
+A column named there cannot also be in `$auditExclude`, `$auditRedact`, `$auditEncrypt` or
+`$auditHash`, nor left out of a declared `$auditInclude`: a lifeline the entry cannot show is not a
+lifeline, and the combination raises a `ConfigurationException` the first time the model is audited.
+
+---
+
 ## v0.11.1 → v0.12.0
 
 No published contract changes. There is one migration, and one behaviour that changes for code that

@@ -62,6 +62,22 @@ final class ConfigurationException extends InvalidArgumentException
         ));
     }
 
+    public static function unreadableTransition(string $column, string $property): self
+    {
+        return new self(
+            "Sentinel cannot record [{$column}] as a state transition and keep it out of the entry at the same time: "
+            ."it is also declared in \${$property}. A lifeline the entry cannot show is not a lifeline.",
+        );
+    }
+
+    public static function omittedTransition(string $column): self
+    {
+        return new self(
+            "Sentinel cannot record [{$column}] as a state transition while \$auditInclude leaves it out: "
+            .'nothing about that column would reach the entry. Add it to the include list, or stop declaring it as a transition.',
+        );
+    }
+
     public static function notAParent(string $model, string $relation): self
     {
         return new self(
