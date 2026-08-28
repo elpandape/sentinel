@@ -30,15 +30,21 @@ dataset('the filters that find', [
 ]);
 
 it('reaches an index for every filter the readme does not call a refiner', function (Closure $narrow): void {
-    expect(readsAnIndex(planFor($narrow())))->toBeTrue();
+    $plan = planFor($narrow());
+
+    expect(readsAnIndex($plan))->toBeTrue($plan);
 })->with('the filters that find');
 
 it('still reaches that index when the newest entry is asked for first', function (Closure $narrow): void {
-    expect(readsAnIndex(planFor($narrow()->latest())))->toBeTrue();
+    $plan = planFor($narrow()->latest());
+
+    expect(readsAnIndex($plan))->toBeTrue($plan);
 })->with('the filters that find');
 
 it('reaches no index at all for a source, which is why it is a refiner', function (): void {
-    expect(readsAnIndex(planFor(Sentinel::audits()->whereSource(Source::Cli))))->toBeFalse();
+    $plan = planFor(Sentinel::audits()->whereSource(Source::Cli));
+
+    expect(readsAnIndex($plan))->toBeFalse($plan);
 });
 
 it('reaches no index for a period on its own, unless the engine skip scans one that is not about it', function (): void {
@@ -47,7 +53,7 @@ it('reaches no index for a period on its own, unless the engine skip scans one t
         new DateTimeImmutable('2026-08-01 00:05:00'),
     ));
 
-    expect(readsAnIndex($plan))->toBe(DB::connection()->getDriverName() === 'sqlite');
+    expect(readsAnIndex($plan))->toBe(DB::connection()->getDriverName() === 'sqlite', $plan);
 });
 
 it('rides the index of the filter in front of it once a refiner has one', function (Closure $narrow): void {
@@ -55,14 +61,16 @@ it('rides the index of the filter in front of it once a refiner has one', functi
         ->whereSource(Source::Cli)
         ->between(new DateTimeImmutable('2026-08-01 00:00:00'), new DateTimeImmutable('2026-09-01 00:00:00'));
 
-    expect(readsAnIndex(planFor($narrowed)))->toBeTrue();
+    $plan = planFor($narrowed);
+
+    expect(readsAnIndex($plan))->toBeTrue($plan);
 })->with('the filters that find');
 
 it('pays for a whole pass and a sort when nothing narrows it, which is why get is bounded', function (): void {
     $plan = planFor(Sentinel::audits()->take(AuditQuery::DEFAULT_LIMIT));
 
-    expect(readsAnIndex($plan))->toBeFalse()
-        ->and(sortsOutsideTheIndex($plan))->toBeTrue();
+    expect(readsAnIndex($plan))->toBeFalse($plan)
+        ->and(sortsOutsideTheIndex($plan))->toBeTrue($plan);
 });
 
 /**
@@ -93,21 +101,26 @@ it('reaches the labels table through an index for a label worth narrowing by', f
 it('leaves the clock of the fact to a cost-based decision on two of the three engines', function (): void {
     $plan = planFor(Sentinel::timeline()->take(AuditQuery::DEFAULT_LIMIT));
 
-    expect(sortsOutsideTheIndex($plan))->toBe(DB::connection()->getDriverName() !== 'sqlite');
+    expect(sortsOutsideTheIndex($plan))->toBe(DB::connection()->getDriverName() !== 'sqlite', $plan);
 });
 
 it('rides an index for the timeline of one subject too', function (): void {
     $plan = planFor(Sentinel::timeline()->for('invoice', 7));
 
-    expect(sortsOutsideTheIndex($plan))->toBeFalse()
-        ->and(readsAnIndex($plan))->toBeTrue();
+    expect(sortsOutsideTheIndex($plan))->toBeFalse($plan)
+        ->and(readsAnIndex($plan))->toBeTrue($plan);
 });
 
 it('reaches no index at all for a changed field, which is why it is a refiner', function (): void {
-    expect(readsAnIndex(planFor(Sentinel::audits()->for('invoice', 7)->whereFieldChanged('email'))))->toBeTrue()
-        ->and(readsAnIndex(planFor(Sentinel::audits()->whereFieldChanged('email')->take(AuditQuery::DEFAULT_LIMIT))))->toBeFalse();
+    $narrowed = planFor(Sentinel::audits()->for('invoice', 7)->whereFieldChanged('email'));
+    $alone = planFor(Sentinel::audits()->whereFieldChanged('email')->take(AuditQuery::DEFAULT_LIMIT));
+
+    expect(readsAnIndex($narrowed))->toBeTrue($narrowed)
+        ->and(readsAnIndex($alone))->toBeFalse($alone);
 });
 
 it('reaches no index at all for a version, which is why it is a refiner', function (): void {
-    expect(readsAnIndex(planFor(Sentinel::audits()->whereVersion(3)->take(AuditQuery::DEFAULT_LIMIT))))->toBeFalse();
+    $plan = planFor(Sentinel::audits()->whereVersion(3)->take(AuditQuery::DEFAULT_LIMIT));
+
+    expect(readsAnIndex($plan))->toBeFalse($plan);
 });
