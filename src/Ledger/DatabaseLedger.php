@@ -107,6 +107,7 @@ final readonly class DatabaseLedger implements DeclaresFilters, Ledger
             ->when($query->actor, static fn (Builder $entries, Reference $actor): Builder => $entries
                 ->where('actor_type', $actor->type)
                 ->where('actor_id', $actor->id))
+            ->when($query->type, static fn (Builder $entries, string $type): Builder => $entries->where('audit_type', $type))
             ->when($query->event, static fn (Builder $entries, string $event): Builder => $entries->where('event', $event))
             ->when($query->severity, static fn (Builder $entries, Severity $severity): Builder => $entries->where('severity', $severity->value))
             ->when($query->source, static fn (Builder $entries, Source $source): Builder => $entries->where('source', $source->value))

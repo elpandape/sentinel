@@ -35,6 +35,8 @@ enum Filter: string
 
     case Operation = 'operation';
 
+    case Type = 'type';
+
     /**
      * @return list<self>
      */
@@ -85,6 +87,7 @@ enum Filter: string
             self::Relation => 'whereRelation',
             self::Related => 'whereRelated',
             self::Operation => 'whereOperation',
+            self::Type => 'whereType',
         };
     }
 }

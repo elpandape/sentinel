@@ -65,6 +65,8 @@ final class AuditQuery
 
     public private(set) ?string $changedField = null;
 
+    public private(set) ?string $type = null;
+
     /**
      * @var list<int>
      */
@@ -118,6 +120,24 @@ final class AuditQuery
     {
         $query = $this->accepting(Filter::Event);
         $query->event = $event instanceof AuditEvent ? $event->value : $event;
+
+        return $query;
+    }
+
+    /**
+     * The kind of entry, rather than the name of what happened: a model change, a relation, a
+     * stated fact, a sign-in, a state transition. It is the column the trail is partitioned by,
+     * and the one an event name cannot stand in for — an application is free to call its own
+     * event `updated`, and only the type tells the two apart.
+     */
+    public function whereType(string $type): self
+    {
+        if ($type === '') {
+            throw QueryException::noType();
+        }
+
+        $query = $this->accepting(Filter::Type);
+        $query->type = $type;
 
         return $query;
     }

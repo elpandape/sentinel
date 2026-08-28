@@ -374,6 +374,8 @@ function seedTheTrail(int $entries = 600): void
 
         $rows[] = auditRow([
             'sequence' => $sequence,
+            // One kind of entry in sixty, so narrowing by it is a seek rather than the whole table.
+            'audit_type' => $bucket === 7 ? 'transition' : 'model',
             'subject_type' => 'invoice',
             'subject_id' => (string) $bucket,
             'actor_type' => 'user',

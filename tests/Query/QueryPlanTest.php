@@ -28,6 +28,7 @@ dataset('the filters that find', [
     'tenant' => [fn (): AuditQuery => Sentinel::audits()->forTenant('tenant-7')],
     'transaction' => [fn (): AuditQuery => Sentinel::audits()->inTransaction(str_pad('7', 26, '0', STR_PAD_LEFT))],
     'trace' => [fn (): AuditQuery => Sentinel::audits()->withTrace(str_pad('7', 32, '0', STR_PAD_LEFT))],
+    'type' => [fn (): AuditQuery => Sentinel::audits()->whereType('transition')],
 ]);
 
 it('reaches an index for every filter the readme does not call a refiner', function (Closure $narrow): void {
@@ -141,4 +142,17 @@ it('reaches it through an index for the record that was related too', function (
     $plan = planFor(Sentinel::audits()->whereRelated('member', 0)->whereOperation('attach'));
 
     expect(reachesByIndex($plan, auditRelationsTable()))->toBeTrue($plan);
+});
+
+/**
+ * The lifeline of one record narrows by two indexed columns at once, and a planner picks one
+ * index, not both: the subject composite finds the record and leaves the clock to be sorted, or
+ * the type composite arrives sorted and filters the subject. Which one it picks is its business
+ * and moves with the engine's version, so what is asserted is that it seeks rather than walks —
+ * the same thing every other index gate here asserts.
+ */
+it('rides an index for the lifeline of one subject', function (): void {
+    $plan = planFor(Sentinel::audits()->for('invoice', 7)->whereType('transition'));
+
+    expect(readsAnIndex($plan))->toBeTrue($plan);
 });

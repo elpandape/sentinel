@@ -38,6 +38,11 @@ final class QueryException extends InvalidArgumentException
         return new self('Narrowing by an empty field name asks nothing of an entry; name the attribute whose history you want.');
     }
 
+    public static function noType(): self
+    {
+        return new self('Narrowing by an empty kind of entry asks nothing of an entry; name the kind you want, such as model, relation, custom, auth or transition.');
+    }
+
     public static function unbounded(int $limit): self
     {
         return new self(

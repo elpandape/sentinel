@@ -153,7 +153,7 @@ it('names the method that reaches each filter', function (): void {
         ->toBe([
             'for', 'by', 'whereEvent', 'whereSeverity', 'whereSource', 'forTenant', 'inTransaction',
             'withTrace', 'between', 'whereTag', 'whereFieldChanged', 'whereVersion', 'whereRelation',
-            'whereRelated', 'whereOperation',
+            'whereRelated', 'whereOperation', 'whereType',
         ]);
 });
 
