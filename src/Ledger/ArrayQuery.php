@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Ledger;
 
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Models\AuditTag;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 
 /**
@@ -43,12 +44,23 @@ final readonly class ArrayQuery
         return ($query->subject?->matches($audit->subject_type, $audit->subject_id) ?? true)
             && ($query->actor?->matches($audit->actor_type, $audit->actor_id) ?? true)
             && ($query->period?->covers($audit->created_at) ?? true)
+            && ($query->tags?->matches($this->labelsOf($audit)) ?? true)
             && $this->equals($query->event, $audit->event)
             && $this->equals($query->severity?->value, $audit->severity->value)
             && $this->equals($query->source?->value, $audit->source->value)
             && $this->equals($query->tenantId, $audit->tenant_id)
             && $this->equals($query->transactionId, $audit->transaction_id)
             && $this->equals($query->traceId, $audit->trace_id);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function labelsOf(Audit $audit): array
+    {
+        return $audit->relationLoaded('tags')
+            ? array_values(array_map(static fn (AuditTag $tag): string => $tag->tag, $audit->tags->all()))
+            : [];
     }
 
     private function equals(?string $wanted, ?string $actual): bool

@@ -8,10 +8,13 @@ use Closure;
 use DateTimeImmutable;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Data\AuditData;
+use ElPandaPe\Sentinel\Enums\Filter;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
+use ElPandaPe\Sentinel\Exceptions\LedgerException;
 use ElPandaPe\Sentinel\Ledger\EntryBuilder;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Models\AuditTag;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\SentinelServiceProvider;
 use Orchestra\Testbench\TestCase;
@@ -150,12 +153,16 @@ abstract class LedgerContractTestCase extends TestCase
      * @param  Closure(AuditQuery): AuditQuery  $narrow
      */
     #[DataProvider('publishedFilters')]
-    public function test_it_answers_with_what_a_filter_matches_and_nothing_else(Closure $narrow): void
+    public function test_it_answers_with_what_a_filter_matches_and_nothing_else(Filter $filter, Closure $narrow): void
     {
         $ledger = $this->ledger();
         $ledger->write($this->auditData());
         $wanted = $ledger->write($this->narrowedAuditData());
         $this->settle($ledger);
+
+        if (! $this->translates($ledger, $filter)) {
+            $this->expectException(LedgerException::class);
+        }
 
         $found = $ledger->query($narrow($this->asking()));
 
@@ -163,20 +170,64 @@ abstract class LedgerContractTestCase extends TestCase
     }
 
     /**
-     * @return array<string, array{Closure(AuditQuery): AuditQuery}>
+     * Each row names the filter it exercises, so a driver that declares a narrow set is skipped
+     * for the ones it never claimed instead of erroring on a refusal it asked for.
+     *
+     * @return array<string, array{Filter, Closure(AuditQuery): AuditQuery}>
      */
     public static function publishedFilters(): array
     {
         return [
-            'subject' => [static fn (AuditQuery $query): AuditQuery => $query->for('invoice', 500)],
-            'actor' => [static fn (AuditQuery $query): AuditQuery => $query->by('user', 1)],
-            'event' => [static fn (AuditQuery $query): AuditQuery => $query->whereEvent('approved')],
-            'severity' => [static fn (AuditQuery $query): AuditQuery => $query->whereSeverity(Severity::Critical)],
-            'source' => [static fn (AuditQuery $query): AuditQuery => $query->whereSource(Source::Queue)],
-            'tenant' => [static fn (AuditQuery $query): AuditQuery => $query->forTenant('acme')],
-            'transaction' => [static fn (AuditQuery $query): AuditQuery => $query->inTransaction('01JTRANSACTION000000000000')],
-            'trace' => [static fn (AuditQuery $query): AuditQuery => $query->withTrace('4bf92f3577b34da6a3ce929d0e0e4736')],
+            'subject' => [Filter::Subject, static fn (AuditQuery $query): AuditQuery => $query->for('invoice', 500)],
+            'actor' => [Filter::Actor, static fn (AuditQuery $query): AuditQuery => $query->by('user', 1)],
+            'event' => [Filter::Event, static fn (AuditQuery $query): AuditQuery => $query->whereEvent('approved')],
+            'severity' => [Filter::Severity, static fn (AuditQuery $query): AuditQuery => $query->whereSeverity(Severity::Critical)],
+            'source' => [Filter::Source, static fn (AuditQuery $query): AuditQuery => $query->whereSource(Source::Queue)],
+            'tenant' => [Filter::Tenant, static fn (AuditQuery $query): AuditQuery => $query->forTenant('acme')],
+            'transaction' => [Filter::Transaction, static fn (AuditQuery $query): AuditQuery => $query->inTransaction('01JTRANSACTION000000000000')],
+            'trace' => [Filter::Trace, static fn (AuditQuery $query): AuditQuery => $query->withTrace('4bf92f3577b34da6a3ce929d0e0e4736')],
+            'every label' => [Filter::Tag, static fn (AuditQuery $query): AuditQuery => $query->whereTag(['billing', 'refund'])],
+            'any label' => [Filter::Tag, static fn (AuditQuery $query): AuditQuery => $query->whereAnyTag(['refund', 'absent'])],
         ];
+    }
+
+    public function test_it_hands_an_entry_back_carrying_the_labels_it_was_written_with(): void
+    {
+        $written = $this->ledger()->write($this->narrowedAuditData());
+
+        $this->assertSame(
+            ['billing', 'refund'],
+            array_map(static fn (AuditTag $tag): string => $tag->tag, $written->tags->all()),
+        );
+    }
+
+    public function test_it_narrows_to_an_entry_carrying_every_label_asked_for(): void
+    {
+        $ledger = $this->ledger();
+        $ledger->write($this->auditData());
+        $wanted = $ledger->write($this->narrowedAuditData());
+        $this->settle($ledger);
+
+        if (! $this->translates($ledger, Filter::Tag)) {
+            $this->expectException(LedgerException::class);
+        }
+
+        $found = $ledger->query($this->asking()->whereTag('billing')->whereTag('refund'));
+
+        $this->assertSame($this->retains() ? [$wanted->id] : [], $found->pluck('id')->all());
+    }
+
+    public function test_it_answers_nothing_for_a_label_no_entry_carries(): void
+    {
+        $ledger = $this->ledger();
+        $ledger->write($this->narrowedAuditData());
+        $this->settle($ledger);
+
+        if (! $this->translates($ledger, Filter::Tag)) {
+            $this->expectException(LedgerException::class);
+        }
+
+        $this->assertSame([], $ledger->query($this->asking()->whereTag('absent'))->pluck('id')->all());
     }
 
     public function test_it_answers_an_unnarrowed_query_with_everything_it_kept(): void
@@ -291,6 +342,17 @@ abstract class LedgerContractTestCase extends TestCase
     }
 
     /**
+     * A driver is held to one of two answers for every published filter, never to neither: it
+     * translates the filter, or it refuses it as the query is built. Skipping the expectation
+     * for a filter a driver does not declare would leave the third answer — dropping it in
+     * silence — the only one this contract never checks, and it is the one it exists to forbid.
+     */
+    protected function translates(Ledger $ledger, Filter $filter): bool
+    {
+        return in_array($filter, Filter::answeredBy($ledger), true);
+    }
+
+    /**
      * @return list<class-string>
      */
     protected function getPackageProviders($app): array
@@ -363,6 +425,7 @@ abstract class LedgerContractTestCase extends TestCase
             tenant_id: 'acme',
             transaction_id: '01JTRANSACTION000000000000',
             trace_id: '4bf92f3577b34da6a3ce929d0e0e4736',
+            tags: ['billing', 'refund'],
         );
     }
 

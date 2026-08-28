@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Enums;
 
+use ElPandaPe\Sentinel\Contracts\DeclaresFilters;
+use ElPandaPe\Sentinel\Contracts\Ledger;
+
 /**
  * One case per published filter. It is what a ledger names to declare which of them its
  * backend can translate, and what the refusal cites when one of them cannot.
@@ -19,6 +22,16 @@ enum Filter: string
     case Transaction = 'transaction';
     case Trace = 'trace';
     case Period = 'period';
+
+    case Tag = 'tag';
+
+    /**
+     * @return list<self>
+     */
+    public static function answeredBy(Ledger $ledger): array
+    {
+        return $ledger instanceof DeclaresFilters ? $ledger->supportedFilters() : self::assumed();
+    }
 
     /**
      * What a driver is taken to answer when it does not declare anything. It is the set as it
@@ -56,6 +69,7 @@ enum Filter: string
             self::Transaction => 'inTransaction',
             self::Trace => 'withTrace',
             self::Period => 'between',
+            self::Tag => 'whereTag',
         };
     }
 }

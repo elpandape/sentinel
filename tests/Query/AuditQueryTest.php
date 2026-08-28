@@ -150,7 +150,7 @@ it('refuses a filter the ledger cannot translate, as the filter is added', funct
 
 it('names the method that reaches each filter', function (): void {
     expect(array_map(static fn (Filter $filter): string => $filter->method(), Filter::cases()))
-        ->toBe(['for', 'by', 'whereEvent', 'whereSeverity', 'whereSource', 'forTenant', 'inTransaction', 'withTrace', 'between']);
+        ->toBe(['for', 'by', 'whereEvent', 'whereSeverity', 'whereSource', 'forTenant', 'inTransaction', 'withTrace', 'between', 'whereTag']);
 });
 
 it('assumes of an undeclaring driver only the filters that were published with the contract', function (): void {

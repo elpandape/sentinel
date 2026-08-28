@@ -17,9 +17,11 @@ use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Models\AuditTag;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Query\Period;
+use ElPandaPe\Sentinel\Query\TagCriteria;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Reference;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Database\UniqueConstraintViolationException;
 
 final readonly class DatabaseLedger implements DeclaresFilters, Ledger
@@ -100,6 +102,7 @@ final readonly class DatabaseLedger implements DeclaresFilters, Ledger
             ->when($query->traceId, static fn (Builder $entries, string $trace): Builder => $entries->where('trace_id', $trace))
             ->when($query->period, static fn (Builder $entries, Period $period): Builder => $entries
                 ->whereBetween('created_at', [$period->from, $period->to]))
+            ->when($query->tags, fn (Builder $entries, TagCriteria $tags): Builder => $this->narrowByLabel($entries, $tags))
             ->orderBy('created_at', $direction)
             ->orderBy('id', $direction)
             ->when($query->offset, static fn (Builder $entries, int $offset): Builder => $entries->offset($offset))
@@ -148,6 +151,36 @@ final readonly class DatabaseLedger implements DeclaresFilters, Ledger
 
             return array_values($written);
         }));
+    }
+
+    /**
+     * One correlated exists per required label and one for the optional set, each a seek into
+     * the reversed index. A planner is free to walk the labels table instead when a label covers
+     * a large share of it, which is the right plan for a label that broad — the shape is what is
+     * being chosen here, not the plan.
+     *
+     * @param  Builder<Audit>  $entries
+     * @return Builder<Audit>
+     */
+    private function narrowByLabel(Builder $entries, TagCriteria $tags): Builder
+    {
+        foreach ($tags->all as $tag) {
+            $entries->whereExists(fn (QueryBuilder $carrying): QueryBuilder => $this->carrying($carrying)->where('tag', $tag));
+        }
+
+        if ($tags->any !== []) {
+            $entries->whereExists(fn (QueryBuilder $carrying): QueryBuilder => $this->carrying($carrying)->whereIn('tag', $tags->any));
+        }
+
+        return $entries;
+    }
+
+    private function carrying(QueryBuilder $labels): QueryBuilder
+    {
+        return $labels
+            ->selectRaw('1')
+            ->from($this->labels->getTable())
+            ->whereColumn($this->labels->getTable().'.audit_id', $this->model->getTable().'.id');
     }
 
     /**

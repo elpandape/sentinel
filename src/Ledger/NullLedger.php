@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Ledger;
 
+use ElPandaPe\Sentinel\Contracts\DeclaresFilters;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Contracts\LedgerStream;
 use ElPandaPe\Sentinel\Data\AuditData;
+use ElPandaPe\Sentinel\Enums\Filter;
 use ElPandaPe\Sentinel\Integrity\Stream;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Query\AuditQuery;
@@ -23,7 +25,7 @@ use ElPandaPe\Sentinel\Support\AuditCollection;
  * counter per stream and per subject, never one per entry: turning auditing off is not a
  * reason to grow with the traffic it is refusing to record.
  */
-final class NullLedger implements Ledger
+final class NullLedger implements DeclaresFilters, Ledger
 {
     /**
      * @var array<string, StreamTail>
@@ -69,6 +71,17 @@ final class NullLedger implements Ledger
     public function find(string $id): ?Audit
     {
         return null;
+    }
+
+    /**
+     * Every filter, answered with nothing. Refusing one would say this ledger cannot translate
+     * it; it translates all of them, into the same empty answer.
+     *
+     * @return list<Filter>
+     */
+    public function supportedFilters(): array
+    {
+        return Filter::cases();
     }
 
     public function query(AuditQuery $query): AuditCollection

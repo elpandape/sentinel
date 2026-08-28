@@ -6,7 +6,6 @@ namespace ElPandaPe\Sentinel\Query;
 
 use DateTimeImmutable;
 use DateTimeInterface;
-use ElPandaPe\Sentinel\Contracts\DeclaresFilters;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
 use ElPandaPe\Sentinel\Enums\Filter;
@@ -55,6 +54,8 @@ final class AuditQuery
 
     public private(set) ?Period $period = null;
 
+    public private(set) ?TagCriteria $tags = null;
+
     public private(set) bool $newestFirst = false;
 
     public private(set) ?int $limit = null;
@@ -68,7 +69,7 @@ final class AuditQuery
 
     public function __construct(private readonly Ledger $ledger)
     {
-        $this->supported = $ledger instanceof DeclaresFilters ? $ledger->supportedFilters() : Filter::assumed();
+        $this->supported = Filter::answeredBy($ledger);
     }
 
     public function for(object|string $subject, int|string|null $id = null): self
@@ -160,6 +161,33 @@ final class AuditQuery
         return $query;
     }
 
+    /**
+     * Every label named, on the same entry. Asking twice accumulates, so this and passing the
+     * whole list at once are the same question.
+     *
+     * @param  list<string>|string  $tag
+     */
+    public function whereTag(array|string $tag): self
+    {
+        $query = $this->accepting(Filter::Tag);
+        $query->tags = ($this->tags ?? new TagCriteria)->requiring($this->labels($tag));
+
+        return $query;
+    }
+
+    /**
+     * At least one of the labels named.
+     *
+     * @param  list<string>|string  $tag
+     */
+    public function whereAnyTag(array|string $tag): self
+    {
+        $query = $this->accepting(Filter::Tag);
+        $query->tags = ($this->tags ?? new TagCriteria)->including($this->labels($tag));
+
+        return $query;
+    }
+
     public function latest(): self
     {
         $query = clone $this;
@@ -199,6 +227,17 @@ final class AuditQuery
             $perPage,
             $entries->count() > $perPage,
         );
+    }
+
+    /**
+     * @param  list<string>|string  $tag
+     * @return non-empty-list<string>
+     */
+    private function labels(array|string $tag): array
+    {
+        $labels = array_values(array_unique(is_string($tag) ? [$tag] : $tag));
+
+        return $labels === [] ? throw QueryException::noLabels() : $labels;
     }
 
     private function accepting(Filter $filter): self
