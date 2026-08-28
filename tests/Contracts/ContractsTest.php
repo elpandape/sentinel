@@ -37,6 +37,7 @@ it('declares the field policies an auditable model answers for', function (): vo
         'auditEncrypted',
         'auditHashed',
         'auditTags',
+        'relationHistory',
         'auditSnapshotsEnabled',
         'auditSeverity',
     ]);

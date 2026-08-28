@@ -10,6 +10,8 @@ use ElPandaPe\Sentinel\Capture\Relations\AuditedMorphToMany;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Query\AuditQuery;
+use ElPandaPe\Sentinel\Sentinel;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -43,6 +45,19 @@ trait Auditable
         $audits = $this->morphMany($this->auditModel(), 'subject')->orderBy('id');
 
         return $audits;
+    }
+
+    /**
+     * What this relation has done over time, as a query rather than a result: it composes with
+     * every other filter and pages like any other read, so asking who was ever a lead on this team
+     * and asking it one page at a time are the same call with one more method on it.
+     */
+    public function relationHistory(string $relation): AuditQuery
+    {
+        /** @var Sentinel $sentinel */
+        $sentinel = app(Sentinel::class);
+
+        return $sentinel->audits()->for($this)->whereRelation($relation);
     }
 
     public function latestAudit(): ?Audit

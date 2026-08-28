@@ -29,6 +29,12 @@ enum Filter: string
 
     case Version = 'version';
 
+    case Relation = 'relation';
+
+    case Related = 'related';
+
+    case Operation = 'operation';
+
     /**
      * @return list<self>
      */
@@ -76,6 +82,9 @@ enum Filter: string
             self::Tag => 'whereTag',
             self::FieldChanged => 'whereFieldChanged',
             self::Version => 'whereVersion',
+            self::Relation => 'whereRelation',
+            self::Related => 'whereRelated',
+            self::Operation => 'whereOperation',
         };
     }
 }

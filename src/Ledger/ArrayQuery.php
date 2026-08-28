@@ -46,6 +46,7 @@ final readonly class ArrayQuery
             && ($query->actor?->matches($audit->actor_type, $audit->actor_id) ?? true)
             && ($query->period?->covers($audit->created_at) ?? true)
             && ($query->tags?->matches($this->labelsOf($audit)) ?? true)
+            && ($query->relations?->matches($this->linesOf($audit)) ?? true)
             && ($query->changedField === null || $this->touches($audit, $query->changedField))
             && ($query->versions === [] || in_array($audit->version, $query->versions, true))
             && $this->equals($query->event, $audit->event)
@@ -69,6 +70,16 @@ final readonly class ArrayQuery
         }
 
         return false;
+    }
+
+    /**
+     * @return array<array-key, mixed>
+     */
+    private function linesOf(Audit $audit): array
+    {
+        $changes = $audit->getAttribute('changes');
+
+        return is_array($changes) ? $changes : [];
     }
 
     /**

@@ -10,6 +10,7 @@ use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Diff\Pointer;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
 use ElPandaPe\Sentinel\Enums\Filter;
+use ElPandaPe\Sentinel\Enums\RelationOperation;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Exceptions\ComparisonException;
@@ -58,6 +59,8 @@ final class AuditQuery
     public private(set) ?Period $period = null;
 
     public private(set) ?TagCriteria $tags = null;
+
+    public private(set) ?RelationCriteria $relations = null;
 
     public private(set) ?string $changedField = null;
 
@@ -196,6 +199,45 @@ final class AuditQuery
     {
         $query = $this->accepting(Filter::Tag);
         $query->tags = ($this->tags ?? new TagCriteria)->including($this->labels($tag));
+
+        return $query;
+    }
+
+    /**
+     * Entries that touched this relation. The three relation criteria narrow the same line, so an
+     * entry answers only when one of its lines satisfies all of them at once — asked separately,
+     * a question about a role being attached would also be answered by an entry that attached
+     * something else and detached that role.
+     */
+    public function whereRelation(string $relation): self
+    {
+        $query = $this->accepting(Filter::Relation);
+        $query->relations = ($this->relations ?? new RelationCriteria)->named($relation);
+
+        return $query;
+    }
+
+    /**
+     * Entries that touched this particular record through a relation.
+     */
+    public function whereRelated(object|string $related, int|string|null $id = null): self
+    {
+        $query = $this->accepting(Filter::Related);
+        $query->relations = ($this->relations ?? new RelationCriteria)->to(Reference::to($related, $id));
+
+        return $query;
+    }
+
+    /**
+     * What happened to the related record: attached, detached, or its pivot updated. Naming more
+     * than one asks for any of them, and asking twice accumulates.
+     */
+    public function whereOperation(RelationOperation|string ...$operations): self
+    {
+        $query = $this->accepting(Filter::Operation);
+        $query->relations = ($this->relations ?? new RelationCriteria)->doing(
+            array_map($this->operation(...), array_values($operations)),
+        );
 
         return $query;
     }
@@ -341,6 +383,15 @@ final class AuditQuery
     {
         return $entries->firstWhere('version', $version)
             ?? throw ComparisonException::missingVersion($version);
+    }
+
+    private function operation(RelationOperation|string $operation): RelationOperation
+    {
+        if ($operation instanceof RelationOperation) {
+            return $operation;
+        }
+
+        return RelationOperation::tryFrom($operation) ?? throw QueryException::unknownOperation($operation);
     }
 
     /**

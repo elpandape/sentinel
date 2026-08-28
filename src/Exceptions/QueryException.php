@@ -8,6 +8,11 @@ use InvalidArgumentException;
 
 final class QueryException extends InvalidArgumentException
 {
+    public static function unknownOperation(string $operation): self
+    {
+        return new self("[{$operation}] is not something that happens to a relation. Expected: attach, detach, update.");
+    }
+
     public static function unsavedModel(string $model): self
     {
         return new self("Cannot query for a {$model} that has no key yet: no entry can reference it.");

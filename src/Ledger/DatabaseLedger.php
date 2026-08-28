@@ -11,6 +11,7 @@ use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Contracts\LedgerStream;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Enums\Filter;
+use ElPandaPe\Sentinel\Enums\RelationOperation;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Integrity\Stream;
@@ -19,6 +20,7 @@ use ElPandaPe\Sentinel\Models\AuditRelation;
 use ElPandaPe\Sentinel\Models\AuditTag;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Query\Period;
+use ElPandaPe\Sentinel\Query\RelationCriteria;
 use ElPandaPe\Sentinel\Query\TagCriteria;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Reference;
@@ -114,6 +116,7 @@ final readonly class DatabaseLedger implements DeclaresFilters, Ledger
             ->when($query->period, static fn (Builder $entries, Period $period): Builder => $entries
                 ->whereBetween('created_at', [$period->from, $period->to]))
             ->when($query->tags, fn (Builder $entries, TagCriteria $tags): Builder => $this->narrowByLabel($entries, $tags))
+            ->when($query->relations, fn (Builder $entries, RelationCriteria $lines): Builder => $this->narrowByRelation($entries, $lines))
             ->when($query->changedField, fn (Builder $entries, string $pointer): Builder => $this->narrowByField($entries, $pointer))
             ->when($query->versions, static fn (Builder $entries, array $versions): Builder => $entries->whereIn('version', $versions))
             ->orderBy($clock, $direction)
@@ -187,6 +190,35 @@ final readonly class DatabaseLedger implements DeclaresFilters, Ledger
         }
 
         return $entries;
+    }
+
+    /**
+     * One exists into the projection, with every part of the criterion inside it, so the row that
+     * answers has to satisfy all of them at once. Split across three exists clauses, an entry that
+     * attached one record and detached another would answer a question about one of them being
+     * detached — a different fact.
+     *
+     * @param  Builder<Audit>  $entries
+     * @return Builder<Audit>
+     */
+    private function narrowByRelation(Builder $entries, RelationCriteria $lines): Builder
+    {
+        return $entries->whereExists(function (QueryBuilder $touching) use ($lines): void {
+            $touching
+                ->selectRaw('1')
+                ->from($this->relations->getTable())
+                ->whereColumn($this->relations->getTable().'.audit_id', $this->model->getTable().'.id')
+                ->when($lines->relation, static fn (QueryBuilder $line, string $relation): QueryBuilder => $line
+                    ->where('relation', $relation))
+                ->when($lines->related, static fn (QueryBuilder $line, Reference $related): QueryBuilder => $line
+                    ->where('related_type', $related->type)
+                    ->where('related_id', $related->id))
+                ->when($lines->operations !== [], static fn (QueryBuilder $line): QueryBuilder => $line
+                    ->whereIn('operation', array_map(
+                        static fn (RelationOperation $operation): string => $operation->value,
+                        $lines->operations,
+                    )));
+        });
     }
 
     /**

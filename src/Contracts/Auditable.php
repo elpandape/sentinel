@@ -6,6 +6,7 @@ namespace ElPandaPe\Sentinel\Contracts;
 
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Query\AuditQuery;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
@@ -15,6 +16,8 @@ interface Auditable
      * @return MorphMany<Audit, covariant Model>
      */
     public function audits(): MorphMany;
+
+    public function relationHistory(string $relation): AuditQuery;
 
     /**
      * @return list<string>

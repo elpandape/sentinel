@@ -7,6 +7,8 @@ namespace ElPandaPe\Sentinel\Tests\Fixtures;
 use ElPandaPe\Sentinel\Contracts\Auditable;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Query\AuditQuery;
+use ElPandaPe\Sentinel\Sentinel;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
@@ -36,6 +38,11 @@ final class AuditableSubject extends Model implements Auditable
     public function audits(): MorphMany
     {
         return $this->morphMany(Audit::class, 'subject');
+    }
+
+    public function relationHistory(string $relation): AuditQuery
+    {
+        return app(Sentinel::class)->audits()->for($this)->whereRelation($relation);
     }
 
     /**
