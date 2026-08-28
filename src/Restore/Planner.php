@@ -54,20 +54,42 @@ final readonly class Planner
             return Plan::refused(Omission::EntryTampered);
         }
 
-        $before = $audit->before;
+        $state = $this->portrait($audit);
 
-        if ($before === null || $before === []) {
+        if ($state === null) {
             return Plan::refused(Omission::EntryStateless);
         }
 
-        return $this->weigh($audit, $subject, $before, $fields ?? array_keys($before));
+        return $this->weigh($audit, $subject, $state, $fields ?? array_keys($state), $fields === null);
     }
 
     /**
-     * @param  array<string, mixed>  $before
+     * The state this entry portrays. An entry is a photograph of the record at a moment, and
+     * restoring it is going back to that moment: the caller points at a row of the timeline and
+     * says "back to this one", not "back to whatever came before this one" — which for the first
+     * entry of a record would be nothing at all.
+     *
+     * A deletion is the exception that proves it. Its after is empty because there is no record
+     * left to photograph, so the state it portrays is the one on its before.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function portrait(Audit $audit): ?array
+    {
+        foreach ([$audit->after, $audit->before] as $state) {
+            if ($state !== null && $state !== []) {
+                return $state;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
      * @param  list<string>  $fields
      */
-    private function weigh(Audit $audit, Model $subject, array $before, array $fields): Plan
+    private function weigh(Audit $audit, Model $subject, array $state, array $fields, bool $whole): Plan
     {
         $policy = AuditPolicy::of($subject);
         $current = $this->snapshots->build($subject, $subject->getAttributes());
@@ -83,7 +105,7 @@ final readonly class Planner
 
         foreach ($fields as $field) {
             $refusal = match (true) {
-                ! array_key_exists($field, $before) => Omission::UnrecordedField,
+                ! array_key_exists($field, $state) => Omission::UnrecordedField,
                 $field === $subject->getKeyName() => Omission::IdentityField,
                 ! in_array($field, $columns, true) => Omission::UnknownField,
                 default => $this->protected($field, $protections),
@@ -95,7 +117,7 @@ final readonly class Planner
                 continue;
             }
 
-            $value = $this->readable($audit, $field, $before[$field], $policy);
+            $value = $this->readable($audit, $field, $state[$field], $policy);
 
             match (true) {
                 $value instanceof Omission => $skipped[$field] = $value,
@@ -104,7 +126,31 @@ final readonly class Planner
             };
         }
 
-        return Plan::of($applying, $skipped);
+        return Plan::of($this->revived($subject, $state, $applying, $whole), $skipped);
+    }
+
+    /**
+     * A record whose portrait does not show it deleted comes back out of the bin. Finding it there
+     * and then declining to bring it back would make the search that reached past the soft-delete
+     * scope pointless — and an entry written before the deletion is exactly the one a caller
+     * points at to undo one.
+     *
+     * Only when the whole state was asked for. A caller who named the fields named what they
+     * wanted, and reviving the record was not one of them.
+     *
+     * @param  array<string, mixed>  $state
+     * @param  array<string, mixed>  $applying
+     * @return array<string, mixed>
+     */
+    private function revived(Model $subject, array $state, array $applying, bool $whole): array
+    {
+        $column = method_exists($subject, 'getDeletedAtColumn') ? $subject->getDeletedAtColumn() : null;
+
+        if (! $whole || ! is_string($column) || $subject->getAttribute($column) === null || ($state[$column] ?? null) !== null) {
+            return $applying;
+        }
+
+        return [...$applying, $column => null];
     }
 
     /**

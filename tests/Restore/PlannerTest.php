@@ -108,11 +108,10 @@ it('never writes back a masked value or a digest', function (): void {
 
 it('decrypts a field the entry stored under a key that is still on the keyring', function (): void {
     $record = EncryptedSubject::query()->create(['secret' => 'now']);
+    $opening = $record->audits()->firstOrFail();
     $record->update(['secret' => 'later']);
 
-    $entry = $record->audits()->reorder()->orderByDesc('id')->firstOrFail();
-
-    expect(planner()->for($entry, $record)->applying)->toBe(['secret' => 'now']);
+    expect(planner()->for($opening, $record)->applying)->toBe(['secret' => 'now']);
 });
 
 it('skips a field whose key left the keyring rather than writing back the ciphertext', function (): void {

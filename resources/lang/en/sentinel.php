@@ -44,6 +44,7 @@ return [
         'detached' => 'detached',
         'synced' => 'synced',
         'transition' => 'moved',
+        'restore' => 'restored the state of',
         'rekeyed' => 're-keyed',
         'custom' => 'recorded',
         'login' => 'signed in',

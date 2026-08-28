@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Capture;
 
+use Closure;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Events\AuditWriteFailed;
@@ -46,8 +47,14 @@ final readonly class Recorder
      * The correlation is sealed here and not in a pipeline stage, because the pipeline is not
      * guaranteed to run while the scope is still open — a Sentinel::transaction() inside a
      * DB::transaction() closes before the commit that releases the entries.
+     *
+     * The return value is what was written by the time the call came back, which inside a
+     * transaction is nothing. A caller that opened that transaction itself and can wait for its
+     * commit asks with $settled instead, and is handed the entry on whichever path wrote it.
+     *
+     * @param  Closure(Audit): void|null  $settled
      */
-    public function record(AuditData $audit, ?Model $subject = null, ?Reference $actor = null): ?Audit
+    public function record(AuditData $audit, ?Model $subject = null, ?Reference $actor = null, ?Closure $settled = null): ?Audit
     {
         $this->transactions->stamp($audit);
 
@@ -59,7 +66,7 @@ final readonly class Recorder
 
         $this->attribute($transformed, $actor);
 
-        return $this->settle($transformed, $subject);
+        return $this->settle($transformed, $subject, $settled);
     }
 
     /**
@@ -97,21 +104,33 @@ final readonly class Recorder
      * savepoint, and runs it immediately where a test harness has replaced the manager — which
      * is why the written entry is read back out rather than assumed absent.
      */
-    private function settle(AuditData $audit, ?Model $subject): ?Audit
+    private function settle(AuditData $audit, ?Model $subject, ?Closure $settled): ?Audit
     {
         $connection = $this->connection($subject);
 
         if (! $this->config->afterCommit() || $connection->transactionLevel() === 0) {
-            return $this->written($this->ledger->write($audit));
+            return $this->announce($this->written($this->ledger->write($audit)), $settled);
         }
 
         $written = null;
 
-        $connection->afterCommit(function () use ($audit, &$written): void {
-            $written = $this->deferred($audit);
+        $connection->afterCommit(function () use ($audit, $settled, &$written): void {
+            $written = $this->announce($this->deferred($audit), $settled);
         });
 
         return $written;
+    }
+
+    /**
+     * @param  Closure(Audit): void|null  $settled
+     */
+    private function announce(?Audit $audit, ?Closure $settled): ?Audit
+    {
+        if ($audit instanceof Audit && $settled instanceof Closure) {
+            $settled($audit);
+        }
+
+        return $audit;
     }
 
     /**

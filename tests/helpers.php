@@ -51,6 +51,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use RuntimeException;
 use SplFileInfo;
 
 /**
@@ -598,6 +599,20 @@ function reread(Audit $audit): Audit
     $fresh = Audit::query()->findOrFail($audit->id);
 
     return $fresh;
+}
+
+/**
+ * A model that throws on its way to the row. It is where a restoration can fail after it has
+ * decided everything and before anything is written down, which is the moment the transaction
+ * around it exists for.
+ *
+ * @param  class-string<Model>  $model
+ */
+function refuseToSave(string $model): void
+{
+    app(Dispatcher::class)->listen('eloquent.saving: '.$model, static function (): void {
+        throw new RuntimeException('the record refused the write');
+    });
 }
 
 function planner(): Planner

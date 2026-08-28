@@ -16,6 +16,8 @@ use ElPandaPe\Sentinel\Exceptions\ImmutableAuditException;
 use ElPandaPe\Sentinel\Integrity\Verifier;
 use ElPandaPe\Sentinel\Ledger\ChangedFieldPredicate;
 use ElPandaPe\Sentinel\Query\Comparison;
+use ElPandaPe\Sentinel\Restore\Restorer;
+use ElPandaPe\Sentinel\Restore\RestoreResult;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Database\Eloquent\Attributes\CollectedBy;
@@ -234,6 +236,21 @@ class Audit extends Model
     public function diffFor(string $path): Diff
     {
         return $this->diff()->for($path);
+    }
+
+    /**
+     * Put the record this entry is about back the way this entry found it — all of it, or only
+     * the fields named. The trail is not rewritten: the restoration is a new entry pointing at
+     * this one, and what comes back says what it applied and what it declined to.
+     *
+     * @param  list<string>|null  $fields
+     */
+    public function restore(?array $fields = null): RestoreResult
+    {
+        /** @var Restorer $restorer */
+        $restorer = app(Restorer::class);
+
+        return $restorer->restore($this, $fields);
     }
 
     public function verifyIntegrity(): bool

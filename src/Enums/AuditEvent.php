@@ -15,6 +15,7 @@ enum AuditEvent: string
     case Detached = 'detached';
     case Synced = 'synced';
     case Transition = 'transition';
+    case Restore = 'restore';
     case Rekeyed = 'rekeyed';
     case Custom = 'custom';
 }

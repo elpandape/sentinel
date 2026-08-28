@@ -44,6 +44,7 @@ return [
         'detached' => 'desvinculó',
         'synced' => 'sincronizó',
         'transition' => 'movió',
+        'restore' => 'restauró el estado de',
         'rekeyed' => 'recifró',
         'custom' => 'registró',
         'login' => 'inició sesión',
