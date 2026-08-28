@@ -174,6 +174,10 @@ return [
             'deleted' => 'notice',
             'force_deleted' => 'warning',
             'rekeyed' => 'notice',
+            // Getting in is routine; being refused or shut out is not.
+            'failed' => 'warning',
+            'lockout' => 'critical',
+            'password_reset' => 'notice',
         ],
     ],
 
