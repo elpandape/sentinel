@@ -2,6 +2,39 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.11.1 — The parent side of a relation (2026-08-28)
+
+`v0.11.0` records what happens to a pivot table. A `belongsTo` has none, so when an article changes
+author the only thing Eloquent announces is the article's own update — and two parents lived a
+change of relation that nothing wrote down. This version writes it.
+
+### Added
+
+- **`$auditParents`**, a map of the `belongsTo` relations whose parent gets an entry when this model
+  changes hands, keyed by the relation on the child and naming the collection on the parent. A map
+  and not a list: the entry hangs off the parent, so its line needs the name the parent gives that
+  collection, and a list would have to invent it.
+- **Two entries, not one.** A foreign key that moves leaves a `detached` on the parent it left and
+  an `attached` on the parent it joined. One entry holds one subject, and a hand-over has two.
+- **The line is the one `v0.11.0` froze** — same shape, same projection, same three filters, same
+  `+ / -` render — with the child as the related record and `pivot_before`/`pivot_after` null,
+  because there is no pivot. The `api` in `metadata` is `foreign_key`: there was no method to
+  intercept, the fact is that the column changed.
+- **A parent that has since been deleted still gets its entry**, because the foreign key is the
+  name and nothing has to be read to write it. When the relation points at a column other than the
+  parent's primary key the parent is read once per end, and an end that resolves to nobody is left
+  unsaid.
+- README: *When there is no pivot at all*, inside *Relationship auditing*.
+
+### Changed
+
+- **`Contracts\Auditable` gains `auditParents()`.** See the [upgrade guide](UPGRADE.md).
+- **A declaration that is not a plain `belongsTo` is refused**, by name, rather than half-audited: a
+  `morphTo` moves the type as well as the key, and that is out of scope until after `1.0`.
+
+No migration, no schema change, `payload_version` stays at `1`. A model that declares nothing
+audits exactly as it did before.
+
 ## v0.11.0 — Relationship auditing (2026-08-28)
 
 Eloquent fires **no event** when a pivot table is touched: `attach()` inserts and `detach()` deletes

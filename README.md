@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.11.0-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.11.1-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -20,7 +20,7 @@ the state was before, what it is now — and whether the record itself can be pr
 
 ```json
 "repositories": [{ "type": "vcs", "url": "https://github.com/elpandape/sentinel" }],
-"require": { "elpandape/sentinel": "v0.11.0" }
+"require": { "elpandape/sentinel": "v0.11.1" }
 ```
 
 ```bash
@@ -42,6 +42,7 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.9.0` | The Query API: `Sentinel::audits()`, nine filters, ordering and paging over the ledger contract |
 | `v0.10.0` | Labels, field history, the timeline, comparing two versions, and a readable presenter |
 | `v0.11.0` | Relationship auditing: the six pivot operations, the relation projection, three filters and the `+ / -` render |
+| `v0.11.1` | The parent side of a `belongsTo`: a child that changes hands leaves an entry on the parent it left and the parent it joined |
 
 Everything else is on the roadmap: business transactions, custom events,
 state transitions, restore, advanced verification (checkpoints and signatures), retention and
@@ -56,7 +57,8 @@ that makes "extensible by drivers" a thing you can run rather than a thing this 
 is the one that lets you ask, which a trail you cannot read back is not. `v0.10.0` is the one that
 answers the three questions a trail gets asked most — what happened to this field, what is this
 entry about, and what happened at all — and says them in a sentence a person can read. `v0.11.0`
-is the one that records what Eloquent never announces: a pivot table changing under you.
+is the one that records what Eloquent never announces: a pivot table changing under you. `v0.11.1`
+finishes that thought for the relations that have no pivot at all.
 
 ## Quick start
 
@@ -987,10 +989,54 @@ removing a row there leaves `verifyIntegrity()` untouched. That is the point —
 must not be indistinguishable from tampering. Verification of the projection against the entry, and
 the command to rebuild it, land in `v0.18.0`.
 
-Two more things this version does not do. `whereFieldChanged('members')` finds **nothing**: a field
-is an attribute, a relation is not one, and the field predicate reads a `path` that relation lines
-do not carry. And a `hasMany`/`hasOne` parent whose child changes its foreign key is not audited
-yet — that is a different mechanism and it ships in `v0.11.1`.
+One thing this version does not do: `whereFieldChanged('members')` finds **nothing**. A field is an
+attribute, a relation is not one, and the field predicate reads a `path` that relation lines do not
+carry.
+
+### When there is no pivot at all
+
+A `belongsTo` has no pivot table to wrap. When an article changes author, the only thing Eloquent
+announces is the article's own update — and yet two parents lived a change of relation. Say which
+relations that applies to, on the child:
+
+```php
+class Article extends Model
+{
+    use Auditable;
+
+    protected array $auditParents = ['author' => 'articles'];
+}
+```
+
+The key is the `belongsTo` on this model; the value is the name the **parent** gives that
+collection, because the entry hangs off the parent and its line has to be findable as `articles`.
+
+```php
+$article->update(['author_id' => $grace->id]);
+```
+
+That writes **three** entries: the article's own `updated`, a `detached` on the author it left, and
+an `attached` on the author it joined. Two and not one, because one entry holds one subject and a
+hand-over has two. Both read exactly like a pivot entry — same lines, same projection, same filters,
+same render — with the article as the related record and no pivot on either side, because there is
+none:
+
+```php
+$grace->relationHistory('articles')->whereOperation('attach')->get();
+Sentinel::audits()->whereRelated($article)->get();   // both ends of the hand-over
+```
+
+The three share a `request_id`; correlating them as one business operation arrives in `v0.12.0`.
+
+A parent that has since been deleted still gets its entry: the foreign key **is** the name, so
+nothing has to be read to write it. That changes when the `belongsTo` points at a column other than
+the parent's primary key — then the parent is read once per end, because `subject_id` is a primary
+key wherever it appears, and an end that resolves to nobody is left unsaid.
+
+Declaring nothing keeps the old behaviour exactly. Only `belongsTo` is covered: a `morphTo` moves
+the type as well as the key, so it is refused by name rather than half-audited. And this is about
+the hand-over — creating or deleting the child writes no relation entry, because the child's own
+entry already carries the foreign key.
 
 ## Reading a trail out loud
 

@@ -139,6 +139,7 @@ it('answers relationHistory and the presenter without a line of its own', functi
     expect(linesOf($joined))->toHaveCount(1)
         ->and($this->grace->relationHistory('articles')->whereOperation('attach')->get())->toHaveCount(1)
         ->and($this->ada->relationHistory('articles')->whereOperation('attach')->get())->toBeEmpty()
+        ->and(Sentinel::audits()->whereRelated($this->article)->get())->toHaveCount(2)
         ->and(presenter()->entry($joined))->toContain('· articles')
         ->and(presenter()->entry($joined))->toContain('+ Article #'.$this->article->getKey());
 });
