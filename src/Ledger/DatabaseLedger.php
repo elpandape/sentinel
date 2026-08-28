@@ -12,6 +12,7 @@ use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Integrity\Stream;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Models\AuditTag;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Query\Period;
 use ElPandaPe\Sentinel\Support\AuditCollection;
@@ -25,6 +26,7 @@ final readonly class DatabaseLedger implements Ledger
 
     public function __construct(
         private Audit $model,
+        private AuditTag $labels,
         private Stream $stream,
         private EntryBuilder $builder,
     ) {}
@@ -39,9 +41,17 @@ final readonly class DatabaseLedger implements Ledger
         return new AuditCollection($audits === [] ? [] : $this->chain($audits));
     }
 
+    /**
+     * A secondary destination takes an entry the primary already sealed, labels included: an
+     * entry stored without the labels it arrived with is not the entry that arrived. The
+     * transaction is what makes that an all-or-nothing statement rather than a hope.
+     */
     public function append(Audit $audit): Audit
     {
-        $this->model->newQuery()->insert([$audit->getAttributes()]);
+        $this->model->getConnection()->transaction(function () use ($audit): void {
+            $this->model->newQuery()->insert([$audit->getAttributes()]);
+            $this->label([$audit]);
+        });
 
         $audit->exists = true;
         $audit->wasRecentlyCreated = true;
@@ -122,11 +132,40 @@ final readonly class DatabaseLedger implements Ledger
             }
 
             $this->model->newQuery()->insert($rows);
+            $this->label($written);
 
             ksort($written);
 
             return array_values($written);
         }));
+    }
+
+    /**
+     * Written through the connection the transaction is open on, not through the label model's
+     * own: the audits connection is very often not the application default, and that setting
+     * existing at all is the reason. insertOrIgnore keeps the unique pair from ever reaching the
+     * retry above, which is there for the chain's unique index and would replay a whole sealed
+     * batch for a repeated label.
+     *
+     * Only labels already loaded are written. An entry that arrives without the relation loaded
+     * is an entry that says nothing about its labels, and the alternative — reading them here —
+     * would be a query nobody asked for, issued inside a transaction that is holding a chain.
+     *
+     * @param  array<int, Audit>  $written
+     */
+    private function label(array $written): void
+    {
+        $rows = [];
+
+        foreach ($written as $audit) {
+            foreach ($audit->relationLoaded('tags') ? $audit->tags : [] as $tag) {
+                $rows[] = ['audit_id' => $audit->id, 'tag' => $tag->tag];
+            }
+        }
+
+        if ($rows !== []) {
+            $this->model->getConnection()->table($this->labels->getTable())->insertOrIgnore($rows);
+        }
     }
 
     /**

@@ -8,7 +8,9 @@ use Carbon\CarbonImmutable;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Integrity\Hasher;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Models\AuditTag;
 use ElPandaPe\Sentinel\Support\Config;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Str;
 
 final readonly class EntryBuilder
@@ -65,6 +67,24 @@ final readonly class EntryBuilder
         $audit->hash = $this->hasher->hash($audit);
         $audit->syncOriginal();
 
+        $audit->setRelation('tags', $this->labels($audit, $data));
+
         return $audit;
+    }
+
+    /**
+     * Labels ride the built entry as a loaded relation, never as attributes. That is what keeps
+     * them out of getAttributes() — which is both what the ledger inserts and, through the frozen
+     * column list, what the hash is taken over — while still travelling with the entry to whoever
+     * stores it.
+     *
+     * @return Collection<int, AuditTag>
+     */
+    private function labels(Audit $audit, AuditData $data): Collection
+    {
+        return new Collection(array_map(
+            static fn (string $tag): AuditTag => new AuditTag(['audit_id' => $audit->id, 'tag' => $tag]),
+            $data->tags,
+        ));
     }
 }
