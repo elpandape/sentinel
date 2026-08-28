@@ -27,6 +27,7 @@ use ElPandaPe\Sentinel\Pipeline\Discard;
 use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Presentation\AuditPresenter;
 use ElPandaPe\Sentinel\Query\AuditQuery;
+use ElPandaPe\Sentinel\Restore\Planner;
 use ElPandaPe\Sentinel\Security\Digester;
 use ElPandaPe\Sentinel\Security\Keyring;
 use ElPandaPe\Sentinel\Security\Maskers;
@@ -566,6 +567,45 @@ function auditsOf(Model $subject): AuditCollection
         ->get();
 
     return $audits;
+}
+
+/**
+ * An entry about a record, sealed by the real ledger so its hash is the one the restorer
+ * checks. Writing the row by hand would leave a hash that no longer matches its own payload,
+ * which is the condition one of these tests is about and the last thing the others want.
+ *
+ * @param  array<string, mixed>  $before
+ * @param  array<string, mixed>  $overrides
+ */
+function restorableEntry(Model $subject, array $before, array $overrides = []): Audit
+{
+    return ledger()->write(auditData([
+        'subject_type' => $subject->getMorphClass(),
+        'subject_id' => (string) $subject->getKey(),
+        'event' => 'updated',
+        'before' => $before,
+        ...$overrides,
+    ]));
+}
+
+/**
+ * The entry as the table holds it now. A test that changes a row behind the model's back is
+ * asking what the package does with what is stored, not with what it built.
+ */
+function reread(Audit $audit): Audit
+{
+    /** @var Audit $fresh */
+    $fresh = Audit::query()->findOrFail($audit->id);
+
+    return $fresh;
+}
+
+function planner(): Planner
+{
+    /** @var Planner $planner */
+    $planner = app(Planner::class);
+
+    return $planner;
 }
 
 function verifier(?Ledger $ledger = null): Verifier

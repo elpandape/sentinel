@@ -59,12 +59,12 @@ return [
 
     'restore' => [
         'subject_missing' => 'El registro del que habla este asiento ya no existe, así que no hay nada que restaurar.',
-        'subject_mismatch' => 'Ese registro no es del que habla este asiento.',
         'entry_redacted' => 'Este asiento está redactado: su contenido se destruyó a propósito y no puede devolver nada.',
         'entry_tampered' => 'Este asiento ya no reproduce su propio hash, así que nada de lo que guarda puede escribirse de vuelta.',
         'entry_stateless' => 'Este asiento no guarda ningún estado anterior que devolver.',
         'cancelled' => 'Un listener canceló la restauración.',
         'unknown_field' => 'El registro ya no tiene :key.',
+        'unrecorded_field' => 'Este asiento no registra el campo :key.',
         'identity_field' => 'El campo :key identifica al registro en vez de describir su estado.',
         'redacted_field' => 'El campo :key se guardó enmascarado, y el original ya no está.',
         'hashed_field' => 'El campo :key se guardó como digest, y un digest no se revierte.',
