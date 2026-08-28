@@ -119,6 +119,32 @@ function auditTagsTable(): string
     return $config->table('audit_tags');
 }
 
+function auditRelationsTable(): string
+{
+    /** @var Config $config */
+    $config = app(Config::class);
+
+    return $config->table('audit_relations');
+}
+
+/**
+ * @param  array<string, mixed>  $overrides
+ * @return array<string, mixed>
+ */
+function relationRow(array $overrides = []): array
+{
+    return [
+        'audit_id' => Str::ulid()->toString(),
+        'relation' => 'roles',
+        'operation' => 'attach',
+        'related_type' => 'role',
+        'related_id' => '3',
+        'pivot_before' => null,
+        'pivot_after' => null,
+        ...$overrides,
+    ];
+}
+
 /**
  * @param  array<string, mixed>  $overrides
  * @return array<string, mixed>

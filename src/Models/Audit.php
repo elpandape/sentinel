@@ -71,6 +71,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * @property-read Model|null $actor
  * @property-read Model|null $impersonator
  * @property-read Collection<int, AuditTag> $tags
+ * @property-read Collection<int, AuditRelation> $relations
  */
 #[CollectedBy(AuditCollection::class)]
 class Audit extends Model
@@ -90,6 +91,19 @@ class Audit extends Model
     public function tags(): HasMany
     {
         return $this->hasMany(AuditTag::class, 'audit_id')->orderBy('tag');
+    }
+
+    /**
+     * The projection of this entry's relation lines, in the order the entry canonicalised them.
+     *
+     * @return HasMany<AuditRelation, $this>
+     */
+    public function relations(): HasMany
+    {
+        return $this->hasMany(AuditRelation::class, 'audit_id')
+            ->orderBy('relation')
+            ->orderBy('related_type')
+            ->orderBy('related_id');
     }
 
     /**
