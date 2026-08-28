@@ -20,9 +20,9 @@ use ElPandaPe\Sentinel\Pipeline\Discard;
 use ElPandaPe\Sentinel\Security\Keyring;
 use ElPandaPe\Sentinel\Security\Maskers;
 use ElPandaPe\Sentinel\Support\Config;
+use ElPandaPe\Sentinel\Support\PackageMigrations;
 use ElPandaPe\Sentinel\Support\Policies;
 use ElPandaPe\Sentinel\Support\PolicyRegistry;
-use ElPandaPe\Sentinel\Support\PublishedMigration;
 use Illuminate\Console\Events\CommandFinished;
 use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Console\Events\ScheduledTaskStarting;
@@ -79,9 +79,7 @@ final class SentinelServiceProvider extends ServiceProvider
 
         $this->latchRuntimeSignals();
 
-        if (! $this->publishedMigration()->exists()) {
-            $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
-        }
+        $this->loadMigrationsFrom($this->migrations()->unpublished());
 
         if ($this->app->runningInConsole()) {
             $this->publishes([
@@ -167,11 +165,11 @@ final class SentinelServiceProvider extends ServiceProvider
         );
     }
 
-    private function publishedMigration(): PublishedMigration
+    private function migrations(): PackageMigrations
     {
-        return new PublishedMigration(
+        return new PackageMigrations(
+            __DIR__.'/../database/migrations',
             $this->app->databasePath('migrations'),
-            'create_sentinel_audits_table',
         );
     }
 }

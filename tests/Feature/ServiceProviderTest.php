@@ -66,13 +66,13 @@ it('publishes the configuration, the translations and the migration', function (
         ->and(ServiceProvider::pathsToPublish(SentinelServiceProvider::class, 'sentinel-migrations'))->not->toBeEmpty();
 });
 
-it('loads the package migration when the application published none', function (): void {
+it('loads every package migration when the application published none', function (): void {
     /** @var Migrator $migrator */
     $migrator = app('migrator');
 
     $paths = array_map(static fn (string $path): string => (string) realpath($path), $migrator->paths());
 
-    expect($paths)->toContain(dirname(__DIR__, 2).'/database/migrations');
+    expect($paths)->toContain(...glob(dirname(__DIR__, 2).'/database/migrations/*_*.php') ?: []);
 });
 
 it('resolves the package audit model when nothing overrides it', function (): void {
@@ -86,7 +86,7 @@ it('resolves the audit model the configuration names', function (): void {
     expect(app(Audit::class))->toBeInstanceOf(CustomAudit::class);
 });
 
-it('skips the package migration when the application published a copy', function (): void {
+it('withholds only the migration the application published a copy of', function (): void {
     $directory = sys_get_temp_dir().'/sentinel-'.uniqid();
     mkdir($directory.'/migrations', recursive: true);
     touch($directory.'/migrations/2030_01_01_000000_create_sentinel_audits_table.php');
@@ -113,7 +113,7 @@ it('skips the package migration when the application published a copy', function
     rmdir($directory.'/migrations');
     rmdir($directory);
 
-    expect($paths)->not->toContain(dirname(__DIR__, 2).'/database/migrations');
+    expect($paths)->not->toContain(...glob(dirname(__DIR__, 2).'/database/migrations/*_create_sentinel_audits_table.php') ?: []);
 });
 
 it('ships the migration under the name the guard looks for', function (): void {

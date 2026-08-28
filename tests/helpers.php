@@ -608,3 +608,38 @@ function contextEngine(): ContextEngine
 
     return $engine;
 }
+
+/**
+ * @param  list<string>  $package
+ * @param  list<string>  $published
+ * @return array{string, string, string}
+ */
+function migrationDirectories(array $package = [], array $published = []): array
+{
+    $root = sys_get_temp_dir().'/sentinel-'.uniqid();
+
+    foreach (['package' => $package, 'published' => $published] as $directory => $files) {
+        mkdir("{$root}/{$directory}", recursive: true);
+
+        foreach ($files as $file) {
+            touch("{$root}/{$directory}/{$file}");
+        }
+    }
+
+    return [$root, "{$root}/package", "{$root}/published"];
+}
+
+function discardMigrationDirectories(string $root): void
+{
+    foreach (['package', 'published'] as $directory) {
+        $files = glob("{$root}/{$directory}/*.php");
+
+        foreach (is_array($files) ? $files : [] as $file) {
+            unlink($file);
+        }
+
+        rmdir("{$root}/{$directory}");
+    }
+
+    rmdir($root);
+}
