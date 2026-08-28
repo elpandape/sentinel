@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Ledger;
 
 use Closure;
-use ElPandaPe\Sentinel\Capture\RelationCapture;
 use ElPandaPe\Sentinel\Contracts\DeclaresFilters;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Contracts\LedgerStream;
@@ -278,6 +277,10 @@ final readonly class DatabaseLedger implements DeclaresFilters, Ledger
     }
 
     /**
+     * Which entries have lines is asked of the lines, not of the entry's type: a restoration that
+     * put a relation back carries the same lines under a type of its own, and asking whoever
+     * filters by relation to know that would make the projection a list of producers.
+     *
      * The indexable copy of what the entry already carries. Unlike the labels, these are read
      * back out of the entry rather than off a loaded relation: the lines are inside the canonical
      * payload, so an entry that has them cannot arrive without them, and deriving the rows here is
@@ -291,15 +294,11 @@ final readonly class DatabaseLedger implements DeclaresFilters, Ledger
         $rows = [];
 
         foreach ($written as $audit) {
-            if ($audit->audit_type !== RelationCapture::AUDIT_TYPE) {
-                continue;
-            }
-
             /** @var array<array-key, mixed> $lines */
             $lines = $audit->getAttribute('changes') ?? [];
 
             foreach ($lines as $line) {
-                if (is_array($line)) {
+                if (is_array($line) && array_key_exists('relation', $line) && array_key_exists('operation', $line)) {
                     $rows[] = $this->row($audit->id, $line);
                 }
             }

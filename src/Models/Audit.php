@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Models;
 
 use Carbon\CarbonImmutable;
-use ElPandaPe\Sentinel\Capture\RelationCapture;
 use ElPandaPe\Sentinel\Data\RelationLine;
 use ElPandaPe\Sentinel\Database\Factories\AuditFactory;
 use ElPandaPe\Sentinel\Diff\Diff;
@@ -161,7 +160,7 @@ class Audit extends Model
         $changes = $this->getAttribute('changes');
 
         if ($changes !== null) {
-            return $this->audit_type === RelationCapture::AUDIT_TYPE
+            return $this->carriesRelationLines($changes)
                 ? RelationLine::asDiff($changes)
                 : Diff::fromEntries($changes);
         }
@@ -251,6 +250,18 @@ class Audit extends Model
         $restorer = app(Restorer::class);
 
         return $restorer->restore($this, $fields);
+    }
+
+    /**
+     * Put a relation back the way this entry found it, from the lines it recorded: what it
+     * attached stays attached with the pivot it left, what it detached stays detached.
+     */
+    public function restoreRelationship(string $relation): RestoreResult
+    {
+        /** @var Restorer $restorer */
+        $restorer = app(Restorer::class);
+
+        return $restorer->restoreRelationship($this, $relation);
     }
 
     public function verifyIntegrity(): bool
@@ -365,11 +376,26 @@ class Audit extends Model
             return null;
         }
 
-        if ($this->audit_type !== RelationCapture::AUDIT_TYPE) {
+        if (! $this->carriesRelationLines($changes)) {
             return $this->diff()->toArray();
         }
 
         return array_values(array_filter($changes, is_array(...)));
+    }
+
+    /**
+     * Whether what this entry holds is relation lines rather than diff entries, asked of the
+     * lines themselves and not of the entry's type. A relation line says relation and operation
+     * where a diff entry says path and op, so the two are never mistakable — and a restoration
+     * that put a relation back is an entry of a different type carrying the same lines.
+     *
+     * @param  array<array-key, mixed>  $changes
+     */
+    private function carriesRelationLines(array $changes): bool
+    {
+        $first = reset($changes);
+
+        return is_array($first) && array_key_exists('relation', $first) && array_key_exists('operation', $first);
     }
 
     /**

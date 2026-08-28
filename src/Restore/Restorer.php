@@ -7,9 +7,11 @@ namespace ElPandaPe\Sentinel\Restore;
 use Carbon\CarbonImmutable;
 use ElPandaPe\Sentinel\Capture\Recorder;
 use ElPandaPe\Sentinel\Data\AuditData;
+use ElPandaPe\Sentinel\Data\RelationLine;
 use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
 use ElPandaPe\Sentinel\Enums\Omission;
+use ElPandaPe\Sentinel\Enums\RelationOperation;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Events\AuditRestored;
 use ElPandaPe\Sentinel\Events\AuditRestoring;
@@ -20,6 +22,8 @@ use ElPandaPe\Sentinel\Support\AuditPolicy;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\Pivot;
 
 /**
  * Putting a record back the way an entry found it, as one more entry rather than an erasure. The
@@ -43,6 +47,7 @@ final readonly class Restorer
         private Sentinel $sentinel,
         private Recorder $recorder,
         private Planner $planner,
+        private RelationPlanner $relations,
         private SnapshotBuilder $snapshots,
         private Config $config,
         private Dispatcher $events,
@@ -83,6 +88,40 @@ final readonly class Restorer
     }
 
     /**
+     * The relation as this entry portrays it: what it attached stays attached with the pivot it
+     * left behind, what it detached stays detached. One entry again, however many pivot rows it
+     * takes — the operation was one, the same way a sync() that touched three of them was.
+     */
+    public function restoreRelationship(Audit $audit, string $name): RestoreResult
+    {
+        $subject = Subject::of($audit);
+
+        if (! $subject instanceof Model) {
+            return RestoreResult::refused(Omission::SubjectMissing);
+        }
+
+        $plan = $this->relations->for($audit, $subject, $name);
+
+        if ($plan->refused instanceof Omission) {
+            return RestoreResult::refused($plan->refused);
+        }
+
+        if ($plan->applying === []) {
+            return RestoreResult::of([], $plan->skipped);
+        }
+
+        if ($this->events->until(new AuditRestoring($audit, $subject, $plan->keys(), $name)) === false) {
+            return RestoreResult::refused(Omission::Cancelled);
+        }
+
+        $result = $this->reattach($audit, $subject, $plan, $name);
+
+        $this->events->dispatch(new AuditRestored($audit, $subject, $result));
+
+        return $result;
+    }
+
+    /**
      * The whole restoration is one database transaction: either the applicable set goes back and
      * the ledger settles the entry, or the record is untouched. The entry is asked for by callback
      * because the ledger may be waiting for that same commit — with the deferral on, which is the
@@ -109,6 +148,84 @@ final readonly class Restorer
         });
 
         return RestoreResult::of($plan->keys(), $plan->skipped, $entry);
+    }
+
+    private function reattach(Audit $audit, Model $subject, Plan $plan, string $name): RestoreResult
+    {
+        $entry = null;
+
+        $subject->getConnection()->transaction(function () use ($audit, $subject, $plan, $name, &$entry): void {
+            $lines = [];
+
+            $this->sentinel->withoutAuditing(function () use ($subject, $plan, $name, &$lines): void {
+                $relation = $subject->{$name}();
+
+                if ($relation instanceof BelongsToMany) {
+                    $lines = $this->rewire($relation, $name, $plan);
+                }
+            });
+
+            $this->recorder->record(
+                $this->relationEntry($audit, $subject, $plan, $lines),
+                $subject,
+                settled: static function (Audit $written) use (&$entry): void {
+                    $entry = $written;
+                },
+            );
+        });
+
+        return RestoreResult::of($plan->keys(), $plan->skipped, $entry);
+    }
+
+    /**
+     * @param  BelongsToMany<Model, Model, Pivot>  $relation
+     * @return list<RelationLine>
+     */
+    private function rewire(BelongsToMany $relation, string $name, Plan $plan): array
+    {
+        $lines = [];
+
+        foreach ($plan->applying as $step) {
+            /** @var array{operation: string, id: string, pivot: array<string, mixed>, was: array<string, mixed>|null} $step */
+            $operation = RelationOperation::from($step['operation']);
+
+            match ($operation) {
+                RelationOperation::Attach => $relation->attach($step['id'], $step['pivot']),
+                RelationOperation::Detach => $relation->detach($step['id']),
+                RelationOperation::Update => $relation->updateExistingPivot($step['id'], $step['pivot']),
+            };
+
+            $lines[] = new RelationLine(
+                $name,
+                $operation,
+                $relation->getRelated()->getMorphClass(),
+                $step['id'],
+                $step['was'],
+                $this->relations->pivot($relation, $step['id']),
+            );
+        }
+
+        return $lines;
+    }
+
+    /**
+     * @param  list<RelationLine>  $lines
+     */
+    private function relationEntry(Audit $audit, Model $subject, Plan $plan, array $lines): AuditData
+    {
+        $key = $subject->getKey();
+
+        return new AuditData(
+            audit_type: self::AUDIT_TYPE,
+            event: AuditEvent::Restore->value,
+            severity: $this->severity($subject),
+            occurred_at: CarbonImmutable::now(),
+            subject_type: $subject->getMorphClass(),
+            subject_id: is_string($key) || is_int($key) ? (string) $key : null,
+            changes: RelationLine::canonical($lines),
+            metadata: ['restore' => $this->summary($plan)],
+            source_audit_id: $audit->id,
+        );
     }
 
     /**
