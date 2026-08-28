@@ -2,6 +2,81 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.13.0 — State transitions (2026-08-28)
+
+`draft → pending → approved → paid` is the question a trail gets asked about a document, and
+answering it from a pile of `updated` entries meant mining every diff for one column. This version
+makes a state change an entry of its own kind, with where it came from, where it went, why, and how
+long the record had been where it was.
+
+### Added
+
+- **`Sentinel::transition($invoice, from: Status::Pending, to: Status::Approved)`**, with `on()`,
+  `reason()`, `actor()`, `severity()`, `tags()`, `metadata()` and an explicit `record()` terminal.
+  `audit_type = transition`, through the same pipeline and the same ledger as everything else.
+- **`$auditTransitions = ['status']`**: an `update` that moves a declared column is written as a
+  transition instead of the generic model entry. No call site changes, and a model that declares
+  nothing audits exactly as before.
+- **A backed enum, a pure enum and a plain string reach the entry as the same scalar**, read the way
+  the snapshot builder reads them, so a transition and the snapshot of the same column never
+  disagree.
+- **The two states are filed as a diff line** under the column that moved, so
+  `whereFieldChanged('status')` finds them with no new filter and no new index. The column is named
+  by `->on()`, inferred from `$auditTransitions` when it declares exactly one, or taken from the new
+  `transitions.attribute` config key, which ships as `status`.
+- **`Contracts\DeclaresTransitions`**, optional: a model that implements it can refuse a move it
+  does not make. The refusal raises `Transitions\IllegalTransition` **before the save**, so neither
+  the row nor the trail moves — refusing after the update was announced would leave the record
+  holding a state the trail says never happened. Sentinel asks; it does not execute.
+- **`Sentinel::transitions()`**, the lifeline: every state a record moved through, in order, with
+  `from`, `to`, `reason`, `actor`, `occurredAt` and how long it had been in the state it just left.
+  It composes `for()`, `by()`, `between()`, `latest()` and `take()`, and is always ordered by the
+  clock of the fact.
+- **`whereType()` and `Filter::Type`** on the query surface: the kind of entry, which no filter
+  covered. An application is free to call its own stated fact `updated`, and only the type tells it
+  apart from a model change. It rides the `(audit_type, created_at)` index the table already had.
+- **The presenter and the timeline render a transition as `from → to`**, in both languages.
+- README: *State transitions*.
+
+### Changed
+
+- **`Contracts\Auditable` gains `auditTransitions()`.** See the [upgrade guide](UPGRADE.md).
+- **A state column has to be readable.** A column in `$auditTransitions` that is also excluded,
+  redacted, encrypted, hashed, or left out of a declared `$auditInclude` raises a
+  `ConfigurationException` the first time the model is audited. A lifeline the entry cannot show is
+  not a lifeline.
+
+### Notes
+
+- **One save is one entry.** An `update` that moves the state and three other columns writes a
+  single transition carrying the whole diff. Every prior art collapses an eloquent event to one
+  record for the same reason, and splitting it would invent a second fact where there was one.
+- **A record that had no state and acquires one is a transition from nothing**, not a non-event —
+  otherwise a lifeline would always be missing its first step.
+- **A column holding a structure is left to be the ordinary edit it is.** Nothing a person calls
+  approved is an array.
+- **The elapsed time is computed on read and stored nowhere.** No prior art persists it either: it
+  is a fact about two entries rather than about either of them, and an entry carrying it would be
+  wrong the moment an earlier one was archived away. It is computed in PHP rather than with a
+  window function, because a driver that is not SQL has to answer the same question.
+- **There is no `paginate()` on a lifeline**: the interval of a page's first row is the distance to
+  an entry the page does not hold. `->entries()` drops back to the query underneath.
+- **Transitions only exist from the moment you declare them.** Adopting `$auditTransitions` does not
+  rewrite the `updated` entries that already described state changes, so a lifeline that starts late
+  is exactly that and not a gap in the chain.
+- **Cost.** Declaring a state column adds nothing measurable to an audited update that does not
+  touch it (+0.3% and +0.8% over two runs). An update written as a transition costs +5.4% and +6.5%
+  over the same update written as a change. A transition stated outright costs about 70% of an
+  audited update: it carries no snapshot pair and no diff to compute.
+
+No migration, no schema change, `payload_version` stays at `1`.
+
+### Upgrade notes
+
+`Contracts\Auditable` gains one method. Nothing to do if your models use the `Concerns\Auditable`
+trait. If you implement the interface by hand, add `auditTransitions(): array` returning `[]`;
+[UPGRADE.md](UPGRADE.md) has the snippet. Nothing else changes and there is no migration.
+
 ## v0.12.1 — Custom events and authentication events (2026-08-28)
 
 `v0.12.0` gave a business operation a name. This one stops "auditable" from meaning "a model

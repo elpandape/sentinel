@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.12.1-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.13.0-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -45,9 +45,10 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.11.1` | The parent side of a `belongsTo`: a child that changes hands leaves an entry on the parent it left and the parent it joined |
 | `v0.12.0` | Business transactions: `Sentinel::transaction()`, the `sentinel_transactions` header, and entries that wait for the commit |
 | `v0.12.1` | Custom events and authentication events: `Sentinel::event()` and an opt-in subscriber over the five auth events |
+| `v0.13.0` | State transitions: `Sentinel::transition()`, `$auditTransitions`, an optional state machine, `whereType()` and the lifeline with time spent in each state |
 
-Everything else is on the roadmap: state transitions, restore, advanced verification (checkpoints
-and signatures), retention and compliance, performance modes and distributed tracing.
+Everything else is on the roadmap: restore, advanced verification (checkpoints and signatures),
+retention and compliance, performance modes and distributed tracing.
 
 `v0.4.0` is the version that starts auditing: a model with the trait writes its own chained entries.
 `v0.5.0` is the one that answers what changed, instead of leaving you two states to compare.
@@ -63,7 +64,9 @@ finishes that thought for the relations that have no pivot at all. `v0.12.0` is 
 the trail from being a pile of entries that happen to share a request: an operation gets a name, and
 its entries stop existing when the transaction that produced them does not. `v0.12.1` is the one
 that stops "auditable" from meaning "a model changed" — a fact you state and a login you did not
-are entries like any other.
+are entries like any other. `v0.13.0` is the one that stops a document's lifeline from being
+something you reconstruct: `draft → pending → approved → paid` is a read, with how long it spent
+in each.
 
 ## Quick start
 
@@ -651,6 +654,7 @@ cannot be narrowed behind your back.
 | `for()` / `forModel()` | `subject_type`, `subject_id` | `(subject_type, subject_id, id)` | none — the subject's own entries are sorted |
 | `by()` / `byActor()` | `actor_type`, `actor_id` | `(actor_type, actor_id, id)` | none — the actor's own entries are sorted |
 | `whereEvent()` | `event` | `(event)` | none — see below |
+| `whereType()` | `audit_type` | `(audit_type, created_at)` | the same index |
 | `whereSeverity()` | `severity` | `(severity, created_at)` | the same index |
 | `forTenant()` | `tenant_id` | `(tenant_id, created_at)` | the same index |
 | `inTransaction()` | `transaction_id` | `(transaction_id)` | none — one transaction is sorted |
@@ -1212,6 +1216,142 @@ redacting afterwards.
 `Lockout` arrives with no guard and no user — the framework hands it a request and nothing else —
 so its entry has no actor and no `metadata`. Everything identifying about the attempt that is not a
 credential is already in the context.
+
+## State transitions
+
+`draft → pending → approved → paid` is the question a trail gets asked about a document, and
+answering it from a pile of `updated` entries means mining every diff for one column. A state
+change is an entry of its own kind instead — `audit_type = transition` — with where it came from,
+where it went, why, and how long the record had been where it was.
+
+Two ways in. State it outright:
+
+```php
+Sentinel::transition($invoice, from: Status::Pending, to: Status::Approved)
+    ->reason('Budget confirmed')
+    ->actor($user)
+    ->record();
+```
+
+Or let the model declare which column is its lifeline, and every `update` that moves it is written
+as a transition instead of a generic change:
+
+```php
+class Invoice extends Model
+{
+    use Auditable;
+
+    protected array $auditTransitions = ['status'];
+}
+
+$invoice->update(['status' => 'approved']);   // audit_type = transition
+$invoice->update(['total' => 90_00]);         // audit_type = model, event = updated
+```
+
+`record()` is the terminal and nothing is written until you call it, for the same reason
+[`Sentinel::event()`](#custom-events) works that way.
+
+- **`from` and `to` take enums or strings**, and a backed enum, a pure enum and a plain string all
+  reach the entry as the same scalar — read exactly the way [snapshots](#snapshots--diffs) read
+  them, so a transition and the snapshot of the same column never disagree.
+- **The two states are filed as a diff line** under the column that moved, so
+  `whereFieldChanged('status')` finds a transition like any other change to that column, with no
+  new index.
+- **The column is named** by `->on('phase')`, or inferred from `$auditTransitions` when it declares
+  exactly one, or taken from `transitions.attribute` in the config, which ships as `status`.
+- **`reason` travels in `metadata`**, under a `transition` key alongside the column, so your own
+  `->metadata(['reason' => …])` stays yours.
+- **One save is one entry.** An `update` that moves the state *and* three other columns writes a
+  single transition carrying the whole diff. Splitting it would invent a second fact where there
+  was one.
+- **Setting the column to the value it already had writes nothing at all**, the way any update that
+  changed nothing does.
+- **A record that had no state** and acquires one is a transition from nothing, not a non-event.
+
+### The state column has to be readable
+
+A column named in `$auditTransitions` cannot also be in `$auditExclude`, `$auditRedact`,
+`$auditEncrypt` or `$auditHash`, nor left out of a declared `$auditInclude`. A lifeline the entry
+cannot show is not a lifeline, and the combination raises a `ConfigurationException` the first time
+the model is audited rather than leaving you to discover it months later in a row of asterisks.
+
+### Refusing a move the model does not make
+
+Optional, and off unless the model asks for it. Implement `DeclaresTransitions` and Sentinel will
+refuse to record a jump that never should have happened:
+
+```php
+use ElPandaPe\Sentinel\Contracts\DeclaresTransitions;
+
+class Invoice extends Model implements DeclaresTransitions
+{
+    use Auditable;
+
+    protected array $auditTransitions = ['status'];
+
+    public function allowsTransition(string $attribute, bool|float|int|string|null $from, bool|float|int|string|null $to): bool
+    {
+        return in_array([$from, $to], [['draft', 'pending'], ['pending', 'approved']], true);
+    }
+}
+
+$invoice->update(['status' => 'paid']);   // IllegalTransition — and the row is not written either
+```
+
+The refusal happens **before the save**, not after it. By the time Eloquent announces an update the
+row is already written, so refusing there would leave the record holding a state the trail says
+never happened. Here the `save()` itself is abandoned, and nothing reaches the ledger.
+
+Sentinel asks; it does not execute. It will not move your model between states, and a model that
+declares no machine may move however it likes — this is an audit engine, not a workflow engine. If
+you already use a state machine package, one method delegating to it is the whole adapter.
+
+### Reading the lifeline
+
+```php
+$lifeline = Sentinel::transitions()->for($invoice)->get();
+
+foreach ($lifeline as $step) {
+    $step->from;        // 'pending'
+    $step->to;          // 'approved'
+    $step->reason;      // 'Budget confirmed', or null
+    $step->actor;       // a Reference, or null
+    $step->occurredAt;  // when it happened
+    $step->since;       // how long it had been in the state it just left, or null for the first
+    $step->entry;       // the Audit itself
+}
+```
+
+It composes `for()`, `by()`, `between()`, `latest()` and `take()`, and it is **always ordered by the
+clock of the fact**: the two clocks agree while writing is synchronous and come apart the moment it
+is not, and only the first says how long something lasted. Asking for the newest first reverses the
+reading, not the arithmetic — the interval still points backwards in time.
+
+The elapsed time is computed on read and stored nowhere. It is a fact about two entries rather than
+about either of them, and an entry carrying it would be wrong the moment an earlier one was
+archived away.
+
+There is no `paginate()` on a lifeline: the interval of a page's first row is the distance to an
+entry the page does not hold. `->entries()` drops back to the query underneath, which pages like
+any other read.
+
+### Transitions only exist from the moment you declare them
+
+Adopting `$auditTransitions` does not rewrite the `updated` entries that already described state
+changes. `Sentinel::transitions()` sees the part of the history that came after the adoption, and
+a lifeline that starts late is exactly that — not a gap in the chain.
+
+The trail can also be narrowed by the kind of entry directly, which is what `Sentinel::transitions()`
+does underneath:
+
+```php
+Sentinel::audits()->whereType('transition')->for($invoice)->paginate(20);
+```
+
+`whereType()` is not the same question as `whereEvent()`: an application is free to call its own
+stated fact `updated`, and only the type tells that apart from a model change. It rides the
+`(audit_type, created_at)` index the table has carried since it was created. Like every filter
+published after `v0.9.0`, a driver that does not declare it refuses it rather than dropping it.
 
 ## Reading a trail out loud
 
