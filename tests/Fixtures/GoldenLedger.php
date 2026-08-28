@@ -173,6 +173,31 @@ final class GoldenLedger
                 '{"actor_id":"1","actor_type":"user","affected_rows":null,"after":null,"audit_type":"model","before":null,"changes":[{"new":"sent","old":"draft","op":"replace","path":"/status"}],"context":{"environment":"production","hostname":"node-1","ip":"203.0.113.7","method":"PATCH","route":"invoices.update","session_id":"ULoRcHqYZzGeMjTqFvHDvLPuAeJhTsYP","url":"https://example.test/api/invoices/500","user_agent":"Sentinel/1.0"},"criteria":null,"encryption":null,"event":"updated","id":"01JGOLDEN000000000000000F6","impersonator_id":"7","impersonator_type":"user","metadata":null,"occurred_at":"2026-08-26 10:00:00.000000","request_id":"01JREQUEST00000000000000R1","severity":"info","source":"api","source_audit_id":null,"span_id":"00f067aa0ba902b7","subject_id":"500","subject_type":"subject","tenant_id":"acme","trace_id":"4bf92f3577b34da6a3ce929d0e0e4736","transaction_id":null,"version":null}',
                 '2946fa2e8f0235870977c3dfd9533f8c895c1470fedecf30f4427f88236ab176',
             ],
+            'a relation entry, frozen with the lines inside its payload' => [
+                [
+                    'id' => '01JGOLDEN000000000000000R1',
+                    'stream' => 'global',
+                    'sequence' => 7,
+                    'audit_type' => 'relation',
+                    'event' => 'synced',
+                    'severity' => 'info',
+                    'source' => 'http',
+                    'subject_type' => 'team',
+                    'subject_id' => '15',
+                    'context' => [],
+                    'metadata' => ['api' => 'sync'],
+                    'changes' => [
+                        ['relation' => 'roles', 'operation' => 'attach', 'related_type' => 'role', 'related_id' => '3', 'pivot_before' => null, 'pivot_after' => []],
+                        ['relation' => 'roles', 'operation' => 'detach', 'related_type' => 'role', 'related_id' => '7', 'pivot_before' => ['expires_at' => '2026-01-01'], 'pivot_after' => null],
+                    ],
+                    'payload_version' => 1,
+                    'algorithm' => 'sha256',
+                    'previous_hash' => '2946fa2e8f0235870977c3dfd9533f8c895c1470fedecf30f4427f88236ab176',
+                    'occurred_at' => '2026-08-26 10:00:00.000000',
+                ],
+                '{"actor_id":null,"actor_type":null,"affected_rows":null,"after":null,"audit_type":"relation","before":null,"changes":[{"operation":"attach","pivot_after":[],"pivot_before":null,"related_id":"3","related_type":"role","relation":"roles"},{"operation":"detach","pivot_after":null,"pivot_before":{"expires_at":"2026-01-01"},"related_id":"7","related_type":"role","relation":"roles"}],"context":[],"criteria":null,"encryption":null,"event":"synced","id":"01JGOLDEN000000000000000R1","impersonator_id":null,"impersonator_type":null,"metadata":{"api":"sync"},"occurred_at":"2026-08-26 10:00:00.000000","request_id":null,"severity":"info","source":"http","source_audit_id":null,"span_id":null,"subject_id":"15","subject_type":"team","tenant_id":null,"trace_id":null,"transaction_id":null,"version":null}',
+                '099857d2b5a8b0b46adccb73dd6e743b7f03553b97dc81d1db21acc4899b34f7',
+            ],
         ];
     }
 }

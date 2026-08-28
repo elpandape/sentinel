@@ -8,6 +8,7 @@ use ElPandaPe\Sentinel\Facades\Sentinel;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use Illuminate\Support\Facades\DB;
 
+use function ElPandaPe\Sentinel\Tests\auditRelationsTable;
 use function ElPandaPe\Sentinel\Tests\auditTagsTable;
 use function ElPandaPe\Sentinel\Tests\planFor;
 use function ElPandaPe\Sentinel\Tests\reachesByIndex;
@@ -123,4 +124,21 @@ it('reaches no index at all for a version, which is why it is a refiner', functi
     $plan = planFor(Sentinel::audits()->whereVersion(3)->take(AuditQuery::DEFAULT_LIMIT));
 
     expect(readsAnIndex($plan))->toBeFalse($plan);
+});
+
+/**
+ * The same question the label index answers, asked of the relation projection: did the engine seek
+ * into it, or walk it. Which of its three indexes answered is the planner's business and moves with
+ * the engine's version, so what is asserted is the seek — the lesson v0.10.1 was published for.
+ */
+it('reaches the relation projection through an index for a relation worth narrowing by', function (): void {
+    $plan = planFor(Sentinel::audits()->whereRelation('members'));
+
+    expect(reachesByIndex($plan, auditRelationsTable()))->toBeTrue($plan);
+});
+
+it('reaches it through an index for the record that was related too', function (): void {
+    $plan = planFor(Sentinel::audits()->whereRelated('member', 0)->whereOperation('attach'));
+
+    expect(reachesByIndex($plan, auditRelationsTable()))->toBeTrue($plan);
 });

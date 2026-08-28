@@ -366,7 +366,25 @@ function seedTheTrail(int $entries = 600): void
         DB::table(auditTagsTable())->insert($chunk);
     }
 
-    foreach ([auditsTable(), auditTagsTable()] as $table) {
+    $lines = [];
+
+    foreach ($rows as $index => $row) {
+        $lines[] = [
+            'audit_id' => $row['id'],
+            'relation' => $index % 60 === 0 ? 'members' : 'guests',
+            'operation' => $index % 2 === 0 ? 'attach' : 'detach',
+            'related_type' => 'member',
+            'related_id' => (string) ($index % 60),
+            'pivot_before' => null,
+            'pivot_after' => null,
+        ];
+    }
+
+    foreach (array_chunk($lines, 100) as $chunk) {
+        DB::table(auditRelationsTable())->insert($chunk);
+    }
+
+    foreach ([auditsTable(), auditTagsTable(), auditRelationsTable()] as $table) {
         match (DB::connection()->getDriverName()) {
             'pgsql' => DB::statement('analyze '.$table),
             'mysql' => DB::statement('analyze table '.$table),
