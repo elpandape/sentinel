@@ -25,6 +25,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
@@ -74,6 +75,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * @property-read Model|null $impersonator
  * @property-read Collection<int, AuditTag> $tags
  * @property-read Collection<int, AuditRelation> $relations
+ * @property-read AuditTransaction|null $transaction
  */
 #[CollectedBy(AuditCollection::class)]
 class Audit extends Model
@@ -106,6 +108,17 @@ class Audit extends Model
             ->orderBy('relation')
             ->orderBy('related_type')
             ->orderBy('related_id');
+    }
+
+    /**
+     * The business operation this entry belongs to, when it belongs to one. It is what turns the
+     * identifier from something entries merely share into the name of what they were doing.
+     *
+     * @return BelongsTo<AuditTransaction, $this>
+     */
+    public function transaction(): BelongsTo
+    {
+        return $this->belongsTo(AuditTransaction::class, 'transaction_id');
     }
 
     /**

@@ -17,6 +17,7 @@ use ElPandaPe\Sentinel\Exceptions\ComparisonException;
 use ElPandaPe\Sentinel\Exceptions\LedgerException;
 use ElPandaPe\Sentinel\Exceptions\QueryException;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Models\AuditTransaction;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Reference;
 
@@ -145,10 +146,15 @@ final class AuditQuery
         return $query;
     }
 
-    public function inTransaction(string $transaction): self
+    /**
+     * The header itself is accepted as well as its identifier, the way whereEvent() accepts the
+     * enum as well as its value: what a caller has in hand after reading the operation is the
+     * operation, and making them reach for ->id is asking them to unwrap it for no reason.
+     */
+    public function inTransaction(AuditTransaction|string $transaction): self
     {
         $query = $this->accepting(Filter::Transaction);
-        $query->transactionId = $transaction;
+        $query->transactionId = $transaction instanceof AuditTransaction ? $transaction->id : $transaction;
 
         return $query;
     }
