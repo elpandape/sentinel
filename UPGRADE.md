@@ -9,6 +9,36 @@ before `1.0.0`.
 
 ---
 
+## v0.11.0 → v0.11.1
+
+One published contract changes. Nothing to migrate.
+
+### `Contracts\Auditable` gains `auditParents()`
+
+**Before:** ten methods.
+
+**After:** eleven. `auditParents(): array` returns the `belongsTo` relations whose parent gets a
+relation entry when this model changes hands, as a map of *relation on this model* to *the name the
+parent gives that collection*.
+
+Nothing to do if your model uses the `Concerns\Auditable` trait: the trait implements it, and
+declaring `protected array $auditParents = ['author' => 'articles'];` on the model is all it reads.
+A model that declares nothing keeps auditing exactly as before.
+
+If you implement the interface by hand, add the method:
+
+```php
+/**
+ * @return array<string, string>
+ */
+public function auditParents(): array
+{
+    return [];
+}
+```
+
+---
+
 ## v0.10.1 → v0.11.0
 
 Two published contracts change, and there is a migration.

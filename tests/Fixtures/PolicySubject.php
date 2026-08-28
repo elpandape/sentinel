@@ -27,6 +27,8 @@ final class PolicySubject extends Model
 
     public mixed $auditTags = null;
 
+    public mixed $auditParents = null;
+
     public mixed $auditSnapshots = null;
 
     public mixed $auditSeverity = null;

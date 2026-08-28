@@ -25,6 +25,7 @@ it('answers with no field policy when the model declares none', function (): voi
         ->and($subject->auditEncrypted())->toBeEmpty()
         ->and($subject->auditHashed())->toBeEmpty()
         ->and($subject->auditTags())->toBeEmpty()
+        ->and($subject->auditParents())->toBeEmpty()
         ->and($subject->auditSnapshotsEnabled())->toBeTrue()
         ->and($subject->auditSeverity())->toBeNull();
 });
@@ -37,6 +38,7 @@ it('reads every field policy the model declares', function (): void {
     $subject->auditEncrypt = ['price'];
     $subject->auditHash = ['status'];
     $subject->auditTags = ['billing'];
+    $subject->auditParents = ['author' => 'articles'];
     $subject->auditSnapshots = false;
 
     expect($subject->auditIncluded())->toBe(['name'])
@@ -45,6 +47,7 @@ it('reads every field policy the model declares', function (): void {
         ->and($subject->auditEncrypted())->toBe(['price'])
         ->and($subject->auditHashed())->toBe(['status'])
         ->and($subject->auditTags())->toBe(['billing'])
+        ->and($subject->auditParents())->toBe(['author' => 'articles'])
         ->and($subject->auditSnapshotsEnabled())->toBeFalse();
 });
 
@@ -105,3 +108,15 @@ it('refuses a severity that is neither the enum nor its value', function (): voi
 
     $subject->auditSeverity();
 })->throws(ConfigurationException::class, 'auditSeverity');
+
+it('refuses a parent declaration that is not a map of relation to relation', function (mixed $declared): void {
+    $subject = new PolicySubject;
+    $subject->auditParents = $declared;
+
+    $subject->auditParents();
+})->with([
+    'a string' => ['author'],
+    'a list' => [[['author']]],
+    'a map to something other than a name' => [[['author' => 7]]],
+    'a map to an empty name' => [[['author' => '']]],
+])->throws(ConfigurationException::class, 'auditParents');

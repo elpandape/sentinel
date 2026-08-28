@@ -113,6 +113,37 @@ trait Auditable
         return $this->auditFields('auditTags');
     }
 
+    /**
+     * A map and not a list: the entry hangs off the parent, so its line needs the name the parent
+     * gives that collection, and a list would have to invent it.
+     *
+     * @return array<string, string>
+     */
+    public function auditParents(): array
+    {
+        $value = $this->auditProperty('auditParents');
+
+        if ($value === null) {
+            return [];
+        }
+
+        if (! is_array($value)) {
+            throw ConfigurationException::expected('auditParents', 'a map of relation name to relation name', get_debug_type($value));
+        }
+
+        $parents = [];
+
+        foreach ($value as $relation => $collection) {
+            if (! is_string($relation) || ! is_string($collection) || $collection === '') {
+                throw ConfigurationException::expected('auditParents', 'a map of relation name to relation name', get_debug_type($collection));
+            }
+
+            $parents[$relation] = $collection;
+        }
+
+        return $parents;
+    }
+
     public function auditSnapshotsEnabled(): bool
     {
         $value = $this->auditProperty('auditSnapshots');

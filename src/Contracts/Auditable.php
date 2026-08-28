@@ -49,6 +49,14 @@ interface Auditable
      */
     public function auditTags(): array;
 
+    /**
+     * The belongsTo relations whose parent gets an entry when this model changes hands, keyed by
+     * the relation on this model and naming the collection on the parent.
+     *
+     * @return array<string, string>
+     */
+    public function auditParents(): array;
+
     public function auditSnapshotsEnabled(): bool;
 
     public function auditSeverity(): ?Severity;

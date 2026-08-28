@@ -11,12 +11,14 @@ use ElPandaPe\Sentinel\Tests\Fixtures\PolicySubject;
 it('reads the policy of a model that uses the trait', function (): void {
     $subject = new PolicySubject;
     $subject->auditExclude = ['secret'];
+    $subject->auditParents = ['author' => 'articles'];
     $subject->auditSnapshots = false;
     $subject->auditSeverity = Severity::Critical;
 
     $policy = AuditPolicy::of($subject);
 
     expect($policy->excluded)->toBe(['secret'])
+        ->and($policy->parents)->toBe(['author' => 'articles'])
         ->and($policy->snapshots)->toBeFalse()
         ->and($policy->severity)->toBe(Severity::Critical);
 });
@@ -34,6 +36,7 @@ it('falls back to auditing everything for a model that says nothing', function (
 
     expect($policy->included)->toBeEmpty()
         ->and($policy->excluded)->toBeEmpty()
+        ->and($policy->parents)->toBeEmpty()
         ->and($policy->snapshots)->toBeTrue()
         ->and($policy->severity)->toBeNull();
 });
