@@ -744,12 +744,27 @@ function presenter(): AuditPresenter
 }
 
 /**
- * Whether the plan found entries through the reversed label index, whatever it then did with the
- * result. Each engine words its plan differently and all three name the index they used.
+ * Whether the plan reaches a table through one of its indexes instead of walking it. Which index
+ * answers is the planner's business, and for the labels table it is not even the same one across
+ * versions of the same engine: SQLite turns the correlated exists into a semi-join from 3.51 on
+ * and seeks the reversed index, and before that it evaluates the exists per row with audit_id
+ * already fixed, where the unique pair is the right one to seek. Both are a seek, so naming one
+ * of them would be a gate that moves with the patch version underneath it.
+ *
+ * The table has to be named in the plan at all. On the two engines read by the absence of a scan,
+ * a plan that never mentions it would otherwise pass for having reached it.
  */
-function readsTheLabelIndex(string $plan): bool
+function reachesByIndex(string $plan, string $table): bool
 {
-    return str_contains(strtolower($plan), auditTagsTable().'_tag_audit_id_index');
+    if (! str_contains($plan, $table)) {
+        return false;
+    }
+
+    return match (DB::connection()->getDriverName()) {
+        'mysql' => ! str_contains($plan, "Table scan on {$table}"),
+        'pgsql' => ! str_contains($plan, "Seq Scan on {$table}"),
+        default => ! str_contains($plan, "SCAN {$table}"),
+    };
 }
 
 /**

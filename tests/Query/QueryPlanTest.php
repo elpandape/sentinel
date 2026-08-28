@@ -8,9 +8,10 @@ use ElPandaPe\Sentinel\Facades\Sentinel;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use Illuminate\Support\Facades\DB;
 
+use function ElPandaPe\Sentinel\Tests\auditTagsTable;
 use function ElPandaPe\Sentinel\Tests\planFor;
+use function ElPandaPe\Sentinel\Tests\reachesByIndex;
 use function ElPandaPe\Sentinel\Tests\readsAnIndex;
-use function ElPandaPe\Sentinel\Tests\readsTheLabelIndex;
 use function ElPandaPe\Sentinel\Tests\seedTheTrail;
 use function ElPandaPe\Sentinel\Tests\sortsOutsideTheIndex;
 
@@ -65,16 +66,19 @@ it('pays for a whole pass and a sort when nothing narrows it, which is why get i
 });
 
 /**
- * The question a label filter has to answer is whether the reversed index found the entries, not
- * whether the trail was scanned: with five matching labels against six hundred entries, joining
- * the index result to a scan of the small side is the right plan and PostgreSQL picks it.
+ * The question a label filter has to answer is whether asking for a label is a seek into the
+ * labels table rather than a walk of it, not whether the trail was scanned: with five matching
+ * labels against six hundred entries, joining the index result to a scan of the small side is the
+ * right plan and PostgreSQL picks it.
  *
  * Only the intersection is asserted. A union over a labels table this small is cheaper to scan
  * than to seek on PostgreSQL, which is a fact about the fixture rather than about the index, and
  * pinning it would be a gate that moves with the data.
  */
-it('reaches the reversed label index for a label worth narrowing by', function (): void {
-    expect(readsTheLabelIndex(planFor(Sentinel::audits()->whereTag('audited'))))->toBeTrue();
+it('reaches the labels table through an index for a label worth narrowing by', function (): void {
+    $plan = planFor(Sentinel::audits()->whereTag('audited'));
+
+    expect(reachesByIndex($plan, auditTagsTable()))->toBeTrue($plan);
 });
 
 /**
