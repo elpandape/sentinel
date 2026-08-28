@@ -2,6 +2,67 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.10.0 — Field history, labels and timeline (2026-08-27)
+
+### Added
+
+- **Labels.** A model declares what its entries are classified as the way it already declares their
+  severity (`protected array $auditTags = ['billing'];`), the `tags` configuration gives every entry
+  the ones an installation wants, and a new pipeline stage gathers both before anything can discard
+  the entry. They live in `sentinel_audit_tags`, keyed by the pair and indexed the other way round,
+  so asking for a label is a seek rather than a pass over a JSON column.
+- **`whereTag()` and `whereAnyTag()`** — every label named, or at least one of them. One criterion
+  for both spellings, and asking twice accumulates: `whereTag('a')->whereTag('b')` and
+  `whereTag(['a', 'b'])` are the same question.
+- **`whereFieldChanged()`**, and the same reading exposed as a scope: `$user->audits()->field('email')`.
+  Touching a field means the pointer or anything beneath it, which is what `$audit->diffFor()`
+  already meant by it, so `whereFieldChanged('profile')` finds a change to `/profile/address/city`.
+- **`Sentinel::timeline()`** — the whole trail in the order things happened, ordered by
+  `occurred_at` with the entry's own identifier behind it. `byOccurrence()` is the criterion behind
+  it and composes with every filter.
+- **`AuditCollection::loadReferences()`**, which resolves subjects, actors and labels for a page of
+  entries in a query per morph type rather than a query per line. A recorded type that names no
+  class is left unresolved rather than fatal — an entry outliving its subject is the normal case.
+- **`compare()` and `comparedTo()`**, which answer what changed between two versions of a subject
+  that need not be adjacent. Both hand back a `Query\Comparison`: the two entries and the diff,
+  because a diff has one way to say nothing and several ways to arrive there.
+- **`whereVersion()`**, a refiner, and what `compare()` is built on.
+- **`take()`**, a prefix asked for on purpose.
+- **`Presentation\AuditPresenter`** — an entry, a field history and a timeline as text, in English
+  or Spanish. An impersonated entry reads «Administrator #1 acting as User #100 changed
+  Invoice #500» from its own language key, not from a clause bolted onto the plain one.
+- **`$audit->toArray()`** in a first form. **Not a frozen contract**: keys can move in any minor
+  until `v0.15.0` declares it stable.
+- README: *Field history*, *Timeline*, *Labels*.
+
+### Changed
+
+- **`get()` refuses a read it would have to truncate.** See the [upgrade guide](UPGRADE.md).
+- **A driver is assumed to answer only the filters published with the contract**, not every case the
+  enum grows to hold. See the [upgrade guide](UPGRADE.md).
+- **`Contracts\Auditable` gains `auditTags()`**, and the pipeline gains a stage a published
+  configuration will not pick up on its own. See the [upgrade guide](UPGRADE.md).
+- **Labels come back loaded from every read.** An unloaded subject reads as `null`, which is
+  legible; an unloaded label list reads as an empty one, which is a claim the entry never made.
+- **`Ledger::append()` stores the labels it was handed**, in its own transaction. An entry stored
+  without the labels it arrived with is not the entry that arrived.
+- **The package loads its migrations one at a time**, so an application that published the first one
+  still receives the ones that came after it.
+- The contract suite holds a driver to one of two answers for every published filter — it translates
+  it, or it refuses it — instead of skipping the expectation for the ones it never claimed.
+
+### Fixed
+
+- **A malformed `changes` column no longer answers with fewer entries than it should.** SQLite
+  stores it as bare text, and an unguarded JSON walk over something unparseable is answered by the
+  driver with a partial result and no exception. Every engine now guards the column before walking
+  it.
+
+### Upgrade notes
+
+Two additive migrations, four changed contracts, one read that now refuses. The whole of it is in
+[UPGRADE.md](UPGRADE.md#v090--v0100).
+
 ## v0.9.0 — Query API (2026-08-27)
 
 ### Added

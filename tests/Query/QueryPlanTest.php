@@ -62,3 +62,30 @@ it('pays for a whole pass and a sort when nothing narrows it, which is why get i
     expect(readsAnIndex($plan))->toBeFalse()
         ->and(sortsOutsideTheIndex($plan))->toBeTrue();
 });
+
+it('reaches the reversed label index for a label worth narrowing by', function (): void {
+    expect(readsAnIndex(planFor(Sentinel::audits()->whereTag('audited'))))->toBeTrue();
+});
+
+it('rides an index for the clock of the fact instead of sorting outside one', function (): void {
+    $plan = planFor(Sentinel::timeline()->take(AuditQuery::DEFAULT_LIMIT));
+
+    expect(sortsOutsideTheIndex($plan))->toBeFalse()
+        ->and(readsAnIndex($plan))->toBeTrue();
+});
+
+it('rides an index for the timeline of one subject too', function (): void {
+    $plan = planFor(Sentinel::timeline()->for('invoice', 7));
+
+    expect(sortsOutsideTheIndex($plan))->toBeFalse()
+        ->and(readsAnIndex($plan))->toBeTrue();
+});
+
+it('reaches no index at all for a changed field, which is why it is a refiner', function (): void {
+    expect(readsAnIndex(planFor(Sentinel::audits()->for('invoice', 7)->whereFieldChanged('email'))))->toBeTrue()
+        ->and(readsAnIndex(planFor(Sentinel::audits()->whereFieldChanged('email')->take(AuditQuery::DEFAULT_LIMIT))))->toBeFalse();
+});
+
+it('reaches no index at all for a version, which is why it is a refiner', function (): void {
+    expect(readsAnIndex(planFor(Sentinel::audits()->whereVersion(3)->take(AuditQuery::DEFAULT_LIMIT))))->toBeFalse();
+});

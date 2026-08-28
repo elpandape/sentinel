@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.9.0-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.10.0-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -20,7 +20,7 @@ the state was before, what it is now — and whether the record itself can be pr
 
 ```json
 "repositories": [{ "type": "vcs", "url": "https://github.com/elpandape/sentinel" }],
-"require": { "elpandape/sentinel": "v0.9.0" }
+"require": { "elpandape/sentinel": "v0.10.0" }
 ```
 
 ```bash
@@ -40,6 +40,7 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.7.0` | The write pipeline, field-level redaction, hashing and encryption, key rotation, discards |
 | `v0.8.0` | `MemoryLedger`, `FanoutLedger`, the published contract suite, `append()` |
 | `v0.9.0` | The Query API: `Sentinel::audits()`, nine filters, ordering and paging over the ledger contract |
+| `v0.10.0` | Labels, field history, the timeline, comparing two versions, and a readable presenter |
 
 Everything else is on the roadmap: relationship auditing, business transactions, custom events,
 state transitions, restore, advanced verification (checkpoints and signatures), retention and
@@ -51,7 +52,9 @@ compliance, performance modes and distributed tracing.
 from nowhere. `v0.7.0` is the one that stops the answer from being a leak: no declared value reaches
 the ledger in the clear, and nothing writes an entry that says nothing happened. `v0.8.0` is the one
 that makes "extensible by drivers" a thing you can run rather than a thing this file claims. `v0.9.0`
-is the one that lets you ask, which a trail you cannot read back is not.
+is the one that lets you ask, which a trail you cannot read back is not. `v0.10.0` is the one that
+answers the three questions a trail gets asked most — what happened to this field, what is this
+entry about, and what happened at all — and says them in a sentence a person can read.
 
 ## Quick start
 
@@ -643,8 +646,11 @@ cannot be narrowed behind your back.
 | `forTenant()` | `tenant_id` | `(tenant_id, created_at)` | the same index |
 | `inTransaction()` | `transaction_id` | `(transaction_id)` | none — one transaction is sorted |
 | `withTrace()` | `trace_id` | `(trace_id)` | none — one trace is sorted |
+| `whereTag()` / `whereAnyTag()` | the labels an entry carries | `(tag, audit_id)` on the labels table | none |
 | `whereSource()` | `source` | **none — a refiner** | — |
 | `between()` | `created_at` | **none — a refiner** | — |
+| `whereFieldChanged()` | a path inside `changes` | **none — a refiner** | — |
+| `whereVersion()` | `version` | **none — a refiner** | — |
 
 Every row of that table was measured, on SQLite, MySQL 9 and PostgreSQL 16, with the engine's own
 `EXPLAIN` over the statement the driver actually issues — and the measurement is a test, so it
@@ -661,10 +667,17 @@ Sentinel::audits()->for(Invoice::class, 500)->get();
 
 ### Refiners
 
-Two filters are **refiners**: they narrow a result, they do not find one. `whereSource()` reads a
-column with eight possible values and no index of its own, and `between()` reads `created_at`, which
-lives in the tail of the composite indexes and not at the head of any. On MySQL and PostgreSQL either
-one, alone, walks the whole table. Put one of the indexed filters in front and they ride its index.
+Four filters are **refiners**: they narrow a result, they do not find one. `whereSource()` reads a
+column with eight possible values and no index of its own; `between()` reads `created_at`, which
+lives in the tail of the composite indexes and not at the head of any; `whereFieldChanged()` reads
+inside a JSON column, which no index this package ships covers; and `whereVersion()` reads a counter
+that is not indexed either. On MySQL and PostgreSQL any of them, alone, walks the whole table. Put
+one of the indexed filters in front and they ride its index.
+
+`whereTag()` is not a refiner, but its index is **selectivity-dependent** and that is worth knowing:
+both planners are cost-based, and a label carried by a large share of the table is walked rather than
+sought. That is the right plan for a label that broad — it is a fact about how you label, not about
+the query.
 
 `between()` bounds `created_at`, the clock the ledger stamps the entry with, and both ends are
 inclusive. It is not `occurred_at`: that is what the entry says about the world, it has no index,
@@ -688,8 +701,16 @@ one trace.
 matches is not bounded by anything — `whereEvent('updated')` on a busy trail is most of the table, and
 its index finds those rows but cannot order them. Put a filter in front of it.
 
-`get()` returns at most `AuditQuery::DEFAULT_LIMIT` entries — 500. A trail has no natural end, so a
-read with no bound is a read of the whole table; `paginate()` is how you walk past it.
+`get()` is bounded at `AuditQuery::DEFAULT_LIMIT` entries — 500 — and **refuses** rather than
+truncates. A trail has no natural end, so a read with no bound is a read of the whole table; handing
+back the first five hundred in the shape of a complete answer is the one mistake a trail cannot
+afford.
+
+```php
+Sentinel::audits()->get();                  // throws if the filter matches 500 or more
+Sentinel::audits()->take(500)->get();       // a prefix, asked for on purpose
+Sentinel::audits()->paginate(100);          // all of it, a page at a time
+```
 
 ```php
 $page = Sentinel::audits()->for($invoice)->latest()->paginate(25);
@@ -731,6 +752,170 @@ A driver that does not implement it answers all of them. Silently dropping a fil
 translate would answer with entries nobody asked for, and a trail that shows the wrong history is
 worse than one that refuses to answer.
 
+## Labels
+
+An entry can carry labels, and a label is how you ask for a slice of the trail that no column
+describes: everything billing touched, everything a compliance review cares about.
+
+A model says what its entries are born with, the same way it says their severity:
+
+```php
+final class Invoice extends Model
+{
+    use Auditable;
+
+    protected array $auditTags = ['billing'];
+}
+```
+
+and the configuration gives every entry the ones an installation wants:
+
+```php
+// config/sentinel.php
+'tags' => [
+    'enabled' => true,
+    'default' => ['environment:production'],
+],
+```
+
+Both arrive together, in declaration order and without repeats, and they are written **inside the
+transaction that seals the entry**: an entry is stored with its labels or it is not stored.
+
+```php
+Sentinel::audits()->whereTag('billing')->get();               // carries billing
+Sentinel::audits()->whereTag(['billing', 'refund'])->get();   // carries both
+Sentinel::audits()->whereAnyTag(['billing', 'payroll'])->get();  // carries either
+```
+
+Asking twice accumulates, so `whereTag('a')->whereTag('b')` and `whereTag(['a', 'b'])` are the same
+question. An empty list is refused rather than answered: it asks nothing of an entry, so it would
+hand back the whole trail.
+
+### What a label is not
+
+**Labels are outside the hash, deliberately, and it cuts both ways.** Classifying an old entry when
+a new category appears is a legitimate operation, and making it break the chain would turn your
+taxonomy into an integrity problem — so `verifyIntegrity()` is untouched by labelling.
+
+The other half of that: labelling is **not tamper-evident**. Anyone with write access to the
+database can relabel an entry and nothing will say so. Labels are operational classification, not
+facts. What has to be provable goes in `metadata`, which is part of the entry, is covered by the
+hash, and is redacted with it.
+
+## Field history
+
+"What did this field do" is one query, and it means the same thing everywhere in the package:
+
+```php
+Sentinel::audits()->for($user)->whereFieldChanged('email')->get();
+$user->audits()->field('email')->get();       // the same reading, from the relation
+```
+
+A field is touched by a change **at that pointer or beneath it**, which is what `$audit->diffFor()`
+already meant, so `whereFieldChanged('profile')` finds a change to `/profile/address/city`. Dot
+notation is read as a JSON Pointer, and a longer neighbour is never a match: `email` does not find
+`/email_verified_at`.
+
+The predicate is a JSON function per engine, measured to return the same entries on SQLite, MySQL 9
+and PostgreSQL 16. It reads only an element's own `path`, never one buried inside another change's
+`old` or `new`.
+
+### The two numberings
+
+A field's history skips versions, and both numbers on screen are true:
+
+```text
+v1  ada@example.com     ← the subject's own version, which leads back to the entry
+v4  ada@work.example
+v7  ada@home.example
+```
+
+The subject changed seven times; this field changed in three of them. Sentinel keeps the **real**
+version, because that is what takes you back to the whole entry, and the presenter counts the field's
+own changes beside it.
+
+### Comparing two versions
+
+```php
+$comparison = Sentinel::audits()->for($invoice)->compare(1, 7);
+
+$comparison->diff;    // what changed between them
+$comparison->from;    // the entry at v1
+$comparison->to;      // the entry at v7
+
+$entry->comparedTo($other);   // two entries you already hold
+```
+
+The two versions need not be adjacent — that is the point, and it costs one read. You get the two
+entries and not only the diff, because an empty diff has several causes and only one of them is
+"nothing changed". Comparing entries about different subjects is refused rather than answered with an
+empty diff that would read as agreement.
+
+A caveat worth carrying: **`version` is assigned without a lock**, so two concurrent writes to one
+subject can reach the same number. A repeated number resolves to the newest entry carrying it.
+
+## Timeline
+
+Everything that happened, in the order it happened:
+
+```php
+$page = Sentinel::timeline()->paginate(50);
+
+Sentinel::timeline()->for($invoice)->get();
+Sentinel::timeline()->byActor($user)->between($from, $to)->get();
+```
+
+One query over one table. Every kind of entry lives in `sentinel_audits`, so a timeline is the
+unnarrowed read with a different clock in front — not a merge of sources in PHP.
+
+**The clock is `occurred_at`**, when it happened, with the entry's own identifier behind it. It is
+not `created_at`, when the ledger sealed it: the two agree while writing is synchronous and come
+apart the moment it is not. Two indexes ship with this version so that order rides an index instead
+of sorting outside one — measured over two hundred thousand entries on all three engines, where
+without them it sorts outside every index and an indexed filter in front only shrinks what it sorts.
+
+Rendering a page of a timeline resolves what the entries point at in a query per morph type rather
+than a query per line:
+
+```php
+$page->entries->loadReferences();
+```
+
+A recorded type that names no class is left unresolved rather than fatal. An entry outliving the
+subject it describes is the normal case, not the edge one.
+
+## Reading a trail out loud
+
+```php
+$presenter = app(ElPandaPe\Sentinel\Presentation\AuditPresenter::class);
+
+$presenter->entry($audit);
+// Administrator #1 acting as User #100 changed Invoice #500
+
+$presenter->fieldHistory($history, 'email');
+// v1  ada@example.com
+// v4  ada@work.example
+
+$presenter->timeline($entries);
+// 10:02  Someone created Role #3
+// 11:30  User #100 changed Invoice #500
+```
+
+Every word comes from `resources/lang`, event names included — "changed" is what a person reads, not
+what the column holds. English and Spanish ship with the package; `--tag=sentinel-lang` publishes
+them.
+
+An impersonated entry has its **own** language key rather than a clause appended to the plain one:
+the two languages do not put "on behalf of" in the same place, and a conditional concatenation would
+freeze English word order into every translation that came after.
+
+### `toArray()` is not a contract yet
+
+`$audit->toArray()` gives the entry as data — who, what, the changes as the pointer list the column
+holds, the context, the labels, the correlation ids and the integrity block. **Its keys can move in
+any minor** until `v0.15.0`, which declares it stable and pins it with a snapshot test. Build against
+it if you like; do not build a public API on it yet.
+
 ## Configuration
 
 `config/sentinel.php` ships every section the package will use through 1.0, with future features
@@ -746,8 +931,9 @@ otherwise silently win over the package and end up with nothing configured at al
 
 ## Schema & models
 
-`sentinel_audits` ships complete: forty columns and eleven indexes, created once and never altered
-by a later minor. Most columns stay empty until the version that writes them lands — an empty column
+`sentinel_audits` ships complete: forty columns, created once and never altered by a later minor.
+Thirteen indexes — eleven from `v0.2.0` and two added by `v0.10.0` for the clock a timeline orders
+by. Most columns stay empty until the version that writes them lands — an empty column
 in an empty table costs nothing, an `ALTER` on a table with ten million rows costs a maintenance
 window.
 
@@ -766,6 +952,10 @@ text on SQLite; `datetime(6)` on MySQL and `timestamp(6)` on PostgreSQL.
 
 `subject_id`, `actor_id` and `impersonator_id` are `string(64)`, so integer, UUID and ULID keys all
 fit without a migration. There is no `updated_at`: the table is append-only.
+
+`sentinel_audit_tags` sits beside it: `(audit_id, tag)` unique, with a `(tag, audit_id)` index the
+other way round. No foreign key — date partitioning and batched purging both live badly with a
+cascade — so cleaning up after a purged entry belongs to whoever purges it.
 
 Two things the schema does **not** promise. Order comes from `(stream, sequence)`, never from the
 clock — `occurred_at` records when something happened, it does not sort the chain. And neither MySQL
@@ -811,6 +1001,12 @@ configuration, so a row keeps verifying under the algorithm it was written with 
 configured default changes later. `canonical` is the RFC 8785 canonical JSON of the twenty-seven
 columns frozen in `Integrity\CanonicalPayload::COLUMNS`. Writing and verifying both call
 `Integrity\Hasher::hash()`, so they walk the exact same code.
+
+**Labels are not covered by any of this**, and that is deliberate in both directions. Classifying an
+old entry when a new category appears does not break its hash — making it would turn a taxonomy into
+an integrity problem — and equally, relabelling leaves no trace that `verifyIntegrity()` can find.
+Labels are operational classification; what has to be provable goes in `metadata`, which is inside
+the payload the hash covers. See [Labels](#labels).
 
 `stream` is part of that prefix, which is why a stream is never renamed in place: changing the
 stream strategy while a chain already holds data does not rewrite the old rows under the new name,

@@ -253,6 +253,8 @@ function seedTheTrail(int $entries = 600): void
             'transaction_id' => str_pad((string) $bucket, 26, '0', STR_PAD_LEFT),
             'trace_id' => str_pad((string) $bucket, 32, '0', STR_PAD_LEFT),
             'created_at' => new CarbonImmutable('2026-08-01 00:00:00')->addSeconds($sequence)->format('Y-m-d H:i:s.u'),
+            // The reverse of the recording order, so an order by this clock cannot come out right by accident.
+            'occurred_at' => new CarbonImmutable('2026-08-01 00:00:00')->addSeconds($entries - $sequence)->format('Y-m-d H:i:s.u'),
         ]);
     }
 
@@ -260,11 +262,23 @@ function seedTheTrail(int $entries = 600): void
         DB::table(auditsTable())->insert($chunk);
     }
 
-    match (DB::connection()->getDriverName()) {
-        'pgsql' => DB::statement('analyze '.auditsTable()),
-        'mysql' => DB::statement('analyze table '.auditsTable()),
-        default => DB::statement('analyze'),
-    };
+    $labels = [];
+
+    foreach ($rows as $index => $row) {
+        $labels[] = ['audit_id' => $row['id'], 'tag' => $index % 120 === 0 ? 'audited' : 'routine'];
+    }
+
+    foreach (array_chunk($labels, 100) as $chunk) {
+        DB::table(auditTagsTable())->insert($chunk);
+    }
+
+    foreach ([auditsTable(), auditTagsTable()] as $table) {
+        match (DB::connection()->getDriverName()) {
+            'pgsql' => DB::statement('analyze '.$table),
+            'mysql' => DB::statement('analyze table '.$table),
+            default => DB::statement('analyze'),
+        };
+    }
 }
 
 /**

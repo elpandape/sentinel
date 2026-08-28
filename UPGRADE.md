@@ -9,6 +9,122 @@ before `1.0.0`.
 
 ---
 
+## v0.9.0 → v0.10.0
+
+Four published contracts change. Three of them are one edit each; the fourth is a read that used to
+answer and now refuses, on purpose.
+
+### `Contracts\Auditable` gains `auditTags()`
+
+**Before:** eight methods. **After:** nine — `auditTags(): array` returns the labels every entry of
+that model is born with.
+
+Nothing to do if your model uses the `Concerns\Auditable` trait: the trait implements it, and
+declaring `protected array $auditTags = ['billing'];` on the model is all it reads.
+
+If you implement the interface by hand, add the method:
+
+```php
+/**
+ * @return list<string>
+ */
+public function auditTags(): array
+{
+    return [];
+}
+```
+
+### A new pipeline stage, which a published configuration will not pick up on its own
+
+**Before:** six stages. **After:** seven — `Pipeline\Stages\ResolveTags` gathers what an entry is
+classified as, and it sits between `ResolveContext` and `NormalizeData`.
+
+The published `config/sentinel.php` names every stage and is taken verbatim, so **an installation
+that published its configuration keeps running the six it published** — labels would silently stay
+empty. If you published it, add the stage:
+
+```php
+// config/sentinel.php
+'pipeline' => [
+    ElPandaPe\Sentinel\Pipeline\Stages\FilterUnchanged::class,
+    ElPandaPe\Sentinel\Pipeline\Stages\ResolveContext::class,
+    ElPandaPe\Sentinel\Pipeline\Stages\ResolveTags::class,      // <- new
+    ElPandaPe\Sentinel\Pipeline\Stages\NormalizeData::class,
+    ElPandaPe\Sentinel\Pipeline\Stages\MaskSensitiveData::class,
+    ElPandaPe\Sentinel\Pipeline\Stages\EncryptSensitiveData::class,
+    ElPandaPe\Sentinel\Pipeline\Stages\EnforcePolicies::class,
+],
+```
+
+### A driver no longer answers a filter it never named
+
+**Before:** a driver that does not implement `Contracts\DeclaresFilters` was assumed to translate
+every case of `Enums\Filter`, whatever that enum grew to hold.
+
+**After:** it is assumed to translate `Filter::assumed()` — the nine filters published with the
+contract in `v0.9.0` — and nothing else. `whereTag()`, `whereFieldChanged()` and `whereVersion()`
+are answered only by a driver that names them.
+
+This is the safe direction: a driver written against `v0.9.0` never knew about the new filters, and
+`ArrayQuery`-style resolution ignores a criterion it does not recognise, so the old assumption
+would have had such a driver answering with entries nobody asked for. If your driver does translate
+them, say so:
+
+```php
+final class RedisLedger implements DeclaresFilters, Ledger
+{
+    public function supportedFilters(): array
+    {
+        return Filter::cases();
+    }
+}
+```
+
+The contract suite changed with it. `publishedFilters()` now yields the `Filter` beside the closure,
+and every filter expectation holds a driver to one of two answers — it translates the filter, or it
+refuses it — so a driver declaring the narrower set still runs the suite unchanged.
+
+### `get()` refuses a read it would have to truncate
+
+**Before:** `get()` handed back at most `AuditQuery::DEFAULT_LIMIT` entries and said nothing about
+having cut. A filter matching six hundred entries answered with five hundred, in exactly the shape
+of a complete answer.
+
+**After:** it asks for one more than the bound and throws `QueryException` when that one arrives.
+
+```php
+// was: five hundred entries, silently a prefix
+$entries = Sentinel::audits()->get();
+
+// now, pick one:
+$entries = Sentinel::audits()->whereTag('billing')->get();        // narrow it
+$entries = Sentinel::audits()->take(500)->get();                  // a prefix, on purpose
+$page    = Sentinel::audits()->paginate(100);                     // walk all of it
+```
+
+### Two migrations, both additive
+
+`sentinel_audit_tags` is new. The second one adds two indexes to `sentinel_audits` and no columns:
+`(occurred_at, id)` and `(subject_type, subject_id, occurred_at, id)`, which are what keep the
+timeline from sorting outside every index.
+
+```bash
+php artisan migrate
+```
+
+Existing entries come out unlabelled, and `whereTag()` does not return them. There is no backfill:
+nobody knows which label an entry written before labels existed would have carried.
+
+`payload_version` stays at `1`, labels are not part of the hashed payload, and every entry frozen
+before this version reproduces its hash byte for byte.
+
+**If you published the migrations** with `vendor:publish --tag=sentinel-migrations`, publish again
+to pick up the two new files. Until `v0.10.0` the package loaded its migration directory only when
+the audits migration was absent from yours — all or nothing on one filename — so a second migration
+would never have reached you. That check is now made per file.
+
+---
+
 ## v0.8.0 → v0.9.0
 
 `v0.9.0` gives `Ledger::query()` something to answer. The signature has been on the contract since
