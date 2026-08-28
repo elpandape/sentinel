@@ -2,6 +2,72 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.14.0 — The Restore Engine (2026-08-28)
+
+An entry stops being read-only. Point at any row of the trail and the record goes back the way that
+row found it — all of it, some named fields, or one of its relations. Nothing is rewritten and
+nothing is deleted: a restoration is one more entry, pointing at the one it came from.
+
+### Added
+
+- **`$audit->restore()`**, **`$audit->restore(['email', 'role'])`** and
+  **`$audit->restoreRelationship('members')`**. An entry photographs the record at a moment, and
+  restoring it goes back to that moment — the state on its `after`, and on its `before` only for a
+  deletion, whose `after` is empty because there was no record left to photograph.
+- **`Restore\RestoreResult`**, with what was applied, what was skipped and why, what refused the
+  whole restoration, and the entry that recorded it. No method on it returns `bool`: a restoration
+  that put back four fields out of six is neither a success nor a failure.
+- **`Enums\Omission`**, thirteen reasons with a line in both languages. Five refuse the whole
+  restoration — no record, a redacted entry, a tampered entry, an entry with no state, a listener
+  that said no — and the rest refuse one key and let the others through.
+- **The entry's hash is verified before anything is touched.** Restoring is the only thing the
+  package does that writes into the business model out of what the ledger holds, so an entry that no
+  longer reproduces its own hash restores nothing.
+- **A masked value and a digest never go back**, and an encrypted one is read with the `key_id` the
+  entry recorded — a key that has left the keyring skips the field rather than writing ciphertext
+  into the record. The primary key is never restored either.
+- **A field the schema no longer has is skipped and the rest still goes back**, with the reason on
+  the result.
+- **`audit_type = restore`**, with `source_audit_id` pointing at the entry it came from and a
+  `metadata.restore` summary of what was applied and what was declined, sealed inside the canonical
+  payload. One entry per call, however many fields or pivot rows it moved.
+- **`Events\AuditRestoring`, cancellable, and `Events\AuditRestored`.** Returning `false` from a
+  listener stops the restoration and the result says so. That is the whole answer to who may
+  restore: the package imposes no gate on a write into your business model. `AuditRestored` follows
+  after the commit, with the closed result.
+- **A record in the recycle bin comes back out of it** on a whole restoration. A granular one does
+  not: you named the fields you wanted.
+- README: *Restoring state*.
+
+### Changed
+
+- **Whether an entry carries relation lines is asked of the lines, not of the entry's type.** The
+  diff reader, the serialiser and the ledger's projection to `sentinel_audit_relations` all decided
+  by `audit_type === 'relation'`; a restoration carries the same lines under a type of its own.
+  Without the change the projection skipped it and `whereRelation()` stopped finding it. Behaviour
+  for every existing entry is identical — the type was only ever a proxy for the shape.
+- **`Capture\Recorder::record()` takes an optional callback** that is handed the entry on whichever
+  path wrote it. With the deferral on, which is the default, a caller that opened the transaction
+  itself would otherwise never learn what the ledger settled after its commit. No existing caller
+  changes.
+
+### Notes
+
+- **A restoration is not a transition.** An entry with `audit_type = restore` does not appear in
+  `Sentinel::transitions()`, even when it moves a column named in `$auditTransitions`, and the state
+  machine does not govern it. A lifeline answers which states the workflow moved through, and a
+  correction made by an operator is not one of them.
+- **Restoring the same entry twice writes nothing the second time.** There is no movement to record,
+  and an entry for it would be a link in the chain describing no change.
+- **Auditing is paused for the save**, so the trail carries the restoration and not a restoration
+  plus an `updated` describing the same movement backwards. The pause is released in a `finally`.
+- **Restoring needs the snapshot.** A model with `$auditSnapshots = false` has no state to put back,
+  and the result says so rather than half-restoring from a diff.
+- **`event = 'restored'` is eloquent's** — a soft-deleted record coming back — while
+  `audit_type = 'restore'` is this engine. Different facts, and the filters tell them apart.
+- No migrations, no change to the canonical payload, and `payload_version` stays at 1. An entry
+  frozen in `v0.3.0` still restores.
+
 ## v0.13.0 — State transitions (2026-08-28)
 
 `draft → pending → approved → paid` is the question a trail gets asked about a document, and

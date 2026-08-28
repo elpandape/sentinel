@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.13.0-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.14.0-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -20,7 +20,7 @@ the state was before, what it is now — and whether the record itself can be pr
 
 ```json
 "repositories": [{ "type": "vcs", "url": "https://github.com/elpandape/sentinel" }],
-"require": { "elpandape/sentinel": "v0.12.1" }
+"require": { "elpandape/sentinel": "v0.14.0" }
 ```
 
 ```bash
@@ -46,9 +46,10 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.12.0` | Business transactions: `Sentinel::transaction()`, the `sentinel_transactions` header, and entries that wait for the commit |
 | `v0.12.1` | Custom events and authentication events: `Sentinel::event()` and an opt-in subscriber over the five auth events |
 | `v0.13.0` | State transitions: `Sentinel::transition()`, `$auditTransitions`, an optional state machine, `whereType()` and the lifeline with time spent in each state |
+| `v0.14.0` | The Restore Engine: `$audit->restore()`, granular and relation restores, `RestoreResult`, and two cancellable lifecycle events |
 
-Everything else is on the roadmap: restore, advanced verification (checkpoints and signatures),
-retention and compliance, performance modes and distributed tracing.
+Everything else is on the roadmap: advanced verification (checkpoints and signatures), retention and
+compliance, performance modes and distributed tracing.
 
 `v0.4.0` is the version that starts auditing: a model with the trait writes its own chained entries.
 `v0.5.0` is the one that answers what changed, instead of leaving you two states to compare.
@@ -66,7 +67,8 @@ its entries stop existing when the transaction that produced them does not. `v0.
 that stops "auditable" from meaning "a model changed" — a fact you state and a login you did not
 are entries like any other. `v0.13.0` is the one that stops a document's lifeline from being
 something you reconstruct: `draft → pending → approved → paid` is a read, with how long it spent
-in each.
+in each. `v0.14.0` is the one that makes the trail something you can act on and not only read: a
+row of it puts the record back the way it found it, and says what it could not.
 
 ## Quick start
 
@@ -1355,6 +1357,151 @@ stated fact `updated`, and only the type tells that apart from a model change. I
 `(audit_type, created_at)` index the table has carried since it was created. Like every filter
 published after `v0.9.0`, a driver that does not declare it refuses it rather than dropping it.
 
+## Restoring state
+
+An entry stops being read-only. Point at any row of the trail and put the record back the way that
+row found it — all of it, some named fields, or one of its relations:
+
+```php
+$result = $audit->restore();                      // the whole recorded state
+$result = $audit->restore(['email', 'role']);     // only these
+$result = $audit->restoreRelationship('members'); // the pivot rows it recorded
+```
+
+Nothing is rewritten or deleted. A restoration is a **new** entry of its own kind —
+`audit_type = restore` — pointing back at the one it came from, so the history stays what it was
+plus one more link:
+
+```text
+v1 Created  →  v2 Email changed  →  v3 Role changed  →  v4 Restored from v1
+```
+
+**An entry is a photograph of the record at a moment, and restoring it is going back to that
+moment.** You point at a row and say "back to this one" — not "back to whatever came before this
+one", which for the first entry of a record would be nothing at all. That is the state the entry
+holds in `after`, and in `before` only for a deletion, whose `after` is empty because there was no
+record left to photograph.
+
+### What comes back, and what does not
+
+None of these three ever reach the record, because none of them can:
+
+```php
+class User extends Model
+{
+    use Auditable;
+
+    protected array $auditRedact  = ['email'];   // stored masked; the original is gone
+    protected array $auditHash    = ['token'];   // stored as a digest; digests do not reverse
+    protected array $auditEncrypt = ['dni'];     // read back with the key the entry names
+}
+```
+
+An encrypted field comes back **decrypted with the `key_id` the entry recorded**, so a value written
+under yesterday's key still restores while that key is on the keyring. Once it leaves, the field is
+skipped with its reason — never written back as ciphertext.
+
+The primary key is never restored either: it identifies the record rather than describing its state.
+
+### The result says what it did
+
+```php
+$result = $audit->restore();
+
+$result->applied;                  // ['email', 'role']
+$result->entry;                    // the Audit that recorded the restoration
+$result->reason('token')->message('token');
+// The token was stored as a digest, which cannot be reversed.
+
+foreach ($result->skipped as $field => $omission) {
+    // Omission::RedactedField, Omission::UnknownField, Omission::KeyUnavailable, …
+}
+```
+
+There is no method on it that returns `bool`. A restoration that put back four fields out of six is
+neither a success nor a failure, and `true` would hide the two a masked value and a dropped column
+left behind.
+
+**A field the schema no longer has is skipped, and the rest still goes back.** That is deliberate: a
+column a later migration dropped is an accident of the schema, not a reason to abandon the five
+fields that are still there.
+
+Five conditions refuse the restoration whole, and `$result->refused` says which:
+
+| `$result->refused` | When |
+|---|---|
+| `SubjectMissing` | The record was deleted for good, or its type no longer resolves to a model |
+| `EntryRedacted` | The entry was redacted: its contents were destroyed on purpose |
+| `EntryTampered` | The entry no longer reproduces its own hash |
+| `EntryStateless` | The entry holds no state — a stated fact, or a model with `$auditSnapshots = false` |
+| `Cancelled` | A listener stopped it |
+
+**A tampered entry restores nothing.** Restoring is the only thing the package does that writes into
+your business model out of what the ledger holds, so an entry that cannot answer for itself does not
+get to. The hash is checked before anything is touched.
+
+### It is a write, and it is audited like one
+
+The whole restoration is **one database transaction**: either the applicable set goes back and the
+ledger settles the entry, or the record is untouched. Auditing is paused for the save itself, so the
+trail carries the restoration and not a restoration plus an `updated` describing the same movement
+backwards.
+
+Restoring the same entry twice writes nothing the second time. There is no movement to record, and
+an entry for it would be a link in the chain describing no change:
+
+```php
+$audit->restore();
+$audit->restore()->applied;   // []
+```
+
+A record in the recycle bin comes back out of it: `restore()` finds it past the soft-delete scope
+and clears the deletion mark. A **granular** restore does not — you named the fields you wanted, and
+reviving the record was not one of them.
+
+### Restoring a relation
+
+`restoreRelationship()` reads the lines [relationship auditing](#relationship-auditing) recorded and
+leaves the relation the way that entry left it: what it attached stays attached with the pivot it
+had, what it detached stays detached. A related record that has since been deleted is skipped with
+`RelatedMissing` rather than breaking referential integrity halfway through.
+
+One entry per call, however many pivot rows it takes — the same way a `sync()` that touched three of
+them was one entry.
+
+### Who may restore
+
+Sentinel imposes no gate. Restoring writes into your business model, and which of your users may do
+that is your decision, not an audit engine's. The hook is an event, and returning `false` stops it:
+
+```php
+Event::listen(function (AuditRestoring $event): bool {
+    return Gate::forUser($actor)->allows('restore', $event->subject);
+});
+```
+
+`AuditRestoring` carries the entry, the record and the keys about to move — keys, not values, so a
+field the pipeline masked on the way in does not escape in an event payload on the way out.
+`AuditRestored` follows **after** the commit, with the closed result. Announcing it any earlier
+would tell listeners about a change a rollback is still free to undo.
+
+### A restoration is not a transition
+
+An entry with `audit_type = restore` does not appear in `Sentinel::transitions()`, even when it
+moves a column named in `$auditTransitions`, and the state machine of `DeclaresTransitions` does not
+govern it. A lifeline answers which states the workflow moved through, and a correction made by an
+operator is not one of them. What moved is still on the entry, in its own `changes`.
+
+Ask for restorations the way you ask for anything else:
+
+```php
+Sentinel::audits()->whereType('restore')->for($invoice)->get();
+```
+
+And mind the vocabulary: `event = 'restored'` is Eloquent's — a soft-deleted record coming back out
+of the bin — while `audit_type = 'restore'` is this engine. The two are different facts and the
+filters tell them apart.
+
 ## Reading a trail out loud
 
 ```php
@@ -1381,6 +1528,8 @@ the two languages do not put "on behalf of" in the same place, and a conditional
 freeze English word order into every translation that came after.
 
 ### `toArray()` is not a contract yet
+
+`RestoreResult` and `Omission` are not frozen either, and move under the same rule.
 
 `$audit->toArray()` gives the entry as data — who, what, the changes as the pointer list the column
 holds, the context, the labels, the correlation ids and the integrity block. **Its keys can move in
