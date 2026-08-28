@@ -61,9 +61,10 @@ final class TransactionScope
     }
 
     /**
-     * Stamping and counting are one act. An entry that took the identifier is an entry the
-     * operation produced, and doing the two separately is how a count ends up describing a set
-     * of entries that is not the one carrying the id.
+     * The identifier is stamped before the pipeline, because it belongs to the canonical payload
+     * the chain seals. What the operation wrote is counted after it, because the pipeline is
+     * allowed to discard: an update that changed nothing audited is not something the operation
+     * produced, and counting it would describe a set of entries that does not exist.
      */
     public function stamp(AuditData $audit): void
     {
@@ -72,8 +73,13 @@ final class TransactionScope
         }
 
         $audit->transaction_id = $this->header->id;
+    }
 
-        $this->captured++;
+    public function settled(): void
+    {
+        if ($this->header instanceof AuditTransaction) {
+            $this->captured++;
+        }
     }
 
     /**

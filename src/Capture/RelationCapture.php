@@ -61,7 +61,7 @@ final readonly class RelationCapture
             subject_id: $this->key($parent),
             changes: RelationLine::canonical($lines),
             metadata: ['api' => $api],
-        ));
+        ), $parent);
     }
 
     private function key(Model $parent): ?string

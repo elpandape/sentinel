@@ -12,6 +12,7 @@ return [
 
     'ledger' => [
         'destination_failed' => 'El destino :destination no aceptó el asiento :id en la secuencia :sequence del stream :stream: :reason',
+        'write_failed' => 'El asiento :event de :type :id se capturó pero nunca llegó a asentarse: :reason',
     ],
 
     'presenter' => [

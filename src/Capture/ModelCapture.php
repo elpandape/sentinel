@@ -50,7 +50,7 @@ final readonly class ModelCapture
             before: $retained ? $pair->before : null,
             after: $retained ? $pair->after : null,
             changes: $this->changes($pair),
-        ));
+        ), $model);
     }
 
     /**

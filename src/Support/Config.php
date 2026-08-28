@@ -140,6 +140,16 @@ final readonly class Config
             ?? throw ConfigurationException::unknown("severity.events.{$name}", $value, $this->accepted(Severity::class));
     }
 
+    /**
+     * Whether an entry waits for the database transaction that produced it. On by default, and
+     * not as a performance setting: turning it off is asking the ledger to keep claiming facts a
+     * rollback undid.
+     */
+    public function afterCommit(): bool
+    {
+        return $this->boolean('transactions.after_commit');
+    }
+
     public function tagsEnabled(): bool
     {
         return $this->boolean('tags.enabled');
