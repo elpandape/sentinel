@@ -12,7 +12,7 @@ return [
 
     'ledger' => [
         'destination_failed' => 'Destination :destination did not take audit :id at sequence :sequence of stream :stream: :reason',
-        'write_failed' => 'The :event entry for :type :id was captured but never settled: :reason',
+        'write_failed' => 'The deferred write of the :event entry for :type :id did not complete: :reason',
     ],
 
     'presenter' => [

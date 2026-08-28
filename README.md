@@ -1055,13 +1055,14 @@ Sentinel::transaction('invoice-payment', function () use ($invoice, $payment) {
 $operation = ElPandaPe\Sentinel\Models\AuditTransaction::query()->latest('started_at')->first();
 
 $operation->name;           // 'invoice-payment'
-$operation->audits_count;   // 4
+$operation->audits_count;   // 3 — the update, the insert, and one relation entry for the sync
 Sentinel::audits()->inTransaction($operation)->get();
 $audit->transaction->name;  // from either end
 ```
 
 The header lands in `sentinel_transactions` with the name, the actor and tenant resolved exactly as
-an entry resolves them, the window it ran in, and how many entries it wrote. It is **opened before
+an entry resolves them, the window it ran in, and how many entries it wrote — counted as they settle
+into the ledger, so a capture the pipeline discarded or a rollback undid is not in the total. It is **opened before
 the operation runs**, so one that died halfway is still findable, and closed after — including when
 the operation threw, in which case the class of the failure is in `metadata`. The class and not the
 message: a header does not go through the pipeline, so nothing would redact a domain value someone
@@ -1114,9 +1115,11 @@ framework runs commit callbacks in a bare loop, so an exception there would stop
 of the same transaction from even being attempted.
 
 > **Testing note.** `RefreshDatabase` and `DatabaseTransactions` replace Laravel's transaction
-> manager, and the replacement runs commit callbacks immediately for the wrapping transaction. Your
-> audits still land. A deferred write inside a *nested* `DB::transaction()` in such a test waits for
-> the outer one, which never commits — assert after the inner transaction, not inside it.
+> manager with one that skips the wrapping transaction the trait opened. Your audits still land: a
+> capture with no `DB::transaction()` of its own is written immediately, and one inside a
+> `DB::transaction()` your test opens is written when *that* commits. What you cannot do is assert
+> on an entry from inside the transaction that produced it — which is exactly what the deferral is
+> for, in tests as much as in production.
 
 ## Reading a trail out loud
 

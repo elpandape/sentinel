@@ -13,8 +13,12 @@ use Throwable;
  * later entry of the same transaction from being attempted at all, and would surface out of a
  * DB::transaction() that has already committed.
  *
- * Identity only, like AuditDiscarded, and for the same reason: the entry that failed to settle
- * has been through the pipeline, but an event is not the place to hand its payload around.
+ * Identity only, like AuditDiscarded, and for the same reason: the entry has been through the
+ * pipeline, but an event is not the place to hand its payload around.
+ *
+ * It says the write did not complete, not that no entry exists. A fanout under the strict policy
+ * rethrows after the primary has already sealed and stored the entry, so a listener that read this
+ * as "nothing was written" would be wrong exactly when the chain is intact.
  */
 final readonly class AuditWriteFailed
 {

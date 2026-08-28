@@ -55,7 +55,10 @@ To keep the old behaviour exactly:
 ],
 ```
 
-That is supported and it means what it says: a ledger allowed to assert what a rollback undid.
+That is supported and it means what it says: a ledger allowed to assert what a rollback undid —
+where it can. With the ledger on the connection that rolled back, which is the default, the database
+takes the entry with it either way; the difference shows up with a dedicated `database.connection`,
+a ledger that is not this database, or a fanout to somewhere external.
 
 ### A deferred write that fails is announced, not thrown
 

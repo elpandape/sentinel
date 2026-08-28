@@ -50,7 +50,7 @@ final class TransactionScope
         try {
             $value = $callback();
         } catch (Throwable $failure) {
-            $this->leave($header, $failure);
+            $this->abandon($header, $failure);
 
             throw $failure;
         }
@@ -86,19 +86,43 @@ final class TransactionScope
      * The header of the outermost scope, or null when this call is nested inside one. A nested
      * call keeps the outer identifier and opens no header of its own: a business operation does
      * not split because its implementation reuses code that already wrapped itself.
+     *
+     * Nothing is recorded until the header exists. Counting the level first would mean a header
+     * that failed to open — an unmigrated install, a connection already aborted — left the scope
+     * believing it was one level deep for the rest of the request, and every operation after it
+     * would quietly take the nested branch and correlate nothing at all.
      */
     private function enter(string $name): ?AuditTransaction
     {
-        if ($this->depth++ > 0) {
+        if ($this->depth > 0) {
+            $this->depth++;
             $this->nest($name);
 
             return null;
         }
 
+        $header = $this->open($name);
+
+        $this->depth = 1;
         $this->captured = 0;
         $this->nested = [];
 
-        return $this->header = $this->open($name);
+        return $this->header = $header;
+    }
+
+    /**
+     * Closing a header must never replace the failure that closed it. A header left with a null
+     * finished_at already reads as an operation that did not close, which is more than an
+     * audit-engine exception standing where the application's own belongs would say.
+     */
+    private function abandon(?AuditTransaction $header, Throwable $failure): void
+    {
+        try {
+            $this->leave($header, $failure);
+        } catch (Throwable) {
+            $this->depth = 0;
+            $this->header = null;
+        }
     }
 
     private function leave(?AuditTransaction $header, ?Throwable $failure): void

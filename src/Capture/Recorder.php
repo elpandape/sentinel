@@ -52,13 +52,7 @@ final readonly class Recorder
 
         $transformed = $this->pipeline->process($audit);
 
-        if (! $transformed instanceof AuditData) {
-            return null;
-        }
-
-        $this->transactions->settled();
-
-        return $this->settle($transformed, $subject);
+        return $transformed instanceof AuditData ? $this->settle($transformed, $subject) : null;
     }
 
     /**
@@ -79,7 +73,7 @@ final readonly class Recorder
         $connection = $this->connection($subject);
 
         if (! $this->config->afterCommit() || $connection->transactionLevel() === 0) {
-            return $this->ledger->write($audit);
+            return $this->written($this->ledger->write($audit));
         }
 
         $written = null;
@@ -102,12 +96,25 @@ final readonly class Recorder
     private function deferred(AuditData $audit): ?Audit
     {
         try {
-            return $this->ledger->write($audit);
+            return $this->written($this->ledger->write($audit));
         } catch (Throwable $failure) {
             $this->events->dispatch(AuditWriteFailed::of($audit, $failure));
 
             return null;
         }
+    }
+
+    /**
+     * An operation counts what its entries settled into, not what its captures got as far as. A
+     * capture that the pipeline passed and a rollback then threw away is not something the
+     * operation wrote, and a header claiming it would be a header nobody could reconcile against
+     * the entries carrying its id.
+     */
+    private function written(Audit $audit): Audit
+    {
+        $this->transactions->settled();
+
+        return $audit;
     }
 
     private function connection(?Model $subject): Connection

@@ -29,7 +29,9 @@ it('gives the metadata back as a map, not as text', function (): void {
 
     $header = AuditTransaction::query()->findOrFail(frozenUlid('META'));
 
-    expect($header->metadata)->toBe(['nested' => ['invoice-lines'], 'failed' => false]);
+    expect($header->metadata)->toEqualCanonicalizing(['nested' => ['invoice-lines'], 'failed' => false])
+        ->and($header->metadata['nested'])->toBe(['invoice-lines'])
+        ->and($header->metadata['failed'])->toBeFalse();
 });
 
 it('keeps the microseconds the schema declares', function (): void {

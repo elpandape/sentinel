@@ -79,3 +79,20 @@ it('ignores a column the canonical core deliberately leaves out', function (): v
 
     expect(hasher()->hash($audit))->toBe($before);
 });
+
+it('covers the correlation, so two entries alike but for their operation do not share a hash', function (): void {
+    $shared = collect(auditRow())->except('transaction_id')->all();
+
+    $alone = new Audit()->forceFill([...$shared, 'transaction_id' => null]);
+    $correlated = new Audit()->forceFill([...$shared, 'transaction_id' => Str::ulid()->toString()]);
+
+    expect(hasher()->hash($alone))->not->toBe(hasher()->hash($correlated));
+});
+
+it('reproduces the hash of an entry written before any operation had a name', function (): void {
+    $audit = new Audit()->forceFill([...auditRow(), 'transaction_id' => null]);
+
+    expect(hasher()->hash($audit))->toBe(hasher()->hash($audit))
+        ->and(CanonicalPayload::from($audit))->toHaveKey('transaction_id')
+        ->and(CanonicalPayload::from($audit)['transaction_id'])->toBeNull();
+});

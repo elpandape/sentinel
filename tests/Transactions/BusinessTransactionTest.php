@@ -11,6 +11,7 @@ use ElPandaPe\Sentinel\Tests\Fixtures\AuditedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\Author;
 use ElPandaPe\Sentinel\Tests\Fixtures\Member;
 use ElPandaPe\Sentinel\Tests\Fixtures\Team;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
 it('gives every entry of one operation the same identifier', function (): void {
@@ -180,6 +181,64 @@ it('writes no header at all when the package is not recording', function (): voi
 
     expect($value)->toBe('ran anyway')
         ->and(AuditTransaction::query()->count())->toBe(0);
+});
+
+it('leaves the scope usable when the header cannot be opened at all', function (): void {
+    config()->set('sentinel.tables.transactions', 'nowhere');
+
+    try {
+        Sentinel::transaction('doomed', function (): void {
+            AuditedSubject::query()->create(['name' => 'never reached']);
+        });
+    } catch (QueryException) {
+        // A header that cannot be written is a configuration error and says so. What must not
+        // happen is that it takes the rest of the request down with it.
+    }
+
+    config()->set('sentinel.tables.transactions', 'transactions');
+
+    Sentinel::transaction('the next one', function (): void {
+        AuditedSubject::query()->create(['name' => 'correlated']);
+    });
+
+    $header = AuditTransaction::query()->firstOrFail();
+
+    expect($header->name)->toBe('the next one')
+        ->and($header->audits_count)->toBe(1)
+        ->and(Audit::query()->firstOrFail()->transaction_id)->toBe($header->id);
+});
+
+it('lets the business failure through rather than the one from closing the header', function (): void {
+    $failure = fn (): mixed => Sentinel::transaction('half-done', function (): void {
+        config()->set('sentinel.tables.transactions', 'nowhere');
+
+        throw new DomainException('what the application actually failed at');
+    });
+
+    expect($failure)->toThrow(DomainException::class, 'what the application actually failed at');
+
+    config()->set('sentinel.tables.transactions', 'transactions');
+});
+
+it('counts what settled, not what a rollback threw away', function (): void {
+    Sentinel::transaction('half-rolled-back', function (): void {
+        AuditedSubject::query()->create(['name' => 'kept']);
+
+        try {
+            DB::transaction(function (): void {
+                AuditedSubject::query()->create(['name' => 'undone']);
+
+                throw new RuntimeException('undo');
+            });
+        } catch (RuntimeException) {
+            // The operation carries on; the point is what the header ends up claiming.
+        }
+    });
+
+    $header = AuditTransaction::query()->firstOrFail();
+
+    expect($header->audits_count)->toBe(Audit::query()->count())
+        ->and($header->audits_count)->toBe(1);
 });
 
 it('opens the header before the operation runs, so one that dies is still findable', function (): void {

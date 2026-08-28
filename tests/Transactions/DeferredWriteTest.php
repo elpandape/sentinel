@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use ElPandaPe\Sentinel\Capture\Recorder;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Events\AuditWriteFailed;
 use ElPandaPe\Sentinel\Facades\Sentinel;
@@ -15,6 +16,7 @@ use ElPandaPe\Sentinel\Tests\Fixtures\Team;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 
+use function ElPandaPe\Sentinel\Tests\auditData;
 use function ElPandaPe\Sentinel\Tests\auditQuery;
 
 it('writes no entry for a transaction that rolled back', function (): void {
@@ -129,6 +131,19 @@ it('has the database undo it anyway when the ledger shares the connection that r
     }
 
     expect(Audit::query()->count())->toBe(0);
+});
+
+it('waits on the default connection for an entry that names no subject', function (): void {
+    $recorder = app(Recorder::class);
+
+    DB::transaction(function () use ($recorder): void {
+        $recorder->record(auditData(['subject_type' => null, 'subject_id' => null]));
+
+        expect(Audit::query()->count())->toBe(0);
+    });
+
+    expect(Audit::query()->count())->toBe(1)
+        ->and(Audit::query()->firstOrFail()->subject_type)->toBeNull();
 });
 
 it('behaves exactly as before outside any transaction', function (): void {
