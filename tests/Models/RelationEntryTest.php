@@ -24,7 +24,7 @@ it('reads a relation entry as a diff instead of failing on it', function (): voi
     expect($diff)->toHaveCount(1)
         ->and($diff[0]['path'])->toBe('/members/'.$this->members[0]->getKey())
         ->and($diff[0]['op'])->toBe('add')
-        ->and($diff[0]['new'])->toBe(['expires_at' => null, 'role' => 'lead']);
+        ->and($diff[0]['new'])->toEqualCanonicalizing(['expires_at' => null, 'role' => 'lead']);
 });
 
 it('reads a detach as a removal and an update as a replacement', function (): void {

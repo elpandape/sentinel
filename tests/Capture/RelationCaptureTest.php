@@ -120,15 +120,20 @@ it('carries the pivot state on both sides of an update', function (): void {
 
     expect($audit->metadata)->toBe(['api' => 'update_existing_pivot'])
         ->and(lineOf($audit)['operation'])->toBe('update')
-        ->and(lineOf($audit)['pivot_before'])->toBe(['expires_at' => '2026-01-01', 'role' => 'lead'])
-        ->and(lineOf($audit)['pivot_after'])->toBe(['expires_at' => '2027-01-01', 'role' => 'lead']);
+        ->and(lineOf($audit)['pivot_before'])->toEqualCanonicalizing(['expires_at' => '2026-01-01', 'role' => 'lead'])
+        ->and(lineOf($audit)['pivot_after'])->toEqualCanonicalizing(['expires_at' => '2027-01-01', 'role' => 'lead']);
 });
 
+/**
+ * The keys are compared without their order. A json column hands them back in the engine's own
+ * order — MySQL sorts them by length and then alphabetically — which is why the package canonicalises
+ * before hashing and why the README promises the values round trip and the order does not.
+ */
 it('drops the two foreign keys from the pivot state, which the entry already names', function (): void {
     $this->team->members()->attach($this->members[0]->getKey(), ['role' => 'lead']);
 
     expect(array_keys((array) lineOf(auditsOf($this->team)->sole())['pivot_after']))
-        ->toBe(['expires_at', 'role']);
+        ->toEqualCanonicalizing(['expires_at', 'role']);
 });
 
 it('tells a pivot that never existed from one with no declared columns', function (): void {

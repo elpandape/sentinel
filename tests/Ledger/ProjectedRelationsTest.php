@@ -41,7 +41,7 @@ it('projects exactly what the entry carries, field for field', function (): void
         ->and($line->related_type)->toBe(Member::class)
         ->and($line->related_id)->toBe((string) $this->members[0]->getKey())
         ->and($line->pivot_before)->toBeNull()
-        ->and($line->pivot_after)->toBe(['expires_at' => '2026-01-01', 'role' => 'lead']);
+        ->and($line->pivot_after)->toEqualCanonicalizing(['expires_at' => '2026-01-01', 'role' => 'lead']);
 });
 
 it('writes no row for an entry that is not about a relation', function (): void {
