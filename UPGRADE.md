@@ -9,6 +9,65 @@ before `1.0.0`.
 
 ---
 
+## v0.10.1 → v0.11.0
+
+Two published contracts change, and there is a migration.
+
+### `Contracts\Auditable` gains `relationHistory()`
+
+**Before:** ten methods — nine plus `audits()`.
+
+**After:** eleven. A class that implements the interface by hand rather than using the trait needs:
+
+```php
+public function relationHistory(string $relation): AuditQuery
+{
+    return app(Sentinel::class)->audits()->for($this)->whereRelation($relation);
+}
+```
+
+Models using `Concerns\Auditable` get it for nothing.
+
+### A driver must declare the three new filters to answer them
+
+`Filter` gains `Relation`, `Related` and `Operation`. As with every filter published after `v0.9.0`,
+`Filter::assumed()` does **not** grow: a driver that does not name them refuses them rather than
+ignoring a criterion it cannot translate.
+
+**If you ship a `DeclaresFilters` driver** and want to answer `whereRelation()`, `whereRelated()` and
+`whereOperation()`, add the three cases to `supportedFilters()` and translate them. The criterion
+arrives as one `Query\RelationCriteria` holding all three parts, and they must narrow the **same
+line** — an entry matches when one of its lines satisfies every part at once. Compiling them into
+separate conditions is a subtly wrong answer, not a slower one.
+
+A driver over arrays can hand the whole thing to `Ledger\ArrayQuery`, which already answers them.
+
+**If you do nothing**, your driver keeps working and refuses the three by name.
+
+### The trait now overrides two relation factories
+
+`Concerns\Auditable` overrides `newBelongsToMany()` and `newMorphToMany()` so every many-to-many a
+model declares is wrapped. Nothing in your application changes — `$team->members()->sync([...])` is
+written and behaves exactly as before, and every return value is untouched.
+
+**If your model already overrides either factory**, one of the two overrides wins and the other is
+lost. Call the trait's version from yours, or the relation is not audited.
+
+### Migration
+
+```bash
+php artisan migrate
+```
+
+`sentinel_audit_relations` is created. It is additive and reversible, and `sentinel_audits` is not
+touched: no new column, no `ALTER`, no rewritten hash. `payload_version` stays at `1` and every
+entry frozen before this version reproduces its hash byte for byte.
+
+If you publish migrations, publish again to pick up the new one — the package loads its own for any
+file you have not published.
+
+---
+
 ## v0.9.0 → v0.10.0
 
 Four published contracts change. Three of them are one edit each; the fourth is a read that used to

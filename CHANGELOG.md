@@ -2,6 +2,59 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.11.0 — Relationship auditing (2026-08-28)
+
+Eloquent fires **no event** when a pivot table is touched: `attach()` inserts and `detach()` deletes
+straight through the query builder. Every auditing package in the ecosystem treats that as a
+documented limitation and asks you to call a different method. This version wraps the relation
+instead, so `$team->members()->sync([...])` is written exactly as it always was and is audited.
+
+### Added
+
+- **The six pivot operations** — `attach`, `detach`, `sync`, `syncWithoutDetaching`, `toggle` and
+  `updateExistingPivot` — on `belongsToMany`, `morphToMany` and `morphedByMany`. The trait overrides
+  the two relation factories every many-to-many is built by; both polymorphic directions come
+  through one of them.
+- **One call, one entry.** A `sync()` that attaches two and detaches one writes a single entry with
+  three lines. `sync()` and `toggle()` are built out of the other operations, and none of those
+  inner calls writes anything of its own.
+- **A `sync()` that changed nothing writes nothing**, and takes no sequence number with it, so the
+  chain has no link claiming nothing happened.
+- **`sentinel_audit_relations`**, the indexable projection of the lines, written in the same
+  transaction that seals the entry and reachable as `$audit->relations`. `append()` projects too, so
+  a secondary destination lands with the index the primary wrote.
+- **`whereRelation()`, `whereRelated()` and `whereOperation()`**, plus
+  `$model->relationHistory('members')`. The three narrow the same line, so an entry answers only
+  when one of its lines satisfies all of them at once — asked separately, "when was Ada detached"
+  would also be answered by the entry that attached Ada and detached somebody else.
+- **A line says what happened, not what was called.** `operation` is `attach`, `detach` or `update`.
+  Most attachments in a real application are made by `sync()`, and a filter for attachments that
+  could not find them would answer the wrong question. The method called travels in the entry's
+  `metadata`, which the hashed payload covers.
+- **Pivot columns are protected by the parent**, with the `$auditRedact`, `$auditEncrypt` and
+  `$auditHash` it already declares. Both sides of a changed pivot are covered, and the hash still
+  runs over the ciphertext.
+- **`AuditPresenter` renders the block**: the relation closes the sentence and the records go under
+  it, `+` attached, `-` detached, `~` pivot changed, in `en` and `es`.
+- **A relation entry in the golden dataset**, frozen with its canonical string and its hash.
+- README: *Relationship auditing*.
+
+### Changed
+
+- **`Contracts\Auditable` gains `relationHistory()`.** See the [upgrade guide](UPGRADE.md).
+- **A driver must declare the three new filters to answer them.** See the
+  [upgrade guide](UPGRADE.md).
+- **`$audit->diff()` reads a relation entry instead of failing on it** — attach as an addition,
+  detach as a removal, a pivot change as a replacement, pointed at the relation and the record under
+  it. That is presentation and never storage, and it is what lets one caller walk a mixed trail.
+- **The unchanged filter tests for a comparison that came back empty**, rather than only for an
+  update. A creation with no comparable fields is still kept.
+
+### Upgrade notes
+
+`sentinel_audit_relations` is created: additive, reversible, and `sentinel_audits` is untouched.
+`payload_version` stays at `1`. Full steps in [UPGRADE.md](UPGRADE.md).
+
 ## v0.10.1 — The label plan gate (2026-08-28)
 
 Nothing in `src/` changed. `v0.10.0` was tagged with a green local run and left `main` red: the five

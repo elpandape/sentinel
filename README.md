@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.10.1-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.11.0-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -20,7 +20,7 @@ the state was before, what it is now — and whether the record itself can be pr
 
 ```json
 "repositories": [{ "type": "vcs", "url": "https://github.com/elpandape/sentinel" }],
-"require": { "elpandape/sentinel": "v0.10.1" }
+"require": { "elpandape/sentinel": "v0.11.0" }
 ```
 
 ```bash
@@ -41,8 +41,9 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.8.0` | `MemoryLedger`, `FanoutLedger`, the published contract suite, `append()` |
 | `v0.9.0` | The Query API: `Sentinel::audits()`, nine filters, ordering and paging over the ledger contract |
 | `v0.10.0` | Labels, field history, the timeline, comparing two versions, and a readable presenter |
+| `v0.11.0` | Relationship auditing: the six pivot operations, the relation projection, three filters and the `+ / -` render |
 
-Everything else is on the roadmap: relationship auditing, business transactions, custom events,
+Everything else is on the roadmap: business transactions, custom events,
 state transitions, restore, advanced verification (checkpoints and signatures), retention and
 compliance, performance modes and distributed tracing.
 
@@ -54,7 +55,8 @@ the ledger in the clear, and nothing writes an entry that says nothing happened.
 that makes "extensible by drivers" a thing you can run rather than a thing this file claims. `v0.9.0`
 is the one that lets you ask, which a trail you cannot read back is not. `v0.10.0` is the one that
 answers the three questions a trail gets asked most — what happened to this field, what is this
-entry about, and what happened at all — and says them in a sentence a person can read.
+entry about, and what happened at all — and says them in a sentence a person can read. `v0.11.0`
+is the one that records what Eloquent never announces: a pivot table changing under you.
 
 ## Quick start
 
@@ -883,6 +885,112 @@ $page->entries->loadReferences();
 
 A recorded type that names no class is left unresolved rather than fatal. An entry outliving the
 subject it describes is the normal case, not the edge one.
+
+## Relationship auditing
+
+Eloquent fires **no event** when a pivot table is touched. `attach()` inserts and `detach()` deletes
+straight through the query builder, so a package listening for model events hears nothing — which is
+why the rest of the ecosystem asks you to call `auditAttach()` instead of `attach()`.
+
+Sentinel wraps the relation instead. You keep writing exactly what you already wrote:
+
+```php
+$team->members()->attach($ada, ['role' => 'lead']);
+$team->members()->sync([$ada->id, $linus->id]);
+$team->members()->updateExistingPivot($ada->id, ['role' => 'admin']);
+$team->members()->detach($ada);
+```
+
+All six operations are covered — `attach`, `detach`, `sync`, `syncWithoutDetaching`, `toggle` and
+`updateExistingPivot` — on `belongsToMany`, `morphToMany` and `morphedByMany`.
+
+**One call is one entry.** A `sync()` that attaches two records and detaches one writes a single
+entry with three lines, not three entries: the operation the application performed was one.
+Internally `sync()` calls `attach()` and `detach()`, and none of those inner calls writes anything.
+
+A `sync()` that attaches nothing and detaches nothing writes **no entry at all** — and takes no
+sequence number, so the chain has no link claiming nothing happened.
+
+```text
+Someone synced Team #1 · members
+  + Member #2
+  - Member #7
+  ~ Member #9
+```
+
+`+` was attached, `-` was detached, `~` kept its place and its pivot changed.
+
+### What a line says
+
+Each line records what happened to **one** related record:
+
+| | |
+|---|---|
+| `relation` | The relation on the parent — `members` |
+| `operation` | `attach`, `detach` or `update` — what became of that record |
+| `related_type` / `related_id` | Which record |
+| `pivot_before` / `pivot_after` | The pivot columns either side. `null` means the row did not exist; `{}` means it existed and carried nothing |
+
+`operation` is what **happened**, not which method was called. That is deliberate: most attachments
+in a real application are made by `sync()`, and a filter for attachments that could not find them
+would be answering the wrong question. The method you called is not lost — it travels in the entry's
+`metadata` as `{"api": "sync"}`, and metadata is inside the hashed payload.
+
+### Asking
+
+```php
+$team->relationHistory('members')->get();
+$team->relationHistory('members')->whereOperation('attach')->get();
+
+Sentinel::audits()->whereRelated($ada)->get();
+Sentinel::audits()->whereRelation('members')->whereRelated($ada)->whereOperation('detach')->get();
+```
+
+The three narrow the **same line**, so an entry answers only when one of its lines satisfies all of
+them at once. Asked separately, "when was Ada detached" would also be answered by the entry that
+attached Ada and detached somebody else.
+
+They compose with every other filter, page like any other read, and reach the projection through an
+index on all three engines.
+
+```php
+$audit->relations;     // the lines, as rows
+$audit->diff();        // the same lines, read as a diff: /members/7 added, removed or replaced
+```
+
+### Protecting a pivot column
+
+A pivot has no class of its own to declare anything on, so the **parent** declares for it, with the
+same properties it already uses for its own columns:
+
+```php
+class Team extends Model
+{
+    use Auditable;
+
+    protected array $auditRedact = ['role'];
+    protected array $auditEncrypt = ['expires_at'];
+}
+```
+
+Both sides of a changed pivot are protected, not just the new one, and the hash still covers the
+ciphertext — so a relation entry with an encrypted pivot verifies where no key is reachable.
+
+### What the chain covers, and what it does not
+
+**The lines are inside the hashed payload.** Nobody can change what was attached, what was detached
+or what the pivot was worth without breaking `verifyIntegrity()`.
+
+`sentinel_audit_relations` is a **projection** of those lines: an index over the evidence, not the
+evidence. It is written in the same transaction that seals the entry and is rebuildable from it, so
+removing a row there leaves `verifyIntegrity()` untouched. That is the point — rebuilding an index
+must not be indistinguishable from tampering. Verification of the projection against the entry, and
+the command to rebuild it, land in `v0.18.0`.
+
+Two more things this version does not do. `whereFieldChanged('members')` finds **nothing**: a field
+is an attribute, a relation is not one, and the field predicate reads a `path` that relation lines
+do not carry. And a `hasMany`/`hasOne` parent whose child changes its foreign key is not audited
+yet — that is a different mechanism and it ships in `v0.11.1`.
 
 ## Reading a trail out loud
 
