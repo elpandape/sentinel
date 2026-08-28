@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Ledger;
 
 use Closure;
+use ElPandaPe\Sentinel\Capture\RelationCapture;
 use ElPandaPe\Sentinel\Contracts\DeclaresFilters;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Contracts\LedgerStream;
@@ -14,6 +15,7 @@ use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Integrity\Stream;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Models\AuditRelation;
 use ElPandaPe\Sentinel\Models\AuditTag;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Query\Period;
@@ -31,6 +33,7 @@ final readonly class DatabaseLedger implements DeclaresFilters, Ledger
     public function __construct(
         private Audit $model,
         private AuditTag $labels,
+        private AuditRelation $relations,
         private Stream $stream,
         private EntryBuilder $builder,
         private ChangedFieldPredicate $fields,
@@ -56,6 +59,7 @@ final readonly class DatabaseLedger implements DeclaresFilters, Ledger
         $this->model->getConnection()->transaction(function () use ($audit): void {
             $this->model->newQuery()->insert([$audit->getAttributes()]);
             $this->label([$audit]);
+            $this->project([$audit]);
         });
 
         $audit->exists = true;
@@ -155,6 +159,7 @@ final readonly class DatabaseLedger implements DeclaresFilters, Ledger
 
             $this->model->newQuery()->insert($rows);
             $this->label($written);
+            $this->project($written);
 
             ksort($written);
 
@@ -237,6 +242,76 @@ final readonly class DatabaseLedger implements DeclaresFilters, Ledger
         if ($rows !== []) {
             $this->model->getConnection()->table($this->labels->getTable())->insertOrIgnore($rows);
         }
+    }
+
+    /**
+     * The indexable copy of what the entry already carries. Unlike the labels, these are read
+     * back out of the entry rather than off a loaded relation: the lines are inside the canonical
+     * payload, so an entry that has them cannot arrive without them, and deriving the rows here is
+     * projection rather than guesswork. It is also what keeps the two from ever disagreeing — an
+     * entry appended by a secondary destination projects exactly what the primary sealed.
+     *
+     * @param  array<int, Audit>  $written
+     */
+    private function project(array $written): void
+    {
+        $rows = [];
+
+        foreach ($written as $audit) {
+            if ($audit->audit_type !== RelationCapture::AUDIT_TYPE) {
+                continue;
+            }
+
+            /** @var array<array-key, mixed> $lines */
+            $lines = $audit->getAttribute('changes') ?? [];
+
+            foreach ($lines as $line) {
+                if (is_array($line)) {
+                    $rows[] = $this->row($audit->id, $line);
+                }
+            }
+        }
+
+        if ($rows !== []) {
+            $this->model->getConnection()->table($this->relations->getTable())->insert($rows);
+        }
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $line
+     * @return array<string, mixed>
+     */
+    private function row(string $audit, array $line): array
+    {
+        return [
+            'audit_id' => $audit,
+            'relation' => $this->text($line, 'relation'),
+            'operation' => $this->text($line, 'operation'),
+            'related_type' => $this->text($line, 'related_type'),
+            'related_id' => $this->text($line, 'related_id'),
+            'pivot_before' => $this->json($line, 'pivot_before'),
+            'pivot_after' => $this->json($line, 'pivot_after'),
+        ];
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $line
+     */
+    private function text(array $line, string $key): ?string
+    {
+        $value = $line[$key] ?? null;
+
+        return is_string($value) ? $value : null;
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $line
+     */
+    private function json(array $line, string $key): ?string
+    {
+        $value = $line[$key] ?? null;
+
+        return is_array($value) ? json_encode($value, JSON_THROW_ON_ERROR) : null;
     }
 
     /**

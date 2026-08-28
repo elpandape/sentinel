@@ -19,6 +19,7 @@ use ElPandaPe\Sentinel\Integrity\Hasher;
 use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
 use ElPandaPe\Sentinel\Integrity\Stream;
 use ElPandaPe\Sentinel\Integrity\Verifier;
+use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
 use ElPandaPe\Sentinel\Ledger\FanoutLedger;
 use ElPandaPe\Sentinel\Ledger\MemoryLedger;
 use ElPandaPe\Sentinel\Models\Audit;
@@ -457,6 +458,14 @@ function seedTheFrozenTrail(): array
     }
 
     return $ids;
+}
+
+function ledger(): DatabaseLedger
+{
+    /** @var DatabaseLedger $ledger */
+    $ledger = app(DatabaseLedger::class);
+
+    return $ledger;
 }
 
 function auditQuery(?Ledger $ledger = null): AuditQuery
