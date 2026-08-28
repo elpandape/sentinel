@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Presentation;
 
+use ElPandaPe\Sentinel\Capture\RelationCapture;
 use ElPandaPe\Sentinel\Diff\Pointer;
+use ElPandaPe\Sentinel\Enums\RelationOperation;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use Illuminate\Contracts\Translation\Translator;
@@ -30,12 +32,16 @@ final readonly class AuditPresenter
             'subject' => $this->party($audit->subject_type, $audit->subject_id, 'something'),
         ];
 
-        return $audit->impersonator_type === null
+        $sentence = $audit->impersonator_type === null
             ? $this->line('entry', $line)
             : $this->line('impersonated', [
                 ...$line,
                 'impersonator' => $this->party($audit->impersonator_type, $audit->impersonator_id, 'someone'),
             ]);
+
+        return $audit->audit_type === RelationCapture::AUDIT_TYPE
+            ? $this->relation($audit, $sentence)
+            : $sentence;
     }
 
     /**
@@ -69,6 +75,78 @@ final readonly class AuditPresenter
                 'line' => $this->entry($audit),
             ]))
             ->implode(PHP_EOL);
+    }
+
+    /**
+     * A relation entry says nothing worth reading as one sentence: "Someone synced Team #1" leaves
+     * out what was synced, which is the whole of what happened. The lines go underneath it, one per
+     * record, with the sign saying what became of it.
+     */
+    private function relation(Audit $audit, string $sentence): string
+    {
+        /** @var array<array-key, mixed> $lines */
+        $lines = $audit->getAttribute('changes') ?? [];
+
+        $rendered = [];
+
+        foreach ($lines as $line) {
+            if (is_array($line)) {
+                $rendered[] = $this->touched($line);
+            }
+        }
+
+        if ($rendered === []) {
+            return $sentence;
+        }
+
+        return implode(PHP_EOL, [
+            $this->line('relation', ['line' => $sentence, 'relation' => $this->named($lines)]),
+            ...$rendered,
+        ]);
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $line
+     */
+    private function touched(array $line): string
+    {
+        $related = $this->party(
+            $this->text($line, 'related_type'),
+            $this->text($line, 'related_id'),
+            'something',
+        );
+
+        return $this->line(match ($this->text($line, 'operation')) {
+            RelationOperation::Attach->value => 'attached',
+            RelationOperation::Detach->value => 'detached',
+            default => 'repivoted',
+        }, ['related' => $related]);
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $lines
+     */
+    private function named(array $lines): string
+    {
+        foreach ($lines as $line) {
+            $relation = is_array($line) ? $this->text($line, 'relation') : null;
+
+            if ($relation !== null) {
+                return $relation;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $line
+     */
+    private function text(array $line, string $key): ?string
+    {
+        $value = $line[$key] ?? null;
+
+        return is_string($value) ? $value : null;
     }
 
     private function value(Audit $audit, string $pointer): string
