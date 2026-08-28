@@ -2,10 +2,14 @@
 
 declare(strict_types=1);
 
+use ElPandaPe\Sentinel\Benchmarks\BenchArticle;
 use ElPandaPe\Sentinel\Benchmarks\BenchAudited;
+use ElPandaPe\Sentinel\Benchmarks\BenchAuthor;
 use ElPandaPe\Sentinel\Benchmarks\BenchLabelled;
+use ElPandaPe\Sentinel\Benchmarks\BenchLooseArticle;
 use ElPandaPe\Sentinel\Benchmarks\BenchMember;
 use ElPandaPe\Sentinel\Benchmarks\BenchPlain;
+use ElPandaPe\Sentinel\Benchmarks\BenchPlainArticle;
 use ElPandaPe\Sentinel\Benchmarks\BenchPlainTeam;
 use ElPandaPe\Sentinel\Benchmarks\BenchProtected;
 use ElPandaPe\Sentinel\Benchmarks\BenchSnapshotless;
@@ -77,6 +81,15 @@ Schema::create('bench_team_member', static function (Blueprint $table): void {
     $table->unsignedBigInteger('team_id');
     $table->unsignedBigInteger('member_id');
     $table->string('role')->nullable();
+});
+
+Schema::create('bench_authors', static function (Blueprint $table): void {
+    $table->id();
+});
+
+Schema::create('bench_articles', static function (Blueprint $table): void {
+    $table->id();
+    $table->unsignedBigInteger('author_id')->nullable();
 });
 
 /**
@@ -258,6 +271,42 @@ $syncBaseline = $churnSync(BenchPlainTeam::class, 1, 100, SYNC_SIZE);
 $churnSync(BenchTeam::class, 2, 10, SYNC_SIZE);
 $syncAudited = $churnSync(BenchTeam::class, 2, 100, SYNC_SIZE);
 
+// A child changing hands, which no eloquent event announces either: the update fires on the child
+// and the two parents that lived the change hear nothing. Three variants because the interesting
+// number is not what auditing costs but what the two parent entries cost on top of the child's own.
+const HANDOVER_ITERATIONS = 500;
+
+BenchAuthor::query()->create(['id' => 1]);
+BenchAuthor::query()->create(['id' => 2]);
+
+foreach ([1, 2, 3] as $article) {
+    BenchPlainArticle::query()->create(['id' => $article, 'author_id' => 1]);
+}
+
+/**
+ * @param  class-string<BenchArticle|BenchLooseArticle|BenchPlainArticle>  $model
+ */
+$handover = static function (string $model, int $article, int $times): float {
+    /** @var BenchArticle|BenchLooseArticle|BenchPlainArticle $child */
+    $child = $model::query()->findOrFail($article);  // @phpstan-ignore-line staticMethod.dynamicName
+    $start = hrtime(true);
+
+    for ($i = 0; $i < $times; $i++) {
+        $child->update(['author_id' => $i % 2 === 0 ? 2 : 1]);
+    }
+
+    return (hrtime(true) - $start) / 1_000_000;
+};
+
+$handover(BenchPlainArticle::class, 1, WARMUP);
+$handoverBaseline = $handover(BenchPlainArticle::class, 1, HANDOVER_ITERATIONS);
+
+$handover(BenchLooseArticle::class, 2, WARMUP);
+$handoverChild = $handover(BenchLooseArticle::class, 2, HANDOVER_ITERATIONS);
+
+$handover(BenchArticle::class, 3, WARMUP);
+$handoverParents = $handover(BenchArticle::class, 3, HANDOVER_ITERATIONS);
+
 $baseline = $results['plain (not audited)'];
 
 echo '| Variant | Writes | Total (ms) | Per write (µs) | Δ vs plain |', PHP_EOL;
@@ -293,6 +342,27 @@ foreach ($pivot as $label => [$total, $operations, $against]) {
         $total,
         $total * 1000 / $operations,
         $total === $against ? '—' : sprintf('%+.1f%%', ($total / $against - 1) * 100),
+        PHP_EOL,
+    );
+}
+
+echo PHP_EOL, '| Hand-over variant | Operations | Total (ms) | Per operation (µs) | Δ vs plain |', PHP_EOL;
+echo '|---|---|---|---|---|', PHP_EOL;
+
+$handovers = [
+    'foreign key change, not audited' => $handoverBaseline,
+    'foreign key change, child audited' => $handoverChild,
+    'foreign key change, child and both parents audited' => $handoverParents,
+];
+
+foreach ($handovers as $label => $total) {
+    printf(
+        '| %s | %d | %.1f | %.1f | %s |%s',
+        $label,
+        HANDOVER_ITERATIONS,
+        $total,
+        $total * 1000 / HANDOVER_ITERATIONS,
+        $total === $handoverBaseline ? '—' : sprintf('%+.1f%%', ($total / $handoverBaseline - 1) * 100),
         PHP_EOL,
     );
 }
