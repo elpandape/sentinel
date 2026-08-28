@@ -9,6 +9,8 @@ use ElPandaPe\Sentinel\Diff\Pointer;
 use ElPandaPe\Sentinel\Enums\RelationOperation;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Support\AuditCollection;
+use ElPandaPe\Sentinel\Transitions\Transition;
+use ElPandaPe\Sentinel\Transitions\TransitionBuilder;
 use Illuminate\Contracts\Translation\Translator;
 
 /**
@@ -39,9 +41,11 @@ final readonly class AuditPresenter
                 'impersonator' => $this->party($audit->impersonator_type, $audit->impersonator_id, 'someone'),
             ]);
 
-        return $audit->audit_type === RelationCapture::AUDIT_TYPE
-            ? $this->relation($audit, $sentence)
-            : $sentence;
+        return match ($audit->audit_type) {
+            RelationCapture::AUDIT_TYPE => $this->relation($audit, $sentence),
+            TransitionBuilder::AUDIT_TYPE => $this->transition($audit, $sentence),
+            default => $sentence,
+        };
     }
 
     /**
@@ -75,6 +79,22 @@ final readonly class AuditPresenter
                 'line' => $this->entry($audit),
             ]))
             ->implode(PHP_EOL);
+    }
+
+    /**
+     * "Someone moved Invoice #1" leaves out the two states, which are the whole of what happened.
+     * They go on the same line rather than underneath it: a transition is one step, unlike a sync
+     * that touched several records at once.
+     */
+    private function transition(Audit $audit, string $sentence): string
+    {
+        $step = Transition::of($audit, null);
+
+        return $this->line('transition', [
+            'line' => $sentence,
+            'from' => $this->scalar($step->from),
+            'to' => $this->scalar($step->to),
+        ]);
     }
 
     /**

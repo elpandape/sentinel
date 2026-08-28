@@ -27,6 +27,7 @@ return [
         'detached' => '  - :related',
         'repivoted' => '  ~ :related',
         'timeline' => ':time  :line',
+        'transition' => ':line · :from → :to',
         'nothing' => 'nada',
         'yes' => 'sí',
         'no' => 'no',
