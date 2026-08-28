@@ -3,12 +3,14 @@
 declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Enums\AuditEvent;
+use ElPandaPe\Sentinel\Events\AuditDiscarded;
 use ElPandaPe\Sentinel\Facades\Sentinel;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Tests\Fixtures\Label;
 use ElPandaPe\Sentinel\Tests\Fixtures\Member;
 use ElPandaPe\Sentinel\Tests\Fixtures\Post;
 use ElPandaPe\Sentinel\Tests\Fixtures\Team;
+use Illuminate\Support\Facades\Event;
 
 use function ElPandaPe\Sentinel\Tests\auditsOf;
 use function ElPandaPe\Sentinel\Tests\lineOf;
@@ -190,4 +192,22 @@ it('empties the relation when a detach names nobody', function (): void {
 
     expect(linesOf(auditsOf($this->team)->last()))->toHaveCount(2)
         ->and($this->team->members()->count())->toBe(0);
+});
+
+it('writes nothing for a sync that attaches nothing and detaches nothing', function (): void {
+    $this->team->members()->sync([$this->members[0]->getKey()]);
+    Event::fake([AuditDiscarded::class]);
+
+    $this->team->members()->sync([$this->members[0]->getKey()]);
+
+    Event::assertDispatched(AuditDiscarded::class);
+    expect(auditsOf($this->team))->toHaveCount(1);
+});
+
+it('leaves no gap in the chain when it writes nothing', function (): void {
+    $this->team->members()->attach($this->members[0]->getKey());
+    $this->team->members()->sync([$this->members[0]->getKey()]);
+    $this->team->members()->detach($this->members[0]->getKey());
+
+    expect(auditsOf($this->team)->map(static fn (Audit $audit): int => $audit->sequence)->all())->toBe([1, 2]);
 });

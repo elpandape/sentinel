@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use ElPandaPe\Sentinel\Capture\ModelCapture;
+use ElPandaPe\Sentinel\Capture\RelationCapture;
 use ElPandaPe\Sentinel\Events\AuditDiscarded;
 use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Pipeline\Stages\FilterUnchanged;
@@ -86,4 +88,26 @@ it('leaves no gap in the chain when it discards', function (): void {
     $subject->update(['name' => 'Grace']);
 
     expect(auditsOf($subject)->pluck('sequence')->all())->toBe([1, 2]);
+});
+
+it('drops a relation entry whose operation changed nothing, whatever it was called', function (string $event): void {
+    $audit = auditData(['audit_type' => RelationCapture::AUDIT_TYPE, 'event' => $event, 'changes' => []]);
+
+    expect(pipeline()->process($audit))->toBeNull();
+})->with(['attached', 'detached', 'synced']);
+
+it('keeps a relation entry that has lines', function (): void {
+    $audit = auditData([
+        'audit_type' => RelationCapture::AUDIT_TYPE,
+        'event' => 'synced',
+        'changes' => [['relation' => 'roles', 'operation' => 'attach', 'related_type' => 'role', 'related_id' => '3']],
+    ]);
+
+    expect(pipeline()->process($audit))->toBe($audit);
+});
+
+it('keeps a model entry that is not an update even with nothing to compare', function (): void {
+    $audit = auditData(['audit_type' => ModelCapture::AUDIT_TYPE, 'event' => 'created', 'changes' => []]);
+
+    expect(pipeline()->process($audit))->toBe($audit);
 });
