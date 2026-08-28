@@ -276,8 +276,11 @@ function planFor(AuditQuery $query): string
     $connection = DB::connection();
     $captured = ['sql' => '', 'bindings' => []];
 
+    // The read of the trail itself, not the eager load of what hangs off it.
     DB::listen(static function (QueryExecuted $event) use (&$captured): void {
-        $captured = ['sql' => $event->sql, 'bindings' => $event->bindings];
+        if ($captured['sql'] === '' && str_contains($event->sql, auditsTable())) {
+            $captured = ['sql' => $event->sql, 'bindings' => $event->bindings];
+        }
     });
 
     $query->get();

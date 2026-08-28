@@ -37,6 +37,16 @@ final class Sentinel
     }
 
     /**
+     * Everything that happened, in the order it happened. One query over one table: the trail
+     * holds every kind of entry, so a timeline is the unnarrowed read with the clock of the fact
+     * in front — not a merge of sources in PHP.
+     */
+    public function timeline(): AuditQuery
+    {
+        return $this->audits()->byOccurrence();
+    }
+
+    /**
      * The last word on whether an entry settles. A policy that returns false discards it,
      * before the ledger has given it a sequence and therefore without leaving a gap.
      *

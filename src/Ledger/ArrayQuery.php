@@ -31,7 +31,7 @@ final readonly class ArrayQuery
             }
         }
 
-        usort($matched, $this->chronologically(...));
+        usort($matched, fn (Audit $first, Audit $second): int => $this->chronologically($first, $second, $query->byOccurrence));
 
         if ($query->newestFirst) {
             $matched = array_reverse($matched);
@@ -91,9 +91,11 @@ final readonly class ArrayQuery
      * instant it was minted, so two entries stamped in the same microsecond still come back
      * in the order they were written, and they come back in that order on every driver.
      */
-    private function chronologically(Audit $first, Audit $second): int
+    private function chronologically(Audit $first, Audit $second, bool $byOccurrence): int
     {
-        $byClock = $first->created_at <=> $second->created_at;
+        $byClock = $byOccurrence
+            ? $first->occurred_at <=> $second->occurred_at
+            : $first->created_at <=> $second->created_at;
 
         return $byClock === 0 ? $first->id <=> $second->id : $byClock;
     }

@@ -68,6 +68,8 @@ final class AuditQuery
 
     public private(set) bool $newestFirst = false;
 
+    public private(set) bool $byOccurrence = false;
+
     public private(set) ?int $limit = null;
 
     public private(set) ?int $offset = null;
@@ -229,6 +231,22 @@ final class AuditQuery
         return $query;
     }
 
+    /**
+     * Order by the clock of the fact rather than the clock of the ledger. The two agree while
+     * writing is synchronous and come apart the moment it is not, and it is the first that says
+     * what order things happened in.
+     */
+    public function byOccurrence(): self
+    {
+        $query = clone $this;
+        $query->byOccurrence = true;
+
+        return $query;
+    }
+
+    /**
+     * Newest first, by whichever clock the query is ordered on.
+     */
     public function latest(): self
     {
         $query = clone $this;

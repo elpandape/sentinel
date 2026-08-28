@@ -233,6 +233,42 @@ abstract class LedgerContractTestCase extends TestCase
         $this->assertSame([], $ledger->query($this->asking()->whereTag('absent'))->pluck('id')->all());
     }
 
+    /**
+     * The two clocks are asserted against the same three entries, written in an order that is
+     * the reverse of when they happened. An expectation built on entries stamped alike would
+     * pass whether the criterion did anything or not.
+     */
+    public function test_it_orders_by_the_clock_of_the_fact_when_asked_to(): void
+    {
+        $ledger = $this->ledger();
+        $written = [
+            $ledger->write($this->auditData(occurredAt: '2026-08-26 12:00:00.000000'))->id,
+            $ledger->write($this->auditData(occurredAt: '2026-08-26 11:00:00.000000'))->id,
+            $ledger->write($this->auditData(occurredAt: '2026-08-26 10:00:00.000000'))->id,
+        ];
+        $this->settle($ledger);
+
+        $recorded = $ledger->query($this->asking())->pluck('id')->all();
+        $occurred = $ledger->query($this->asking()->byOccurrence())->pluck('id')->all();
+
+        $this->assertSame($this->retains() ? $written : [], $recorded);
+        $this->assertSame($this->retains() ? array_reverse($written) : [], $occurred);
+    }
+
+    public function test_it_turns_the_clock_of_the_fact_around_on_request(): void
+    {
+        $ledger = $this->ledger();
+        $written = [
+            $ledger->write($this->auditData(occurredAt: '2026-08-26 12:00:00.000000'))->id,
+            $ledger->write($this->auditData(occurredAt: '2026-08-26 10:00:00.000000'))->id,
+        ];
+        $this->settle($ledger);
+
+        $found = $ledger->query($this->asking()->byOccurrence()->latest())->pluck('id')->all();
+
+        $this->assertSame($this->retains() ? $written : [], $found);
+    }
+
     public function test_it_answers_an_unnarrowed_query_with_everything_it_kept(): void
     {
         $ledger = $this->ledger();
@@ -441,13 +477,13 @@ abstract class LedgerContractTestCase extends TestCase
      * one overrides this; the suite only ever varies the stream, because the stream is the
      * only field the chain is scoped by.
      */
-    protected function auditData(?string $stream = null): AuditData
+    protected function auditData(?string $stream = null, string $occurredAt = '2026-08-26 10:00:00.000000'): AuditData
     {
         return new AuditData(
             audit_type: 'model',
             event: 'created',
             severity: Severity::Info,
-            occurred_at: new DateTimeImmutable('2026-08-26 10:00:00.000000'),
+            occurred_at: new DateTimeImmutable($occurredAt),
             stream: $stream,
         );
     }

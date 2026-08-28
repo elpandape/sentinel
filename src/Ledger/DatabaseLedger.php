@@ -64,9 +64,13 @@ final readonly class DatabaseLedger implements DeclaresFilters, Ledger
         return $audit;
     }
 
+    /**
+     * Labels come back loaded, always. An unloaded subject reads as null, which is legible; an
+     * unloaded label list reads as an empty one, which is a claim that the entry carries none.
+     */
     public function find(string $id): ?Audit
     {
-        return $this->model->newQuery()->find($id);
+        return $this->model->newQuery()->with('tags')->find($id);
     }
 
     /**
@@ -86,9 +90,11 @@ final readonly class DatabaseLedger implements DeclaresFilters, Ledger
     public function query(AuditQuery $query): AuditCollection
     {
         $direction = $query->newestFirst ? 'desc' : 'asc';
+        $clock = $query->byOccurrence ? 'occurred_at' : 'created_at';
 
         /** @var AuditCollection $entries */
         $entries = $this->model->newQuery()
+            ->with('tags')
             ->when($query->subject, static fn (Builder $entries, Reference $subject): Builder => $entries
                 ->where('subject_type', $subject->type)
                 ->where('subject_id', $subject->id))
@@ -106,7 +112,7 @@ final readonly class DatabaseLedger implements DeclaresFilters, Ledger
             ->when($query->tags, fn (Builder $entries, TagCriteria $tags): Builder => $this->narrowByLabel($entries, $tags))
             ->when($query->changedField, fn (Builder $entries, string $pointer): Builder => $this->narrowByField($entries, $pointer))
             ->when($query->versions, static fn (Builder $entries, array $versions): Builder => $entries->whereIn('version', $versions))
-            ->orderBy('created_at', $direction)
+            ->orderBy($clock, $direction)
             ->orderBy('id', $direction)
             ->when($query->offset, static fn (Builder $entries, int $offset): Builder => $entries->offset($offset))
             ->when($query->limit, static fn (Builder $entries, int $limit): Builder => $entries->limit($limit))
