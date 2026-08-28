@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Benchmarks\BenchAudited;
 use ElPandaPe\Sentinel\Benchmarks\BenchLabelled;
+use ElPandaPe\Sentinel\Benchmarks\BenchMember;
 use ElPandaPe\Sentinel\Benchmarks\BenchPlain;
+use ElPandaPe\Sentinel\Benchmarks\BenchPlainTeam;
 use ElPandaPe\Sentinel\Benchmarks\BenchProtected;
 use ElPandaPe\Sentinel\Benchmarks\BenchSnapshotless;
+use ElPandaPe\Sentinel\Benchmarks\BenchTeam;
 use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Diff\Diff;
@@ -60,6 +63,20 @@ Schema::create('bench_subjects', static function (Blueprint $table): void {
     $table->string('role');
     $table->unsignedInteger('score');
     $table->boolean('active');
+});
+
+Schema::create('bench_teams', static function (Blueprint $table): void {
+    $table->id();
+});
+
+Schema::create('bench_members', static function (Blueprint $table): void {
+    $table->id();
+});
+
+Schema::create('bench_team_member', static function (Blueprint $table): void {
+    $table->unsignedBigInteger('team_id');
+    $table->unsignedBigInteger('member_id');
+    $table->string('role')->nullable();
 });
 
 /**
@@ -181,6 +198,66 @@ for ($i = 0; $i < ITERATIONS; $i++) {
 
 $results['pipeline only (no ledger, no write)'] = (hrtime(true) - $start) / 1_000_000;
 
+// A pivot operation, which no eloquent event announces and which this version audits by
+// photographing the pivot rows either side of it. The pair is measured rather than the attach
+// alone: a detach has to read the rows before they are gone, so the two are not the same cost.
+const PIVOT_ITERATIONS = 500;
+const SYNC_SIZE = 50;
+
+BenchPlainTeam::query()->create(['id' => 1]);
+BenchPlainTeam::query()->create(['id' => 2]);
+
+for ($i = 1; $i <= SYNC_SIZE; $i++) {
+    BenchMember::query()->create(['id' => $i]);
+}
+
+/**
+ * @param  class-string<BenchPlainTeam|BenchTeam>  $model
+ */
+$churn = static function (string $model, int $team, int $times): float {
+    /** @var BenchPlainTeam|BenchTeam $owner */
+    $owner = $model::query()->findOrFail($team);  // @phpstan-ignore-line staticMethod.dynamicName
+    $relation = $owner->members();
+    $start = hrtime(true);
+
+    for ($i = 0; $i < $times; $i++) {
+        $relation->attach(1, ['role' => 'lead']);
+        $relation->detach(1);
+    }
+
+    return (hrtime(true) - $start) / 1_000_000;
+};
+
+/**
+ * @param  class-string<BenchPlainTeam|BenchTeam>  $model
+ */
+$churnSync = static function (string $model, int $team, int $times, int $size): float {
+    /** @var BenchPlainTeam|BenchTeam $owner */
+    $owner = $model::query()->findOrFail($team);  // @phpstan-ignore-line staticMethod.dynamicName
+    $relation = $owner->members();
+    $everyone = range(1, $size);
+    $start = hrtime(true);
+
+    for ($i = 0; $i < $times; $i++) {
+        $relation->sync($everyone);
+        $relation->sync([]);
+    }
+
+    return (hrtime(true) - $start) / 1_000_000;
+};
+
+$churn(BenchPlainTeam::class, 1, WARMUP);
+$pivotBaseline = $churn(BenchPlainTeam::class, 1, PIVOT_ITERATIONS);
+
+$churn(BenchTeam::class, 2, WARMUP);
+$pivotAudited = $churn(BenchTeam::class, 2, PIVOT_ITERATIONS);
+
+$churnSync(BenchPlainTeam::class, 1, 10, SYNC_SIZE);
+$syncBaseline = $churnSync(BenchPlainTeam::class, 1, 100, SYNC_SIZE);
+
+$churnSync(BenchTeam::class, 2, 10, SYNC_SIZE);
+$syncAudited = $churnSync(BenchTeam::class, 2, 100, SYNC_SIZE);
+
 $baseline = $results['plain (not audited)'];
 
 echo '| Variant | Writes | Total (ms) | Per write (µs) | Δ vs plain |', PHP_EOL;
@@ -194,6 +271,28 @@ foreach ($results as $label => $total) {
         $total,
         $total * 1000 / ITERATIONS,
         $total === $baseline ? '—' : sprintf('%+.1f%%', ($total / $baseline - 1) * 100),
+        PHP_EOL,
+    );
+}
+
+echo PHP_EOL, '| Pivot variant | Operations | Total (ms) | Per operation (µs) | Δ vs plain |', PHP_EOL;
+echo '|---|---|---|---|---|', PHP_EOL;
+
+$pivot = [
+    'attach + detach, not audited' => [$pivotBaseline, PIVOT_ITERATIONS * 2, $pivotBaseline],
+    'attach + detach, audited' => [$pivotAudited, PIVOT_ITERATIONS * 2, $pivotBaseline],
+    'sync of '.SYNC_SIZE.' then empty, not audited' => [$syncBaseline, 200, $syncBaseline],
+    'sync of '.SYNC_SIZE.' then empty, audited' => [$syncAudited, 200, $syncBaseline],
+];
+
+foreach ($pivot as $label => [$total, $operations, $against]) {
+    printf(
+        '| %s | %d | %.1f | %.1f | %s |%s',
+        $label,
+        $operations,
+        $total,
+        $total * 1000 / $operations,
+        $total === $against ? '—' : sprintf('%+.1f%%', ($total / $against - 1) * 100),
         PHP_EOL,
     );
 }
