@@ -400,6 +400,39 @@ $correlated(BenchAudited::class, 5, WARMUP / 5, $offset);
 $offset += WARMUP;
 $correlatedFive = $correlated(BenchAudited::class, 5, DEFERRED_ITERATIONS / 5, $offset);
 
+// A fact stated outright, against the model change it is measured beside. It carries no snapshot
+// and no diff, so what is left is the pipeline, the context and the write — which is the number
+// that says whether "the same ledger, no shortcuts" costs anything extra.
+const EVENT_ITERATIONS = 2000;
+
+$sentinel = $app->make(Sentinel::class);
+
+for ($i = 0; $i < WARMUP; $i++) {
+    $sentinel->event('bench.stated')->record();
+}
+
+$start = hrtime(true);
+
+for ($i = 0; $i < EVENT_ITERATIONS; $i++) {
+    $sentinel->event('bench.stated')->record();
+}
+
+$results['domain event, no subject'] = (hrtime(true) - $start) / 1_000_000;
+
+$subject = BenchAudited::query()->firstOrFail();
+
+for ($i = 0; $i < WARMUP; $i++) {
+    $sentinel->event('bench.stated')->subject($subject)->record();
+}
+
+$start = hrtime(true);
+
+for ($i = 0; $i < EVENT_ITERATIONS; $i++) {
+    $sentinel->event('bench.stated')->subject($subject)->record();
+}
+
+$results['domain event, with a subject'] = (hrtime(true) - $start) / 1_000_000;
+
 $baseline = $results['plain (not audited)'];
 
 echo '| Variant | Writes | Total (ms) | Per write (µs) | Δ vs plain |', PHP_EOL;
