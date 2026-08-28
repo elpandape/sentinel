@@ -10,6 +10,7 @@ use ElPandaPe\Sentinel\Events\AuditWriteFailed;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Support\Config;
+use ElPandaPe\Sentinel\Support\Reference;
 use ElPandaPe\Sentinel\Transactions\TransactionScope;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Connection;
@@ -46,13 +47,35 @@ final readonly class Recorder
      * guaranteed to run while the scope is still open — a Sentinel::transaction() inside a
      * DB::transaction() closes before the commit that releases the entries.
      */
-    public function record(AuditData $audit, ?Model $subject = null): ?Audit
+    public function record(AuditData $audit, ?Model $subject = null, ?Reference $actor = null): ?Audit
     {
         $this->transactions->stamp($audit);
 
         $transformed = $this->pipeline->process($audit);
 
-        return $transformed instanceof AuditData ? $this->settle($transformed, $subject) : null;
+        if (! $transformed instanceof AuditData) {
+            return null;
+        }
+
+        $this->attribute($transformed, $actor);
+
+        return $this->settle($transformed, $subject);
+    }
+
+    /**
+     * An actor the caller named outright is put back after the pipeline, because the context stage
+     * reassigns that column on every pass — deliberately, so a second pass leaves none of the first
+     * one's residue. A severity does not need this: it is decided at capture and no stage touches
+     * it. The chain is unaffected either way, since the hash is sealed in the ledger, after this.
+     */
+    private function attribute(AuditData $audit, ?Reference $actor): void
+    {
+        if (! $actor instanceof Reference) {
+            return;
+        }
+
+        $audit->actor_type = $actor->type;
+        $audit->actor_id = $actor->id;
     }
 
     /**

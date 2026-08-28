@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel;
 
 use Closure;
+use ElPandaPe\Sentinel\Capture\PendingEvent;
+use ElPandaPe\Sentinel\Capture\Recorder;
 use ElPandaPe\Sentinel\Context\ExecutionContext;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Data\AuditData;
@@ -26,6 +28,7 @@ final class Sentinel
         private readonly Policies $policies,
         private readonly Ledger $ledger,
         private readonly TransactionScope $transactions,
+        private readonly Recorder $recorder,
     ) {}
 
     /**
@@ -60,6 +63,18 @@ final class Sentinel
     public function transaction(string $name, Closure $callback): mixed
     {
         return $this->isRecording() ? $this->transactions->run($name, $callback) : $callback();
+    }
+
+    /**
+     * A fact the application states outright: an approval, a dispatch, a decision — something that
+     * happened and that no model change describes. It settles through the same pipeline and the
+     * same ledger as an update, and takes the identifier of whatever operation is running.
+     *
+     * The terminal is record(), and it is explicit: nothing is written until it is called.
+     */
+    public function event(string $name): PendingEvent
+    {
+        return new PendingEvent($name, $this, $this->recorder, $this->config);
     }
 
     /**
