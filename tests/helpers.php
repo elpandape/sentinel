@@ -10,8 +10,10 @@ use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Context\Runtime;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Data\AuditData;
+use ElPandaPe\Sentinel\Data\RelationLine;
 use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Enums\FanoutPolicy;
+use ElPandaPe\Sentinel\Enums\RelationOperation;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Integrity\Hasher;
 use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
@@ -125,6 +127,14 @@ function auditRelationsTable(): string
     $config = app(Config::class);
 
     return $config->table('audit_relations');
+}
+
+function relationLine(
+    string $relation = 'roles',
+    string $id = '3',
+    ?RelationOperation $operation = null,
+): RelationLine {
+    return new RelationLine($relation, $operation ?? RelationOperation::Attach, 'role', $id);
 }
 
 /**
