@@ -57,6 +57,22 @@ return [
         'illegal' => ':subject cannot move its :attribute from :from to :to.',
     ],
 
+    'restore' => [
+        'subject_missing' => 'The record this entry is about no longer exists, so there is nothing to restore.',
+        'subject_mismatch' => 'That record is not the one this entry is about.',
+        'entry_redacted' => 'This entry has been redacted: its contents were destroyed on purpose and cannot put anything back.',
+        'entry_tampered' => 'This entry no longer reproduces its own hash, so nothing it holds may be written back.',
+        'entry_stateless' => 'This entry holds no earlier state to put back.',
+        'cancelled' => 'A listener cancelled the restoration.',
+        'unknown_field' => 'The record no longer has a :key.',
+        'identity_field' => 'The :key identifies the record rather than describing its state.',
+        'redacted_field' => 'The :key was stored masked, and the original is gone.',
+        'hashed_field' => 'The :key was stored as a digest, which cannot be reversed.',
+        'key_unavailable' => 'The key that encrypted the :key is not on the keyring.',
+        'related_missing' => 'The related record :key no longer exists.',
+        'unchanged' => 'The :key already holds the value this entry would put back.',
+    ],
+
     'integrity' => [
         'hash_mismatch' => 'Audit :id no longer reproduces its own hash at sequence :sequence of stream :stream.',
         'link_mismatch' => 'Audit :id does not link to the entry before it at sequence :sequence of stream :stream.',
