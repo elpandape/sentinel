@@ -14,6 +14,7 @@ use ElPandaPe\Sentinel\Benchmarks\BenchPlainTeam;
 use ElPandaPe\Sentinel\Benchmarks\BenchProtected;
 use ElPandaPe\Sentinel\Benchmarks\BenchSnapshotless;
 use ElPandaPe\Sentinel\Benchmarks\BenchTeam;
+use ElPandaPe\Sentinel\Benchmarks\BenchTransitioning;
 use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Diff\Diff;
@@ -433,6 +434,77 @@ for ($i = 0; $i < EVENT_ITERATIONS; $i++) {
 
 $results['domain event, with a subject'] = (hrtime(true) - $start) / 1_000_000;
 
+// What a lifeline costs. Two questions, not one: what declaring a state column adds to every
+// audited update that does not touch it — the check itself — and what an update that does touch it
+// costs once it is written as a transition instead. The last row is the same fact stated outright,
+// which carries no snapshot pair to compare.
+//
+// Each variant gets a record of its own. The ledger reads max('version') per subject, so a subject
+// that another variant already wrote two thousand entries about is a subject whose next write is
+// slower for a reason that has nothing to do with transitions.
+const TRANSITION_ITERATIONS = 2000;
+
+/**
+ * The state moves or another column does; either way the save is the same call, so what the two
+ * rows differ by is what the package did with it and nothing else.
+ */
+$moving = static function (Model $record, int $times, bool $state): float {
+    for ($i = 0; $i < WARMUP; $i++) {
+        $record->forceFill($state ? ['role' => $i % 2 === 0 ? 'admin' : 'editor'] : ['score' => $i % 100])->save();
+    }
+
+    $start = hrtime(true);
+
+    for ($i = 0; $i < $times; $i++) {
+        $record->forceFill($state ? ['role' => $i % 2 === 0 ? 'admin' : 'editor'] : ['score' => $i % 100])->save();
+    }
+
+    return (hrtime(true) - $start) / 1_000_000;
+};
+
+/**
+ * @param  class-string<Model>  $model
+ */
+$mover = static function (string $model, int $offset): Model {
+    /** @var Model $record */
+    $record = $model::query()->create([  // @phpstan-ignore-line
+        'name' => 'mover-'.$offset,
+        'email' => 'mover-'.$offset.'@example.com',
+        'role' => 'editor',
+        'score' => 0,
+        'active' => true,
+    ]);
+
+    return $record;
+};
+
+$transitionResults = [];
+
+foreach ([
+    'update of another column, no state column declared' => [BenchAudited::class, false],
+    'update of another column, state column declared' => [BenchTransitioning::class, false],
+    'update of the state column, not declared, written as an update' => [BenchAudited::class, true],
+    'update of the state column, declared, written as a transition' => [BenchTransitioning::class, true],
+] as $label => [$model, $state]) {
+    $offset += WARMUP + TRANSITION_ITERATIONS;
+    $transitionResults[$label] = $moving($mover($model, $offset), TRANSITION_ITERATIONS, $state);
+}
+
+$offset += WARMUP + TRANSITION_ITERATIONS;
+$stated = $mover(BenchTransitioning::class, $offset);
+
+for ($i = 0; $i < WARMUP; $i++) {
+    $sentinel->transition($stated, from: 'editor', to: 'admin')->record();
+}
+
+$start = hrtime(true);
+
+for ($i = 0; $i < TRANSITION_ITERATIONS; $i++) {
+    $sentinel->transition($stated, from: 'editor', to: 'admin')->record();
+}
+
+$transitionResults['transition stated outright'] = (hrtime(true) - $start) / 1_000_000;
+
 $baseline = $results['plain (not audited)'];
 
 echo '| Variant | Writes | Total (ms) | Per write (µs) | Δ vs plain |', PHP_EOL;
@@ -512,6 +584,23 @@ foreach ($deferrals as $label => $total) {
         $total,
         $total * 1000 / DEFERRED_ITERATIONS,
         $total === $deferredPlain ? '—' : sprintf('%+.1f%%', ($total / $deferredPlain - 1) * 100),
+        PHP_EOL,
+    );
+}
+
+echo PHP_EOL, '| Transition variant | Writes | Total (ms) | Per write (µs) | Δ vs an audited update |', PHP_EOL;
+echo '|---|---|---|---|---|', PHP_EOL;
+
+$transitionBaseline = array_values($transitionResults)[0];
+
+foreach ($transitionResults as $label => $total) {
+    printf(
+        '| %s | %d | %.1f | %.1f | %s |%s',
+        $label,
+        TRANSITION_ITERATIONS,
+        $total,
+        $total * 1000 / TRANSITION_ITERATIONS,
+        $total === $transitionBaseline ? '—' : sprintf('%+.1f%%', ($total / $transitionBaseline - 1) * 100),
         PHP_EOL,
     );
 }
