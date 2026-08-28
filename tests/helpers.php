@@ -130,6 +130,29 @@ function auditRelationsTable(): string
     return $config->table('audit_relations');
 }
 
+function transactionsTable(): string
+{
+    /** @var Config $config */
+    $config = app(Config::class);
+
+    return $config->table('transactions');
+}
+
+/**
+ * @param  array<string, mixed>  $overrides
+ * @return array<string, mixed>
+ */
+function transactionRow(array $overrides = []): array
+{
+    return [
+        'id' => Str::ulid()->toString(),
+        'name' => 'invoice-payment',
+        'started_at' => '2026-08-28 10:00:00.000000',
+        'audits_count' => 0,
+        ...$overrides,
+    ];
+}
+
 /**
  * @return list<array<string, mixed>>
  */

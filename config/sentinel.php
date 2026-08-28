@@ -72,6 +72,7 @@ return [
      */
     'models' => [
         'audit' => null,
+        'transaction' => null,
     ],
 
     /*

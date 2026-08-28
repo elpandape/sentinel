@@ -16,6 +16,7 @@ use ElPandaPe\Sentinel\Ledger\FanoutLedger;
 use ElPandaPe\Sentinel\Ledger\MemoryLedger;
 use ElPandaPe\Sentinel\Ledger\NullLedger;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Models\AuditTransaction;
 use ElPandaPe\Sentinel\Pipeline\Discard;
 use ElPandaPe\Sentinel\Security\Keyring;
 use ElPandaPe\Sentinel\Security\Maskers;
@@ -51,6 +52,12 @@ final class SentinelServiceProvider extends ServiceProvider
 
         $this->app->bind(Audit::class, static function (Application $app): Audit {
             $model = $app->make(Config::class)->model('audit', Audit::class);
+
+            return new $model;
+        });
+
+        $this->app->bind(AuditTransaction::class, static function (Application $app): AuditTransaction {
+            $model = $app->make(Config::class)->model('transaction', AuditTransaction::class);
 
             return new $model;
         });

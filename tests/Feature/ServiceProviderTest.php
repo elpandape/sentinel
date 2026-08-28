@@ -12,10 +12,12 @@ use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
 use ElPandaPe\Sentinel\Ledger\MemoryLedger;
 use ElPandaPe\Sentinel\Ledger\NullLedger;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Models\AuditTransaction;
 use ElPandaPe\Sentinel\Sentinel;
 use ElPandaPe\Sentinel\SentinelServiceProvider;
 use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Tests\Fixtures\CustomAudit;
+use ElPandaPe\Sentinel\Tests\Fixtures\CustomAuditTransaction;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Translation\Loader;
 use Illuminate\Database\Migrations\Migrator;
@@ -84,6 +86,23 @@ it('resolves the audit model the configuration names', function (): void {
     config()->set('sentinel.models.audit', CustomAudit::class);
 
     expect(app(Audit::class))->toBeInstanceOf(CustomAudit::class);
+});
+
+it('resolves the package transaction model when nothing overrides it', function (): void {
+    expect(app(AuditTransaction::class))->toBeInstanceOf(AuditTransaction::class)
+        ->and(app(AuditTransaction::class))->not->toBeInstanceOf(CustomAuditTransaction::class);
+});
+
+it('resolves the transaction model the configuration names', function (): void {
+    config()->set('sentinel.models.transaction', CustomAuditTransaction::class);
+
+    expect(app(AuditTransaction::class))->toBeInstanceOf(CustomAuditTransaction::class);
+});
+
+it('resolves the transaction model a configuration published before the key existed', function (): void {
+    config()->set('sentinel.models', ['audit' => null]);
+
+    expect(app(AuditTransaction::class))->toBeInstanceOf(AuditTransaction::class);
 });
 
 it('withholds only the migration the application published a copy of', function (): void {
