@@ -2,6 +2,34 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.10.1 — The label plan gate (2026-08-28)
+
+Nothing in `src/` changed. `v0.10.0` was tagged with a green local run and left `main` red: the five
+jobs that run on SQLite failed on one assertion about a query plan, and the MySQL 9 and PostgreSQL 16
+jobs passed.
+
+### Fixed
+
+- **The label plan gate asserted the name of an index instead of the seek it stands for.** Which
+  index answers a label filter is the planner's call, and it is not the same one across versions of
+  the same engine: SQLite rewrites the correlated `EXISTS` into a semi-join from **3.51** on and
+  seeks `(tag, audit_id)`, while every version before it evaluates the `EXISTS` once per row with
+  the entry id already fixed and seeks `(audit_id, tag)`. Both are a seek and both return the same
+  entries. The dev container runs SQLite 3.53.2 and CI runs the 3.45.1 that Ubuntu 24.04 ships,
+  which is the whole of why it passed in one place and failed in the other. The suite now asserts
+  that the labels table is reached through an index and never walked, checked against the real plans
+  of 3.45.1, 3.50.1, 3.51.0 and 3.53.2.
+
+### Changed
+
+- **A failed plan assertion now prints the plan it read.** The one that broke CI said only that
+  false was not true, which names neither the engine's choice nor the statement it was made for.
+- **Every CI job records the version of the engine it is about to run against**, before it runs
+  anything.
+- **README gains *Engines***: the versions that are run on every push, kept separate from the floor
+  the emitted SQL needs — `jsonb` from PostgreSQL 9.4, `JSON_TABLE` from MySQL 8.0.4, JSON built in
+  from SQLite 3.38. Only the first is a support claim.
+
 ## v0.10.0 — Field history, labels and timeline (2026-08-28)
 
 ### Added

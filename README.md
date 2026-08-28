@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.10.0-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.10.1-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -20,7 +20,7 @@ the state was before, what it is now — and whether the record itself can be pr
 
 ```json
 "repositories": [{ "type": "vcs", "url": "https://github.com/elpandape/sentinel" }],
-"require": { "elpandape/sentinel": "v0.10.0" }
+"require": { "elpandape/sentinel": "v0.10.1" }
 ```
 
 ```bash
