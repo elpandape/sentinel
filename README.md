@@ -950,6 +950,29 @@ window.
 The JSON and date types come from the engine grammar: `jsonb` on PostgreSQL 16, `json` on MySQL 9,
 text on SQLite; `datetime(6)` on MySQL and `timestamp(6)` on PostgreSQL.
 
+### Engines
+
+| Engine | Run on every push | What the SQL it emits needs |
+|---|---|---|
+| PostgreSQL | 16 | 9.4, where `jsonb` and `jsonb_array_elements` arrive |
+| MySQL | 9 | 8.0.4, where `JSON_TABLE` arrives |
+| SQLite | 3.45 on today's runner, 3.53 in the dev container | 3.38, where JSON stops being a compile-time option |
+
+Only the middle column is a support claim: this package does not declare compatibility it does not
+run. The right-hand column is not a promise — it is the floor the emitted SQL needs, and the first
+place to look when an older engine misbehaves.
+
+MariaDB is not in that table and is refused rather than guessed at. `whereFieldChanged()` has no
+dialect for it, so it declines by name instead of answering with something that might not mean the
+same thing.
+
+Below the version a row is run on, the entries that come back are the same; what can differ is the
+plan the engine picks to find them. SQLite is the worked example. From **3.51** it rewrites the
+correlated `EXISTS` behind a label filter into a semi-join and seeks `(tag, audit_id)`; every
+version before it evaluates that `EXISTS` once per row with the entry id already fixed, and seeks
+`(audit_id, tag)`. Both are a seek and both answer the same, which is why the suite asserts the seek
+and not the name of the index that served it.
+
 `subject_id`, `actor_id` and `impersonator_id` are `string(64)`, so integer, UUID and ULID keys all
 fit without a migration. There is no `updated_at`: the table is append-only.
 
