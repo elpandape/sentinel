@@ -7,6 +7,7 @@ use ElPandaPe\Sentinel\Models\AuditTag;
 use Illuminate\Support\Facades\DB;
 
 use function ElPandaPe\Sentinel\Tests\auditTagsTable;
+use function ElPandaPe\Sentinel\Tests\frozenUlid;
 use function ElPandaPe\Sentinel\Tests\insertAudit;
 
 it('reads the table and the connection the configuration names', function (): void {
@@ -19,29 +20,29 @@ it('reads the table and the connection the configuration names', function (): vo
 });
 
 it('hands back the labels of an entry in a stable order', function (): void {
-    insertAudit(['id' => '01J0000000000000000000TAGS', 'sequence' => 1]);
+    insertAudit(['id' => frozenUlid('TAGS'), 'sequence' => 1]);
 
     DB::table(auditTagsTable())->insert([
-        ['audit_id' => '01J0000000000000000000TAGS', 'tag' => 'refund'],
-        ['audit_id' => '01J0000000000000000000TAGS', 'tag' => 'billing'],
+        ['audit_id' => frozenUlid('TAGS'), 'tag' => 'refund'],
+        ['audit_id' => frozenUlid('TAGS'), 'tag' => 'billing'],
     ]);
 
-    $audit = Audit::query()->findOrFail('01J0000000000000000000TAGS');
+    $audit = Audit::query()->findOrFail(frozenUlid('TAGS'));
 
     expect($audit->tags->pluck('tag')->all())->toBe(['billing', 'refund']);
 });
 
 it('hands back nothing for an entry nobody classified', function (): void {
-    insertAudit(['id' => '01J000000000000000000BARE', 'sequence' => 1]);
+    insertAudit(['id' => frozenUlid('BARE'), 'sequence' => 1]);
 
-    expect(Audit::query()->findOrFail('01J000000000000000000BARE')->tags)->toBeEmpty();
+    expect(Audit::query()->findOrFail(frozenUlid('BARE'))->tags)->toBeEmpty();
 });
 
 it('keeps a label off the attributes that make up the entry', function (): void {
-    insertAudit(['id' => '01J0000000000000000000HASH', 'sequence' => 1]);
-    DB::table(auditTagsTable())->insert(['audit_id' => '01J0000000000000000000HASH', 'tag' => 'billing']);
+    insertAudit(['id' => frozenUlid('HASH'), 'sequence' => 1]);
+    DB::table(auditTagsTable())->insert(['audit_id' => frozenUlid('HASH'), 'tag' => 'billing']);
 
-    $audit = Audit::query()->findOrFail('01J0000000000000000000HASH');
+    $audit = Audit::query()->findOrFail(frozenUlid('HASH'));
     $audit->load('tags');
 
     expect($audit->getAttributes())->not->toHaveKey('tags');

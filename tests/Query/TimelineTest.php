@@ -11,6 +11,7 @@ use ElPandaPe\Sentinel\Tests\Fixtures\AuditedSubject;
 use Illuminate\Support\Facades\DB;
 
 use function ElPandaPe\Sentinel\Tests\auditData;
+use function ElPandaPe\Sentinel\Tests\frozenUlid;
 use function ElPandaPe\Sentinel\Tests\insertAudit;
 
 it('reads the trail in the order things happened, not the order they were recorded', function (): void {
@@ -24,7 +25,7 @@ it('reads the trail in the order things happened, not the order they were record
 });
 
 it('breaks a tie on the identifier, which sorts by the instant it was minted', function (): void {
-    foreach (['01J000000000000000000AAA1', '01J000000000000000000AAA2'] as $index => $id) {
+    foreach ([frozenUlid('AAA1'), frozenUlid('AAA2')] as $index => $id) {
         insertAudit([
             'id' => $id,
             'sequence' => 10 + $index,
@@ -104,7 +105,7 @@ it('renders a page of mixed subjects without a query per line', function (): voi
 
 it('answers when a recorded type names no class at all', function (): void {
     insertAudit([
-        'id' => '01J00000000000000000GHOST',
+        'id' => frozenUlid('GHOST'),
         'sequence' => 1,
         'subject_type' => 'invoice',
         'subject_id' => '500',
@@ -126,7 +127,7 @@ it('resolves the subjects it can and leaves alone the ones it cannot', function 
         'subject_type' => $subject->getMorphClass(),
         'subject_id' => (string) $subject->getKey(),
     ]));
-    insertAudit(['id' => '01J0000000000000000GHOST2', 'sequence' => 50, 'subject_type' => 'invoice', 'subject_id' => '9']);
+    insertAudit(['id' => frozenUlid('GHOST2'), 'sequence' => 50, 'subject_type' => 'invoice', 'subject_id' => '9']);
 
     $entries = Sentinel::timeline()->get()->loadReferences();
 

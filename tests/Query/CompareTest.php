@@ -10,6 +10,7 @@ use ElPandaPe\Sentinel\Query\Comparison;
 use ElPandaPe\Sentinel\Tests\Fixtures\AuditedSubject;
 
 use function ElPandaPe\Sentinel\Tests\auditData;
+use function ElPandaPe\Sentinel\Tests\frozenUlid;
 use function ElPandaPe\Sentinel\Tests\insertAudit;
 use function ElPandaPe\Sentinel\Tests\versioned;
 
@@ -75,7 +76,7 @@ it('compares two entries handed to it directly', function (): void {
 });
 
 it('resolves a repeated version number to the newest entry carrying it', function (): void {
-    foreach ([['01J000000000000000000TIE1', 500], ['01J000000000000000000TIE2', 600]] as [$id, $total]) {
+    foreach ([[frozenUlid('TIE1'), 500], [frozenUlid('TIE2'), 600]] as [$id, $total]) {
         insertAudit([
             'id' => $id,
             'sequence' => 900 + $total,
@@ -89,7 +90,7 @@ it('resolves a repeated version number to the newest entry carrying it', functio
 
     $comparison = Sentinel::audits()->for(AuditedSubject::class, 7)->compare(1, 7);
 
-    expect($comparison->to->id)->toBe('01J000000000000000000TIE2')
+    expect($comparison->to->id)->toBe(frozenUlid('TIE2'))
         ->and($comparison->to->after['total'] ?? null)->toBe(600);
 });
 

@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use function ElPandaPe\Sentinel\Tests\auditData;
 use function ElPandaPe\Sentinel\Tests\auditsTable;
 use function ElPandaPe\Sentinel\Tests\changing;
+use function ElPandaPe\Sentinel\Tests\frozenUlid;
 use function ElPandaPe\Sentinel\Tests\insertAudit;
 
 /**
@@ -21,8 +22,8 @@ use function ElPandaPe\Sentinel\Tests\insertAudit;
 it('keeps answering with a row whose changes are not an array of objects', function (string $poison): void {
     app(DatabaseLedger::class)->write(auditData(changing('mailed', '/email')));
 
-    insertAudit(['id' => '01J00000000000000000POISON', 'sequence' => 99, 'event' => 'poisoned']);
-    DB::table(auditsTable())->where('id', '01J00000000000000000POISON')->update(['changes' => $poison]);
+    insertAudit(['id' => frozenUlid('POISON'), 'sequence' => 99, 'event' => 'poisoned']);
+    DB::table(auditsTable())->where('id', frozenUlid('POISON'))->update(['changes' => $poison]);
 
     expect(Sentinel::audits()->whereFieldChanged('email')->get()->pluck('event')->all())->toBe(['mailed']);
 })->with([
@@ -37,8 +38,8 @@ it('keeps answering with a row whose changes are not an array of objects', funct
 it('keeps answering with a row whose changes are not json at all', function (string $poison): void {
     app(DatabaseLedger::class)->write(auditData(changing('mailed', '/email')));
 
-    insertAudit(['id' => '01J0000000000000000GARBAGE', 'sequence' => 98, 'event' => 'garbled']);
-    DB::table(auditsTable())->where('id', '01J0000000000000000GARBAGE')->update(['changes' => $poison]);
+    insertAudit(['id' => frozenUlid('GARBAGE'), 'sequence' => 98, 'event' => 'garbled']);
+    DB::table(auditsTable())->where('id', frozenUlid('GARBAGE'))->update(['changes' => $poison]);
 
     expect(Sentinel::audits()->whereFieldChanged('email')->get()->pluck('event')->all())->toBe(['mailed']);
 })->with([

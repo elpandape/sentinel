@@ -317,11 +317,18 @@ function planFor(AuditQuery $query): string
     };
 }
 
+/**
+ * Whether the plan reaches the trail through an index. It asks about the audits table by name,
+ * because a predicate can put a derived table in the plan whose own scan says nothing about how
+ * the entries were found — the changed-field predicate does exactly that, over one constant row.
+ */
 function readsAnIndex(string $plan): bool
 {
+    $table = auditsTable();
+
     return match (DB::connection()->getDriverName()) {
-        'mysql' => ! str_contains($plan, 'Table scan on'),
-        'pgsql' => ! str_contains($plan, 'Seq Scan'),
+        'mysql' => ! str_contains($plan, "Table scan on {$table}"),
+        'pgsql' => ! str_contains($plan, "Seq Scan on {$table}"),
         default => str_contains($plan, 'USING INDEX') || str_contains($plan, 'USING COVERING INDEX'),
     };
 }
@@ -734,4 +741,23 @@ function presenter(): AuditPresenter
     $presenter = app(AuditPresenter::class);
 
     return $presenter;
+}
+
+/**
+ * Whether the plan found entries through the reversed label index, whatever it then did with the
+ * result. Each engine words its plan differently and all three name the index they used.
+ */
+function readsTheLabelIndex(string $plan): bool
+{
+    return str_contains(strtolower($plan), auditTagsTable().'_tag_audit_id_index');
+}
+
+/**
+ * A recognisable identifier of exactly the width the column holds. Counting the padding by hand is
+ * how a twenty-five character id gets written, and only PostgreSQL says so: char(26) pads with a
+ * space there and MySQL and SQLite trim it away, so the mistake surfaces in one engine out of three.
+ */
+function frozenUlid(string $suffix): string
+{
+    return str_pad('01J', 26 - strlen($suffix), '0').$suffix;
 }
