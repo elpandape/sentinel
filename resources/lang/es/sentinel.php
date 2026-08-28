@@ -45,6 +45,11 @@ return [
         'transition' => 'movió',
         'rekeyed' => 'recifró',
         'custom' => 'registró',
+        'login' => 'inició sesión',
+        'logout' => 'cerró sesión',
+        'failed' => 'fue rechazado',
+        'lockout' => 'fue bloqueado',
+        'password_reset' => 'restableció la contraseña de',
     ],
 
     'integrity' => [

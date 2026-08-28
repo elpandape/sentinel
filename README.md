@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.12.0-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.12.1-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -20,7 +20,7 @@ the state was before, what it is now — and whether the record itself can be pr
 
 ```json
 "repositories": [{ "type": "vcs", "url": "https://github.com/elpandape/sentinel" }],
-"require": { "elpandape/sentinel": "v0.12.0" }
+"require": { "elpandape/sentinel": "v0.12.1" }
 ```
 
 ```bash
@@ -44,9 +44,10 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.11.0` | Relationship auditing: the six pivot operations, the relation projection, three filters and the `+ / -` render |
 | `v0.11.1` | The parent side of a `belongsTo`: a child that changes hands leaves an entry on the parent it left and the parent it joined |
 | `v0.12.0` | Business transactions: `Sentinel::transaction()`, the `sentinel_transactions` header, and entries that wait for the commit |
+| `v0.12.1` | Custom events and authentication events: `Sentinel::event()` and an opt-in subscriber over the five auth events |
 
-Everything else is on the roadmap: custom events, state transitions, restore, advanced verification
-(checkpoints and signatures), retention and compliance, performance modes and distributed tracing.
+Everything else is on the roadmap: state transitions, restore, advanced verification (checkpoints
+and signatures), retention and compliance, performance modes and distributed tracing.
 
 `v0.4.0` is the version that starts auditing: a model with the trait writes its own chained entries.
 `v0.5.0` is the one that answers what changed, instead of leaving you two states to compare.
@@ -60,7 +61,9 @@ entry about, and what happened at all — and says them in a sentence a person c
 is the one that records what Eloquent never announces: a pivot table changing under you. `v0.11.1`
 finishes that thought for the relations that have no pivot at all. `v0.12.0` is the one that stops
 the trail from being a pile of entries that happen to share a request: an operation gets a name, and
-its entries stop existing when the transaction that produced them does not.
+its entries stop existing when the transaction that produced them does not. `v0.12.1` is the one
+that stops "auditable" from meaning "a model changed" — a fact you state and a login you did not
+are entries like any other.
 
 ## Quick start
 
@@ -1120,6 +1123,88 @@ of the same transaction from even being attempted.
 > `DB::transaction()` your test opens is written when *that* commits. What you cannot do is assert
 > on an entry from inside the transaction that produced it — which is exactly what the deferral is
 > for, in tests as much as in production.
+
+## Custom events
+
+Not everything worth auditing is a model changing. An approval, a dispatch, a decision taken in a
+meeting and typed in afterwards — `Sentinel::event()` states them outright:
+
+```php
+Sentinel::event('invoice.approved')
+    ->actor($user)
+    ->subject($invoice)
+    ->severity(Severity::Notice)
+    ->tags(['billing'])
+    ->metadata(['reason' => 'Approved by finance'])
+    ->record();
+```
+
+It settles through the **same pipeline and the same ledger** as an update: same redaction, same
+encryption, same policies, same `sequence`, `stream`, `previous_hash` and `hash`. There is no
+shortcut for entries that did not come from Eloquent, and no way to tell one apart in the chain.
+
+`record()` is the terminal and **nothing is written until you call it**. It returns nothing on
+purpose: with the write [waiting for a commit](#entries-wait-for-the-commit), the entry does not
+exist yet when the call comes back, so returning it would have to mean two different things at once.
+
+- **Leave out `subject()`** and the entry has none. Some facts are not about a record, and giving
+  them one would be inventing it.
+- **Leave out `actor()`** and the context engine names whoever is authenticated. Pass one and it
+  wins — including `->actor('system', 'nightly-billing')` for an actor that is not a model.
+- **Leave out `severity()`** and it comes from `severity.events` keyed by your event name, falling
+  back to `severity.default`.
+- **Labels go to the labels table**, so `whereTag()` still finds them.
+- Inside a `Sentinel::transaction()` it takes the operation's id like any other entry.
+
+The event name is yours, and the presenter prints it as you wrote it — `Someone invoice.approved
+something`. The package cannot translate names it has never seen; publish `--tag=sentinel-lang` and
+add your own line under `events` to change that. Note that a dotted name nests: `invoice.approved`
+becomes `events.invoice.approved`, two levels deep.
+
+## Authentication events
+
+Who got in, who did not, and who was shut out — as entries, not as a log file. **Opt-in**: the
+package ships the subscriber and you register it.
+
+```php
+// bootstrap/app.php, a service provider, wherever you register listeners
+Event::subscribe(ElPandaPe\Sentinel\Capture\AuthenticationSubscriber::class);
+```
+
+```php
+Sentinel::audits()->whereEvent('failed')->whereSeverity(Severity::Warning)->get();
+Sentinel::audits()->for($user)->whereEvent('login')->get();
+```
+
+**Until you register it, nothing about authentication is written.** A package that started
+recording who logs in the moment it was upgraded would be making that call on your behalf.
+
+| Event | `event` | Default severity | Fired by |
+|---|---|---|---|
+| `Login` | `login` | `info` | the framework's session guard |
+| `Logout` | `logout` | `info` | the framework's session guard |
+| `Failed` | `failed` | `warning` | the framework's session guard |
+| `Lockout` | `lockout` | `critical` | **your application** |
+| `PasswordReset` | `password_reset` | `notice` | **your application** |
+
+That last column is the part nobody documents. **`Lockout` and `PasswordReset` are not fired by the
+framework at all** — there is no `new Lockout(` anywhere in `laravel/framework`. They come from your
+application skeleton or a starter kit like Fortify or Breeze. Register the subscriber on a bare
+install and you get three of the five, which is worth knowing before you go looking for the other
+two.
+
+The person is recorded as **both actor and subject**: an authentication event is something someone
+did, and the thing it happened to is that same someone. So `->by($user)` and `->for($user)` both
+find it. A `Failed` that named nobody the provider could find has neither — but it still has the IP,
+the user agent and the request id the context engine resolved, which is the part worth keeping.
+
+**The credentials are never captured.** `Failed` carries them, marked sensitive by the framework,
+and the subscriber does not look at them. Not capturing is a stronger guarantee than capturing and
+redacting afterwards.
+
+`Lockout` arrives with no guard and no user — the framework hands it a request and nothing else —
+so its entry has no actor and no `metadata`. Everything identifying about the attempt that is not a
+credential is already in the context.
 
 ## Reading a trail out loud
 

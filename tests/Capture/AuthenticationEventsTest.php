@@ -15,6 +15,8 @@ use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
 
+use function ElPandaPe\Sentinel\Tests\presenter;
+
 it('writes nothing at all until the application registers the subscriber', function (): void {
     $user = ActingUser::query()->create(['name' => 'Ada']);
 
@@ -144,4 +146,13 @@ it('answers a query for what happened to a person, from either column', function
 
     expect(Sentinel::audits()->by($user)->get())->toHaveCount(1)
         ->and(Sentinel::audits()->for($user)->get())->toHaveCount(1);
+});
+
+it('reads back as a sentence in the language the package ships', function (): void {
+    Event::subscribe(AuthenticationSubscriber::class);
+    $user = ActingUser::query()->create(['name' => 'Ada']);
+
+    Event::dispatch(new Login('web', $user, false));
+
+    expect(presenter()->entry(Audit::query()->firstOrFail()))->toContain('signed in');
 });

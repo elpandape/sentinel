@@ -45,6 +45,11 @@ return [
         'transition' => 'moved',
         'rekeyed' => 're-keyed',
         'custom' => 'recorded',
+        'login' => 'signed in',
+        'logout' => 'signed out',
+        'failed' => 'was refused',
+        'lockout' => 'was locked out',
+        'password_reset' => 'reset the password of',
     ],
 
     'integrity' => [

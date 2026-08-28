@@ -2,6 +2,44 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.12.1 — Custom events and authentication events (2026-08-28)
+
+`v0.12.0` gave a business operation a name. This one stops "auditable" from meaning "a model
+changed": a fact the application states outright and a login it did not are entries like any other,
+through the same pipeline and the same ledger.
+
+### Added
+
+- **`Sentinel::event('invoice.approved')`**, with `actor()`, `subject()`, `severity()`, `tags()`,
+  `metadata()` and an explicit `record()` terminal. `audit_type = custom`, and the event name is
+  whatever you called it. Nothing is written until `record()` is called, and it returns nothing —
+  with the write waiting for a commit, the entry does not exist yet when the call comes back.
+- **A fact with no subject stays subjectless.** Some things that happen are not about a record.
+- **An actor named outright wins over the resolved one**, including `->actor('system', 'cron')` for
+  an actor that is not a model.
+- **`AuthenticationSubscriber`**, opt-in, over `Login`, `Logout`, `Failed`, `Lockout` and
+  `PasswordReset`. `audit_type = auth`, the guard in `metadata`, the person recorded as both actor
+  and subject so `->by()` and `->for()` both find it. The retention policy for `auth` finally has
+  something to purge, and the timeline stops promising a type nobody wrote.
+- **Severity defaults for the auth events**, in the `severity.events` section that already existed:
+  getting in is `info`, being refused is `warning`, being shut out is `critical`.
+- README: *Custom events* and *Authentication events*.
+
+### Notes
+
+- **The credentials of a refused attempt are never captured.** `Failed` carries them and the
+  subscriber does not look at them; not capturing is a stronger guarantee than capturing and
+  redacting afterwards.
+- **`Lockout` and `PasswordReset` are not fired by the framework** — there is no `new Lockout(`
+  anywhere in `laravel/framework`. They come from your application skeleton or a starter kit, so a
+  bare install gets three of the five. The README says which is which.
+- Registering nothing writes nothing. A package that started recording who logs in the moment it
+  was upgraded would be making that decision for you.
+- An actor named outright is reapplied after the pipeline, because the context stage reassigns that
+  column on every pass by design. The chain is unaffected: the hash is sealed after.
+
+No migration, no schema change, `payload_version` stays at `1`.
+
 ## v0.12.0 — Business transactions and deferral to the commit (2026-08-28)
 
 A payment that touches an invoice, a payment record and two relations wrote four entries that only
