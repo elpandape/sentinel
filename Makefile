@@ -70,9 +70,9 @@ mutation: ## Mutation testing over the core, one pass per path
 # One process walks the whole suite here, unlike `make test`, so what every earlier test left
 # on the heap is still there for the last one. The default limit is not a budget this pass fits
 # in, the same way coverage and mutation do not.
-test-dbs: ## Suite against MySQL & Postgres (recreates the schema, waits for healthchecks)
+test-dbs: ## Suite against MySQL & Postgres (make test-dbs ARGS=tests/Capture recreates the schema, waits for healthchecks)
 	$(DC) up -d --wait mysql postgres
 	$(DC) exec -T mysql mysql -uroot -psecret -e "drop database if exists sentinel; create database sentinel"
 	$(DC) exec -T postgres psql -q -U postgres -d sentinel -c "drop schema public cascade" -c "create schema public"
-	$(PHP) sh -c "DB_CONNECTION=mysql DB_HOST=mysql DB_PORT=3306 DB_USERNAME=root DB_PASSWORD=secret DB_DATABASE=sentinel php -d memory_limit=1G vendor/bin/pest --ci"
-	$(PHP) sh -c "DB_CONNECTION=pgsql DB_HOST=postgres DB_PORT=5432 DB_USERNAME=postgres DB_PASSWORD=secret DB_DATABASE=sentinel php -d memory_limit=1G vendor/bin/pest --ci"
+	$(PHP) sh -c "DB_CONNECTION=mysql DB_HOST=mysql DB_PORT=3306 DB_USERNAME=root DB_PASSWORD=secret DB_DATABASE=sentinel php -d memory_limit=1G vendor/bin/pest --ci $(ARGS)"
+	$(PHP) sh -c "DB_CONNECTION=pgsql DB_HOST=postgres DB_PORT=5432 DB_USERNAME=postgres DB_PASSWORD=secret DB_DATABASE=sentinel php -d memory_limit=1G vendor/bin/pest --ci $(ARGS)"
