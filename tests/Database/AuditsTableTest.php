@@ -28,7 +28,7 @@ it('creates the audits table with its forty columns', function (): void {
         ]);
 });
 
-it('creates the eleven non primary indexes over the exact columns, in order', function (): void {
+it('creates the thirteen non primary indexes over the exact columns, in order', function (): void {
     $indexes = array_map(
         static fn (array $index): string => ($index['unique'] ? 'unique' : 'index').'('.implode(', ', $index['columns']).')',
         array_values(array_filter(
@@ -39,14 +39,16 @@ it('creates the eleven non primary indexes over the exact columns, in order', fu
 
     sort($indexes);
 
-    expect($indexes)->toHaveCount(11)
+    expect($indexes)->toHaveCount(13)
         ->and($indexes)->toBe([
             'index(actor_type, actor_id, id)',
             'index(audit_type, created_at)',
             'index(event)',
+            'index(occurred_at, id)',
             'index(request_id)',
             'index(severity, created_at)',
             'index(subject_type, subject_id, id)',
+            'index(subject_type, subject_id, occurred_at, id)',
             'index(tenant_id, created_at)',
             'index(trace_id)',
             'index(transaction_id)',

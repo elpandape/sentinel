@@ -14,9 +14,11 @@ use ElPandaPe\Sentinel\Integrity\Verifier;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Database\Eloquent\Attributes\CollectedBy;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 /**
@@ -63,6 +65,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * @property-read Model|null $subject
  * @property-read Model|null $actor
  * @property-read Model|null $impersonator
+ * @property-read Collection<int, AuditTag> $tags
  */
 #[CollectedBy(AuditCollection::class)]
 class Audit extends Model
@@ -73,6 +76,14 @@ class Audit extends Model
     use HasUlids;
 
     public const UPDATED_AT = null;
+
+    /**
+     * @return HasMany<AuditTag, $this>
+     */
+    public function tags(): HasMany
+    {
+        return $this->hasMany(AuditTag::class, 'audit_id')->orderBy('tag');
+    }
 
     /**
      * @return MorphTo<Model, $this>

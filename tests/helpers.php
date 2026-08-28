@@ -109,6 +109,14 @@ function auditsTable(): string
     return $config->table('audits');
 }
 
+function auditTagsTable(): string
+{
+    /** @var Config $config */
+    $config = app(Config::class);
+
+    return $config->table('audit_tags');
+}
+
 /**
  * @param  array<string, mixed>  $overrides
  * @return array<string, mixed>
