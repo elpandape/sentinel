@@ -9,6 +9,72 @@ before `1.0.0`.
 
 ---
 
+## v0.11.1 → v0.12.0
+
+No published contract changes. There is one migration, and one behaviour that changes for code that
+audits inside a database transaction.
+
+### `sentinel_transactions`
+
+Additive and reversible. It does **not** touch `sentinel_audits`: the `transaction_id` column and
+its index have been there since `v0.2.0`, and this version only stops writing them `null`.
+
+```bash
+php artisan vendor:publish --tag=sentinel-migrations   # only if you publish them
+php artisan migrate
+```
+
+Existing entries keep `transaction_id = null` and the new table starts empty. There is no backfill:
+inferring operations over history already settled would be inventing facts, and rewriting settled
+entries is forbidden by the 0.x schema policy.
+
+### Entries captured inside a `DB::transaction()` now wait for it
+
+`transactions.after_commit` has been in `config/sentinel.php` since `v0.1.0` and nothing read it.
+It does now, and it defaults to `true`.
+
+**Before:** an entry captured inside a database transaction was handed to the ledger immediately.
+
+**After:** it is handed over when that transaction commits, and not at all if it rolls back. A
+rollback to a `SAVEPOINT` discards only that level.
+
+Nothing changes outside a transaction — same write, same return value, same exceptions. Inside one,
+two things are worth checking before you upgrade:
+
+- **A test or a job that asserts on an audit while the transaction is still open** will now find
+  nothing there. Assert after the transaction, which is also where the entry is now true.
+- **Code that uses the return value of a capture inside a transaction** gets `null`, because the
+  entry does not exist yet. Read it back after the commit instead.
+
+To keep the old behaviour exactly:
+
+```php
+// config/sentinel.php
+'transactions' => [
+    'after_commit' => false,
+],
+```
+
+That is supported and it means what it says: a ledger allowed to assert what a rollback undid.
+
+### A deferred write that fails is announced, not thrown
+
+A write that waited for the commit and then failed dispatches `Events\AuditWriteFailed` instead of
+throwing. It has to: the framework runs commit callbacks in a bare loop, so an exception there would
+stop every later entry of the same transaction from even being attempted, and would surface out of a
+`DB::transaction()` that had already committed.
+
+If you relied on a ledger failure surfacing as an exception from `$model->save()`, that still
+happens outside a transaction. Inside one, listen for the event:
+
+```php
+Event::listen(ElPandaPe\Sentinel\Events\AuditWriteFailed::class, function ($failed) {
+    Log::critical($failed->message(), ['transaction' => $failed->transactionId]);
+});
+```
+
+---
+
 ## v0.11.0 → v0.11.1
 
 One published contract changes. Nothing to migrate.

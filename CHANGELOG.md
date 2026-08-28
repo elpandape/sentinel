@@ -2,6 +2,82 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.12.0 — Business transactions and deferral to the commit (2026-08-28)
+
+A payment that touches an invoice, a payment record and two relations wrote four entries that only
+shared a `request_id` — which groups a whole request, not an operation. And an entry captured inside
+a `DB::transaction()` was written whether or not that transaction survived. This version names the
+operation and makes the entry wait for it.
+
+### Added
+
+- **`Sentinel::transaction('invoice-payment', fn () => …)`**, which gives every entry captured
+  inside it the same `transaction_id` and the operation a header of its own. It returns what the
+  callback returned. It **correlates and does not atomise**: it opens no database transaction, and
+  combining the two stays your decision.
+- **`sentinel_transactions`**, the header: name, actor and tenant resolved exactly as an entry
+  resolves them, the window it ran in, and how many entries it wrote. Opened *before* the operation
+  runs, so one that died halfway is still findable, and closed after — including when the operation
+  threw, with the class of the failure in `metadata`. The class and not the message: a header does
+  not go through the pipeline, and an exception message is where a domain value ends up.
+- **Nesting keeps the outer identifier** and opens no second header. An operation does not split
+  because its implementation reuses code that already wrapped itself, and the inner name is kept in
+  the header's `metadata` rather than lost.
+- **`transactions.after_commit`, on by default**, finally has a reader. An entry captured inside a
+  database transaction is written when it commits and never if it rolls back; a rollback to a
+  `SAVEPOINT` discards only that level. Both are the framework's own behaviour rather than a second
+  mechanism on top of it.
+- **`Events\AuditWriteFailed`**, announced when a deferred write fails. Laravel runs commit
+  callbacks in a bare loop, so an exception there would stop every later entry of the same
+  transaction from even being attempted — an append-only engine silently losing the rest of an
+  operation because the first entry hit a constraint.
+- **`Models\AuditTransaction`**, replaceable through `models.transaction`, with `$audit->transaction`
+  and `$operation->audits` walking between the two ends. `inTransaction()` now takes the operation
+  itself as well as its identifier.
+- README: *Business transactions*, and `sentinel_transactions` in *Schema & models*.
+
+### Changed
+
+- **What waits for the commit is the write, never the pipeline.** Redaction, encryption and context
+  resolution run at capture, because the context is only true then: the actor can change before the
+  commit, `Sentinel::withContext()` is restored the moment its callback returns, and the tenant
+  decides which chain signs the entry. A rollback therefore still costs the pipeline work — that is
+  cost, not correctness.
+- **Outside a transaction nothing changes at all**, failures included. An installation that never
+  opens one behaves exactly as it did.
+- Both captures now reach the ledger through one door rather than two, which is what makes a
+  correlation and a settlement decision something that can be true of every entry rather than of
+  two out of two places.
+
+### Notes
+
+- Deferring is **honesty, not speed**: measured on the same machine, an audited write inside a
+  transaction costs the same with the option on and off. What it buys is that a fact the database
+  did not keep leaves no entry.
+- `occurred_at`, and only `occurred_at`, numbers the fact. `created_at`, `sequence` and `version`
+  number the settlement, and that order is sealed into the hash.
+- Where the ledger shares the connection that rolled back, the database had already undone the
+  entry. `after_commit` is what covers the case where it does not — a dedicated connection, a
+  ledger that is not this database, a fanout to somewhere external — and it also stops the chain's
+  stream lock from being held for the length of the business transaction.
+
+### Upgrade notes
+
+One new migration, `sentinel_transactions`. It is additive and reversible and does **not** touch
+`sentinel_audits`, whose `transaction_id` column and index have existed since `v0.2.0`.
+
+```bash
+php artisan vendor:publish --tag=sentinel-migrations   # only if you publish them
+php artisan migrate
+```
+
+Existing entries keep `transaction_id = null` and the new table starts empty. There is no backfill
+and there will not be one: inferring operations over history already settled would be inventing
+facts.
+
+`payload_version` stays at `1` and the golden dataset verifies unchanged. No API was removed;
+`inTransaction(string)` still compiles, it just accepts the header too. See [UPGRADE.md](UPGRADE.md).
+
 ## v0.11.1 — The parent side of a relation (2026-08-28)
 
 `v0.11.0` records what happens to a pivot table. A `belongsTo` has none, so when an article changes

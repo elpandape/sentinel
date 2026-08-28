@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.11.1-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.12.0-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -20,7 +20,7 @@ the state was before, what it is now — and whether the record itself can be pr
 
 ```json
 "repositories": [{ "type": "vcs", "url": "https://github.com/elpandape/sentinel" }],
-"require": { "elpandape/sentinel": "v0.11.1" }
+"require": { "elpandape/sentinel": "v0.12.0" }
 ```
 
 ```bash
@@ -43,10 +43,10 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.10.0` | Labels, field history, the timeline, comparing two versions, and a readable presenter |
 | `v0.11.0` | Relationship auditing: the six pivot operations, the relation projection, three filters and the `+ / -` render |
 | `v0.11.1` | The parent side of a `belongsTo`: a child that changes hands leaves an entry on the parent it left and the parent it joined |
+| `v0.12.0` | Business transactions: `Sentinel::transaction()`, the `sentinel_transactions` header, and entries that wait for the commit |
 
-Everything else is on the roadmap: business transactions, custom events,
-state transitions, restore, advanced verification (checkpoints and signatures), retention and
-compliance, performance modes and distributed tracing.
+Everything else is on the roadmap: custom events, state transitions, restore, advanced verification
+(checkpoints and signatures), retention and compliance, performance modes and distributed tracing.
 
 `v0.4.0` is the version that starts auditing: a model with the trait writes its own chained entries.
 `v0.5.0` is the one that answers what changed, instead of leaving you two states to compare.
@@ -58,7 +58,9 @@ is the one that lets you ask, which a trail you cannot read back is not. `v0.10.
 answers the three questions a trail gets asked most — what happened to this field, what is this
 entry about, and what happened at all — and says them in a sentence a person can read. `v0.11.0`
 is the one that records what Eloquent never announces: a pivot table changing under you. `v0.11.1`
-finishes that thought for the relations that have no pivot at all.
+finishes that thought for the relations that have no pivot at all. `v0.12.0` is the one that stops
+the trail from being a pile of entries that happen to share a request: an operation gets a name, and
+its entries stop existing when the transaction that produced them does not.
 
 ## Quick start
 
@@ -1026,7 +1028,7 @@ $grace->relationHistory('articles')->whereOperation('attach')->get();
 Sentinel::audits()->whereRelated($article)->get();   // both ends of the hand-over
 ```
 
-The three share a `request_id`; correlating them as one business operation arrives in `v0.12.0`.
+The three share a `request_id`, and a [business transaction](#business-transactions) correlates them as the one operation they are.
 
 A parent that has since been deleted still gets its entry: the foreign key **is** the name, so
 nothing has to be read to write it. That changes when the `belongsTo` points at a column other than
@@ -1037,6 +1039,84 @@ Declaring nothing keeps the old behaviour exactly. Only `belongsTo` is covered: 
 the type as well as the key, so it is refused by name rather than half-audited. And this is about
 the hand-over — creating or deleting the child writes no relation entry, because the child's own
 entry already carries the foreign key.
+
+## Business transactions
+
+A payment is not four things that happened to share a request. `Sentinel::transaction()` gives the
+operation a name and every entry inside it the same `transaction_id`:
+
+```php
+Sentinel::transaction('invoice-payment', function () use ($invoice, $payment) {
+    $invoice->markPaid();
+    $payment->save();
+    $invoice->auditors()->sync([$reviewer->id]);
+});
+
+$operation = ElPandaPe\Sentinel\Models\AuditTransaction::query()->latest('started_at')->first();
+
+$operation->name;           // 'invoice-payment'
+$operation->audits_count;   // 4
+Sentinel::audits()->inTransaction($operation)->get();
+$audit->transaction->name;  // from either end
+```
+
+The header lands in `sentinel_transactions` with the name, the actor and tenant resolved exactly as
+an entry resolves them, the window it ran in, and how many entries it wrote. It is **opened before
+the operation runs**, so one that died halfway is still findable, and closed after — including when
+the operation threw, in which case the class of the failure is in `metadata`. The class and not the
+message: a header does not go through the pipeline, so nothing would redact a domain value someone
+interpolated into an exception.
+
+**Nesting keeps the outer identifier.** An operation does not split because its implementation
+reuses code that already wrapped itself; the inner name is kept in the header's `metadata` rather
+than lost.
+
+**It correlates; it does not atomise.** `Sentinel::transaction()` opens no database transaction.
+Combining the two is your decision, and the next section is what happens when you do.
+
+### Entries wait for the commit
+
+With `transactions.after_commit` on — the default — an entry captured inside a `DB::transaction()`
+is written when that transaction commits, and never if it rolls back:
+
+```php
+DB::transaction(function () use ($invoice) {
+    $invoice->update(['status' => 'paid']);   // captured here
+    throw new PaymentDeclined;                 // and never written
+});
+```
+
+A rollback to a `SAVEPOINT` discards only that level. Both are the framework's own behaviour, so
+they are what your engine already does with transactions, not a second mechanism layered on top.
+
+**This is honesty, not speed.** Deferring does not make the request faster — measured, it is
+indistinguishable from writing in place. What it does is stop the ledger from claiming a fact the
+database does not keep.
+
+Three things are worth knowing before you rely on it:
+
+- **What waits is the write, not the pipeline.** Redaction, encryption and context resolution all
+  run at capture, because the context is only true then — the actor can change before the commit,
+  `Sentinel::withContext()` is restored the moment its callback returns, and the tenant decides
+  which chain signs the entry. A rollback therefore costs you that work for nothing. That is cost,
+  not correctness.
+- **`occurred_at`, and only `occurred_at`, numbers the fact.** `created_at`, `sequence` and
+  `version` number the settlement. Two changes to the same subject whose transactions commit out of
+  order settle in commit order, and that order is sealed into the hash.
+- **Where the ledger shares the connection that rolled back, the database had already undone the
+  entry.** What `after_commit` adds is the case where it does not: a dedicated
+  `database.connection`, a ledger that is not this database, or a fanout to somewhere external. It
+  also stops the chain's stream lock from being held for the whole business transaction.
+
+Turning it off is supported and means what it says — a ledger that can assert what a rollback
+undid. A deferred write that fails is announced with `AuditWriteFailed` rather than thrown: the
+framework runs commit callbacks in a bare loop, so an exception there would stop every later entry
+of the same transaction from even being attempted.
+
+> **Testing note.** `RefreshDatabase` and `DatabaseTransactions` replace Laravel's transaction
+> manager, and the replacement runs commit callbacks immediately for the wrapping transaction. Your
+> audits still land. A deferred write inside a *nested* `DB::transaction()` in such a test waits for
+> the outer one, which never commits — assert after the inner transaction, not inside it.
 
 ## Reading a trail out loud
 
@@ -1134,6 +1214,13 @@ fit without a migration. There is no `updated_at`: the table is append-only.
 other way round. No foreign key — date partitioning and batched purging both live badly with a
 cascade — so cleaning up after a purged entry belongs to whoever purges it.
 
+`sentinel_transactions` is the header of a [business transaction](#business-transactions), keyed by
+the `transaction_id` its entries already carry, so the correlation needs no join table. It names the
+actor with the same morph an entry uses, rather than a second shape for the same person. It is the
+one table here that is **updated** rather than appended to: a header is opened when the operation
+starts and completed when it ends, and nothing in it is hashed — what happened is in the entries,
+where the chain covers it.
+
 Two things the schema does **not** promise. Order comes from `(stream, sequence)`, never from the
 clock — `occurred_at` records when something happened, it does not sort the chain. And neither MySQL
 `json` nor PostgreSQL `jsonb` preserves the key order you wrote; values round trip intact, order does
@@ -1157,6 +1244,7 @@ Replace the model with your own subclass:
 // config/sentinel.php
 'models' => [
     'audit' => App\Models\Audit::class,
+    'transaction' => App\Models\AuditTransaction::class,
 ],
 ```
 
