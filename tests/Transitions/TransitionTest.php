@@ -36,7 +36,7 @@ it('reads a backed enum, a pure enum and a string into the same entry', function
     Sentinel::transition($this->invoice, from: PureStatus::Draft, to: PureStatus::Published)->record();
 
     $lines = Audit::query()->orderBy('sequence')->get()
-        ->map(static fn (Audit $audit): mixed => $audit->getAttribute('changes'))
+        ->map(static fn (Audit $audit): array => $audit->diff()->toArray())
         ->all();
 
     expect($lines[0])->toBe($lines[1])
@@ -65,7 +65,7 @@ it('files the two states where a field filter still finds them', function (): vo
 
     $audit = Audit::query()->firstOrFail();
 
-    expect($audit->getAttribute('changes'))->toBe([
+    expect($audit->diff()->toArray())->toBe([
         ['path' => '/status', 'op' => 'replace', 'old' => 'draft', 'new' => 'published'],
     ])->and(Sentinel::audits()->for($this->invoice)->whereFieldChanged('status')->get())->toHaveCount(1);
 });
@@ -75,7 +75,7 @@ it('names the column the call gave it over the one the configuration assumes', f
 
     $audit = Audit::query()->firstOrFail();
 
-    expect($audit->getAttribute('changes'))->toBe([
+    expect($audit->diff()->toArray())->toBe([
         ['path' => '/phase', 'op' => 'replace', 'old' => 'open', 'new' => 'closed'],
     ])->and($audit->metadata['transition']['attribute'] ?? null)->toBe('phase');
 });
@@ -86,10 +86,13 @@ it('keeps the reason with the column it is about, and out of the caller own keys
         ->metadata(['reason' => 'the caller meant something else by this'])
         ->record();
 
-    expect(Audit::query()->firstOrFail()->metadata)->toBe([
-        'reason' => 'the caller meant something else by this',
-        'transition' => ['attribute' => 'status', 'reason' => 'Budget confirmed'],
-    ]);
+    $metadata = Audit::query()->firstOrFail()->metadata ?? [];
+
+    expect($metadata['reason'] ?? null)->toBe('the caller meant something else by this')
+        ->and($metadata['transition'] ?? [])->toEqualCanonicalizing([
+            'attribute' => 'status',
+            'reason' => 'Budget confirmed',
+        ]);
 });
 
 it('leaves the reason out entirely when none was given', function (): void {

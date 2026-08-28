@@ -84,7 +84,7 @@ it('takes the severity configured for a transition, not the one configured for a
 it('infers the column a declared model already named, so the call need not repeat it', function (): void {
     Sentinel::transition($this->invoice, from: 'draft', to: 'published')->record();
 
-    expect(Audit::query()->firstOrFail()->getAttribute('changes'))->toBe([
+    expect(Audit::query()->firstOrFail()->diff()->toArray())->toBe([
         ['path' => '/status', 'op' => 'replace', 'old' => 'draft', 'new' => 'published'],
     ]);
 });
