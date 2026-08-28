@@ -39,6 +39,11 @@ interface Ledger
      * and no hash is recomputed. It is how a secondary destination takes what the primary
      * sealed, because two ledgers assigning their own sequence produce two chains for one
      * fact — and how an archive or a replica takes an entry it did not write.
+     *
+     * "Exactly as it arrived" includes the labels it arrived carrying: an implementation that
+     * stores the entry and drops them has stored something else. Labels travel on the entry as a
+     * loaded relation, so an entry that arrives without that relation loaded is one that says
+     * nothing about its labels, and storing none is the right answer there.
      */
     public function append(Audit $audit): Audit;
 
