@@ -15,9 +15,9 @@ Two published contracts change, and there is a migration.
 
 ### `Contracts\Auditable` gains `relationHistory()`
 
-**Before:** ten methods — nine plus `audits()`.
+**Before:** nine methods.
 
-**After:** eleven. A class that implements the interface by hand rather than using the trait needs:
+**After:** ten. A class that implements the interface by hand rather than using the trait needs:
 
 ```php
 public function relationHistory(string $relation): AuditQuery
