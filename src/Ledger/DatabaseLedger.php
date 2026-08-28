@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Ledger;
 
 use Closure;
+use ElPandaPe\Sentinel\Contracts\DeclaresFilters;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Contracts\LedgerStream;
 use ElPandaPe\Sentinel\Data\AuditData;
+use ElPandaPe\Sentinel\Enums\Filter;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Integrity\Stream;
@@ -20,7 +22,7 @@ use ElPandaPe\Sentinel\Support\Reference;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
 
-final readonly class DatabaseLedger implements Ledger
+final readonly class DatabaseLedger implements DeclaresFilters, Ledger
 {
     private const int MAX_ATTEMPTS = 3;
 
@@ -62,6 +64,14 @@ final readonly class DatabaseLedger implements Ledger
     public function find(string $id): ?Audit
     {
         return $this->model->newQuery()->find($id);
+    }
+
+    /**
+     * @return list<Filter>
+     */
+    public function supportedFilters(): array
+    {
+        return Filter::cases();
     }
 
     /**

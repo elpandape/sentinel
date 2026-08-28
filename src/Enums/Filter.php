@@ -20,6 +20,30 @@ enum Filter: string
     case Trace = 'trace';
     case Period = 'period';
 
+    /**
+     * What a driver is taken to answer when it does not declare anything. It is the set as it
+     * stood in v0.9.0, and it does not grow: a driver written against that surface never named
+     * the filters published after it, and assuming it can translate them would have it quietly
+     * dropping a criterion instead of refusing it — the one failure DeclaresFilters exists to
+     * prevent. A filter published from v0.10.0 on is answered only by a driver that names it.
+     *
+     * @return list<self>
+     */
+    public static function assumed(): array
+    {
+        return [
+            self::Subject,
+            self::Actor,
+            self::Event,
+            self::Severity,
+            self::Source,
+            self::Tenant,
+            self::Transaction,
+            self::Trace,
+            self::Period,
+        ];
+    }
+
     public function method(): string
     {
         return match ($this) {

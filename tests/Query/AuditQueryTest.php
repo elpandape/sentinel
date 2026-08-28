@@ -152,3 +152,17 @@ it('names the method that reaches each filter', function (): void {
     expect(array_map(static fn (Filter $filter): string => $filter->method(), Filter::cases()))
         ->toBe(['for', 'by', 'whereEvent', 'whereSeverity', 'whereSource', 'forTenant', 'inTransaction', 'withTrace', 'between']);
 });
+
+it('assumes of an undeclaring driver only the filters that were published with the contract', function (): void {
+    expect(Filter::assumed())->toBe([
+        Filter::Subject,
+        Filter::Actor,
+        Filter::Event,
+        Filter::Severity,
+        Filter::Source,
+        Filter::Tenant,
+        Filter::Transaction,
+        Filter::Trace,
+        Filter::Period,
+    ]);
+});

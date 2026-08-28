@@ -68,7 +68,7 @@ final class AuditQuery
 
     public function __construct(private readonly Ledger $ledger)
     {
-        $this->supported = $ledger instanceof DeclaresFilters ? $ledger->supportedFilters() : Filter::cases();
+        $this->supported = $ledger instanceof DeclaresFilters ? $ledger->supportedFilters() : Filter::assumed();
     }
 
     public function for(object|string $subject, int|string|null $id = null): self

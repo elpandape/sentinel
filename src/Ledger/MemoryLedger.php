@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Ledger;
 
+use ElPandaPe\Sentinel\Contracts\DeclaresFilters;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Contracts\LedgerStream;
 use ElPandaPe\Sentinel\Data\AuditData;
+use ElPandaPe\Sentinel\Enums\Filter;
 use ElPandaPe\Sentinel\Integrity\Stream;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Query\AuditQuery;
@@ -22,7 +24,7 @@ use ElPandaPe\Sentinel\Support\AuditCollection;
  * reachable as a default driver: a ledger with no durability that looks like it works is
  * worse than one that fails.
  */
-final class MemoryLedger implements Ledger
+final class MemoryLedger implements DeclaresFilters, Ledger
 {
     /**
      * @var array<string, list<Audit>>
@@ -82,6 +84,14 @@ final class MemoryLedger implements Ledger
         }
 
         return null;
+    }
+
+    /**
+     * @return list<Filter>
+     */
+    public function supportedFilters(): array
+    {
+        return Filter::cases();
     }
 
     public function query(AuditQuery $query): AuditCollection
