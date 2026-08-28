@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: composer update --prefer-dist --no-interaction
 
+      - name: Engine version
+        run: php -r 'echo "SQLite ", new PDO("sqlite::memory:")->query("select sqlite_version()")->fetchColumn(), PHP_EOL;'
+
       - name: Pint
         run: vendor/bin/pint --test
 

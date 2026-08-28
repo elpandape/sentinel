@@ -39,6 +39,9 @@ jobs:
           composer require "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
           composer update --${{ matrix.stability }} --prefer-dist --no-interaction
 
+      - name: Engine version
+        run: php -r 'echo "SQLite ", new PDO("sqlite::memory:")->query("select sqlite_version()")->fetchColumn(), PHP_EOL;'
+
       - name: Run tests
         run: php -d memory_limit=1G vendor/bin/pest --ci
 
@@ -79,6 +82,16 @@ jobs:
 
       - name: Install dependencies
         run: composer update --prefer-dist --no-interaction
+
+      - name: Engine version
+        env:
+          DB_CONNECTION: ${{ matrix.connection }}
+          DB_HOST: 127.0.0.1
+          DB_USERNAME: ${{ matrix.connection == 'mysql' && 'root' || 'postgres' }}
+          DB_PASSWORD: secret
+          DB_DATABASE: sentinel
+        run: |
+          php -r '$dsn = getenv("DB_CONNECTION") . ":host=" . getenv("DB_HOST") . ";dbname=" . getenv("DB_DATABASE"); echo getenv("DB_CONNECTION"), " ", new PDO($dsn, getenv("DB_USERNAME"), getenv("DB_PASSWORD"))->getAttribute(PDO::ATTR_SERVER_VERSION), PHP_EOL;'
 
       - name: Run tests
         env:
