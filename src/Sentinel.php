@@ -16,6 +16,9 @@ use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Support\Policies;
 use ElPandaPe\Sentinel\Transactions\TransactionScope;
+use ElPandaPe\Sentinel\Transitions\TransitionBuilder;
+use Illuminate\Database\Eloquent\Model;
+use UnitEnum;
 
 final class Sentinel
 {
@@ -75,6 +78,21 @@ final class Sentinel
     public function event(string $name): PendingEvent
     {
         return new PendingEvent($name, $this, $this->recorder, $this->config);
+    }
+
+    /**
+     * A record moving from one state to the next, as an entry of its own kind rather than an
+     * update a reader has to recognise. The lifeline of a document — draft, pending, approved,
+     * paid — becomes something the trail answers instead of something a diff has to be mined for.
+     *
+     * Sentinel does not move the record: it says that it moved. Executing the transition is the
+     * application's, and giving it away would make an audit engine into a workflow engine.
+     *
+     * The terminal is record(), and it is explicit for the same reason event()'s is.
+     */
+    public function transition(Model $subject, int|string|UnitEnum $from, int|string|UnitEnum $to): TransitionBuilder
+    {
+        return new TransitionBuilder($subject, $from, $to, $this, $this->recorder, $this->config);
     }
 
     /**

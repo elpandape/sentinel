@@ -150,6 +150,16 @@ final readonly class Config
         return $this->boolean('transactions.after_commit');
     }
 
+    /**
+     * The column a transition is about when neither the call nor the model names one. A state
+     * change has to say which column moved: it is what the change line is filed under, and
+     * without it the entry could not be found by the field it is about.
+     */
+    public function transitionAttribute(): string
+    {
+        return $this->string('transitions.attribute');
+    }
+
     public function tagsEnabled(): bool
     {
         return $this->boolean('tags.enabled');

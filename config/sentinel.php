@@ -188,6 +188,11 @@ return [
         'default' => [],
     ],
 
+    'transitions' => [
+        // The column a state change is about when neither the call nor the model names one.
+        'attribute' => 'status',
+    ],
+
     'transactions' => [
         // Defer audits until the database transaction commits, so a rollback
         // leaves no record of what never happened.
