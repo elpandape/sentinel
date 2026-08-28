@@ -5,10 +5,14 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Concerns;
 
 use ElPandaPe\Sentinel\Capture\ModelObserver;
+use ElPandaPe\Sentinel\Capture\Relations\AuditedBelongsToMany;
+use ElPandaPe\Sentinel\Capture\Relations\AuditedMorphToMany;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Support\Config;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 trait Auditable
@@ -119,6 +123,75 @@ trait Auditable
             ),
             default => throw ConfigurationException::expected('auditSeverity', 'a Severity or its value', get_debug_type($value)),
         };
+    }
+
+    /**
+     * Eloquent fires no event for a pivot change, so the relation itself is what gets wrapped.
+     * Every many-to-many a model declares comes through one of these two factories —
+     * morphedByMany() is morphToMany() with the keys reversed — which is what lets
+     * $user->roles()->sync([...]) keep working exactly as written.
+     *
+     * @template TRelatedModel of Model
+     * @template TDeclaringModel of Model
+     *
+     * @param  Builder<TRelatedModel>  $query
+     * @param  TDeclaringModel  $parent
+     * @return AuditedBelongsToMany<TRelatedModel, TDeclaringModel>
+     */
+    protected function newBelongsToMany(
+        Builder $query,
+        Model $parent,
+        $table,
+        $foreignPivotKey,
+        $relatedPivotKey,
+        $parentKey,
+        $relatedKey,
+        $relationName = null,
+    ): AuditedBelongsToMany {
+        return new AuditedBelongsToMany(
+            $query,
+            $parent,
+            $table,
+            $foreignPivotKey,
+            $relatedPivotKey,
+            $parentKey,
+            $relatedKey,
+            $relationName,
+        );
+    }
+
+    /**
+     * @template TRelatedModel of Model
+     * @template TDeclaringModel of Model
+     *
+     * @param  Builder<TRelatedModel>  $query
+     * @param  TDeclaringModel  $parent
+     * @return AuditedMorphToMany<TRelatedModel, TDeclaringModel>
+     */
+    protected function newMorphToMany(
+        Builder $query,
+        Model $parent,
+        $name,
+        $table,
+        $foreignPivotKey,
+        $relatedPivotKey,
+        $parentKey,
+        $relatedKey,
+        $relationName = null,
+        $inverse = false,
+    ): AuditedMorphToMany {
+        return new AuditedMorphToMany(
+            $query,
+            $parent,
+            $name,
+            $table,
+            $foreignPivotKey,
+            $relatedPivotKey,
+            $parentKey,
+            $relatedKey,
+            $relationName,
+            $inverse,
+        );
     }
 
     /**

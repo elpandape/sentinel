@@ -129,6 +129,25 @@ function auditRelationsTable(): string
     return $config->table('audit_relations');
 }
 
+/**
+ * @return list<array<string, mixed>>
+ */
+function linesOf(Audit $audit): array
+{
+    /** @var list<array<string, mixed>> $lines */
+    $lines = $audit->getAttribute('changes') ?? [];
+
+    return $lines;
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function lineOf(Audit $audit): array
+{
+    return linesOf($audit)[0];
+}
+
 function relationLine(
     string $relation = 'roles',
     string $id = '3',
@@ -206,6 +225,44 @@ function createFixtureTables(): void
     Schema::create('fixture_actors', static function (Blueprint $table): void {
         $table->id();
         $table->string('name')->nullable();
+    });
+
+    Schema::create('fixture_teams', static function (Blueprint $table): void {
+        $table->id();
+        $table->string('name')->nullable();
+    });
+
+    Schema::create('fixture_members', static function (Blueprint $table): void {
+        $table->id();
+        $table->string('name')->nullable();
+    });
+
+    Schema::create('fixture_posts', static function (Blueprint $table): void {
+        $table->id();
+    });
+
+    Schema::create('fixture_labels', static function (Blueprint $table): void {
+        $table->id();
+        $table->string('name')->nullable();
+    });
+
+    Schema::create('fixture_team_member', static function (Blueprint $table): void {
+        $table->unsignedBigInteger('team_id');
+        $table->unsignedBigInteger('member_id');
+        $table->string('role')->nullable();
+        $table->string('expires_at')->nullable();
+    });
+
+    Schema::create('fixture_team_guest', static function (Blueprint $table): void {
+        $table->unsignedBigInteger('team_id');
+        $table->unsignedBigInteger('member_id');
+    });
+
+    Schema::create('fixture_labelables', static function (Blueprint $table): void {
+        $table->unsignedBigInteger('label_id');
+        $table->unsignedBigInteger('labelable_id');
+        $table->string('labelable_type');
+        $table->string('note')->nullable();
     });
 
     Schema::create('fixture_audited_subjects', static function (Blueprint $table): void {
