@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Pest\Rector\Rules\ChainExpectCallsRector;
 use Pest\Rector\Rules\ConvertAssertToExpectRector;
+use Pest\Rector\Rules\ConvertExpectExceptionToThrowRector;
 use Pest\Rector\Rules\SimplifyToLiteralBooleanRector;
 use Pest\Rector\Set\PestSetList;
 use Rector\Config\RectorConfig;
@@ -21,4 +22,5 @@ return RectorConfig::configure()
         ConvertAssertToExpectRector::class => [__DIR__.'/src/Testing'],
         ChainExpectCallsRector::class => [__DIR__.'/src/Testing'],
         SimplifyToLiteralBooleanRector::class => [__DIR__.'/src/Testing'],
+        ConvertExpectExceptionToThrowRector::class => [__DIR__.'/src/Testing'],
     ]);

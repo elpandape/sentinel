@@ -255,12 +255,42 @@ final class AuditQuery
         return $query;
     }
 
+    /**
+     * Everything the filter matches, up to the bound. If the bound is reached the read is
+     * refused rather than answered: a prefix shaped exactly like a complete answer is the one
+     * mistake a trail cannot afford, and this surface already declines to issue a read whose
+     * size it would only learn once it arrived. take() asks for a prefix on purpose; paginate()
+     * walks the whole thing.
+     */
     public function get(): AuditCollection
     {
-        $query = clone $this;
-        $query->limit = self::DEFAULT_LIMIT;
+        if ($this->limit !== null) {
+            return $this->ledger->query($this);
+        }
 
-        return $this->ledger->query($query);
+        $query = clone $this;
+        $query->limit = self::DEFAULT_LIMIT + 1;
+
+        $entries = $this->ledger->query($query);
+
+        return $entries->count() > self::DEFAULT_LIMIT
+            ? throw QueryException::unbounded(self::DEFAULT_LIMIT)
+            : $entries;
+    }
+
+    /**
+     * A prefix, asked for knowingly.
+     */
+    public function take(int $limit): self
+    {
+        if ($limit < 1) {
+            throw QueryException::unreachableLimit($limit);
+        }
+
+        $query = clone $this;
+        $query->limit = $limit;
+
+        return $query;
     }
 
     /**

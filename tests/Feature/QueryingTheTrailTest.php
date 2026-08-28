@@ -35,14 +35,15 @@ it('answers an unnarrowed query without reaching for the whole table', function 
     expect(Sentinel::audits()->get())->toHaveCount(1);
 });
 
-it('bounds what get returns even when nothing narrows it', function (): void {
+it('refuses an unnarrowed read rather than answering with a prefix that looks whole', function (): void {
     Sentinel::withoutAuditing(function (): void {
         foreach (range(1, AuditQuery::DEFAULT_LIMIT + 10) as $sequence) {
             insertAudit(['sequence' => $sequence]);
         }
     });
 
-    expect(Sentinel::audits()->get())->toHaveCount(AuditQuery::DEFAULT_LIMIT);
+    expect(fn (): AuditCollection => Sentinel::audits()->get())->toThrow(QueryException::class)
+        ->and(Sentinel::audits()->take(AuditQuery::DEFAULT_LIMIT)->get())->toHaveCount(AuditQuery::DEFAULT_LIMIT);
 });
 
 it('hands back one page and says whether another follows', function (): void {

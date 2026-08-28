@@ -57,7 +57,7 @@ it('rides the index of the filter in front of it once a refiner has one', functi
 })->with('the filters that find');
 
 it('pays for a whole pass and a sort when nothing narrows it, which is why get is bounded', function (): void {
-    $plan = planFor(Sentinel::audits());
+    $plan = planFor(Sentinel::audits()->take(AuditQuery::DEFAULT_LIMIT));
 
     expect(readsAnIndex($plan))->toBeFalse()
         ->and(sortsOutsideTheIndex($plan))->toBeTrue();

@@ -33,6 +33,19 @@ final class QueryException extends InvalidArgumentException
         return new self('Narrowing by an empty field name asks nothing of an entry; name the attribute whose history you want.');
     }
 
+    public static function unbounded(int $limit): self
+    {
+        return new self(
+            "This filter matches at least {$limit} entries, and handing back the first {$limit} would look exactly like handing back all of them. "
+            .'Narrow it, take() a prefix on purpose, or paginate() through the whole thing.',
+        );
+    }
+
+    public static function unreachableLimit(int $limit): self
+    {
+        return new self("A read of {$limit} entries is not a read: ask for at least one.");
+    }
+
     public static function unreachablePage(int $perPage, int $page): self
     {
         return new self("A page of {$perPage} entries numbered {$page} is not a page: both have to be at least one.");

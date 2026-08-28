@@ -12,6 +12,7 @@ use ElPandaPe\Sentinel\Enums\Filter;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Exceptions\LedgerException;
+use ElPandaPe\Sentinel\Exceptions\QueryException;
 use ElPandaPe\Sentinel\Ledger\EntryBuilder;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Models\AuditTag;
@@ -267,6 +268,24 @@ abstract class LedgerContractTestCase extends TestCase
         $found = $ledger->query($this->asking()->byOccurrence()->latest())->pluck('id')->all();
 
         $this->assertSame($this->retains() ? $written : [], $found);
+    }
+
+    public function test_it_refuses_a_read_that_would_come_back_looking_complete(): void
+    {
+        $ledger = $this->ledger();
+
+        for ($written = 0; $written <= AuditQuery::DEFAULT_LIMIT; $written++) {
+            $ledger->write($this->auditData());
+        }
+
+        $this->settle($ledger);
+
+        if (! $this->retains()) {
+            $this->assertCount(0, $this->asking()->get());
+
+            return;
+        }
+        expect(fn () => $this->asking()->get())->toThrow(QueryException::class);
     }
 
     public function test_it_answers_an_unnarrowed_query_with_everything_it_kept(): void
