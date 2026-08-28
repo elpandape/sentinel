@@ -16,6 +16,8 @@ use ElPandaPe\Sentinel\Snapshot\SnapshotBuilder;
 use ElPandaPe\Sentinel\Snapshot\SnapshotPair;
 use ElPandaPe\Sentinel\Support\AuditPolicy;
 use ElPandaPe\Sentinel\Support\Config;
+use ElPandaPe\Sentinel\Transitions\Machine;
+use ElPandaPe\Sentinel\Transitions\State;
 use ElPandaPe\Sentinel\Transitions\TransitionBuilder;
 use Illuminate\Database\Eloquent\Model;
 
@@ -56,6 +58,37 @@ final readonly class ModelCapture
             changes: $changes,
             metadata: $moved === null ? null : ['transition' => ['attribute' => $moved]],
         ), $model);
+    }
+
+    /**
+     * Asked before the save, not after it. By the time eloquent announces an update the row is
+     * already written, so refusing there would leave the record holding a state the entry says
+     * never happened — worse than not validating at all. Here the save is what gets abandoned.
+     *
+     * A model whose auditing is paused is not governed either: Sentinel refusing a move it would
+     * not have recorded would be governing the workflow, which is the one thing it does not do.
+     */
+    public function vet(Model $model): void
+    {
+        if (! $this->sentinel->isRecording()) {
+            return;
+        }
+
+        foreach (AuditPolicy::of($model)->transitions as $column) {
+            $from = $model->getOriginal($column);
+            $to = $model->getAttribute($column);
+
+            if (! State::represents($from) || ! State::represents($to)) {
+                continue;
+            }
+
+            $before = State::of($from);
+            $after = State::of($to);
+
+            if ($before !== $after) {
+                Machine::allow($model, $column, $before, $after);
+            }
+        }
     }
 
     /**

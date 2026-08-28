@@ -35,9 +35,9 @@ final class TransitionBuilder
 
     private readonly string $subjectId;
 
-    private readonly int|string $from;
+    private readonly bool|float|int|string|null $from;
 
-    private readonly int|string $to;
+    private readonly bool|float|int|string|null $to;
 
     private ?string $attribute = null;
 
@@ -59,8 +59,8 @@ final class TransitionBuilder
 
     public function __construct(
         private readonly Model $subject,
-        int|string|UnitEnum $from,
-        int|string|UnitEnum $to,
+        bool|float|int|string|UnitEnum|null $from,
+        bool|float|int|string|UnitEnum|null $to,
         private readonly Sentinel $sentinel,
         private readonly Recorder $recorder,
         private readonly Config $config,
@@ -135,6 +135,8 @@ final class TransitionBuilder
         }
 
         $attribute = $this->attribute ?? $this->declared() ?? $this->config->transitionAttribute();
+
+        Machine::allow($this->subject, $attribute, $this->from, $this->to);
 
         $this->recorder->record(
             new AuditData(

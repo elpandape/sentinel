@@ -28,10 +28,17 @@ trait Auditable
      */
     private const array AUDITED_EVENTS = ['created', 'updated', 'deleted', 'forceDeleted'];
 
+    /**
+     * Not an audited event: nothing is written here. It is the only moment at which a state
+     * machine can refuse a move and have the refusal mean something, because the row has not
+     * been written yet.
+     */
+    private const string VETTED_EVENT = 'updating';
+
     public static function bootAuditable(): void
     {
         // Model::observe() instantiates the model, which cannot happen while it is booting.
-        foreach (self::AUDITED_EVENTS as $event) {
+        foreach ([...self::AUDITED_EVENTS, self::VETTED_EVENT] as $event) {
             static::registerModelEvent($event, [ModelObserver::class, $event]);
         }
     }

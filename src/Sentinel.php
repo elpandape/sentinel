@@ -90,7 +90,7 @@ final class Sentinel
      *
      * The terminal is record(), and it is explicit for the same reason event()'s is.
      */
-    public function transition(Model $subject, int|string|UnitEnum $from, int|string|UnitEnum $to): TransitionBuilder
+    public function transition(Model $subject, bool|float|int|string|UnitEnum|null $from, bool|float|int|string|UnitEnum|null $to): TransitionBuilder
     {
         return new TransitionBuilder($subject, $from, $to, $this, $this->recorder, $this->config);
     }

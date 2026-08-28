@@ -21,6 +21,11 @@ final readonly class ModelObserver
         $this->capture->record($model, AuditEvent::Created);
     }
 
+    public function updating(Model $model): void
+    {
+        $this->capture->vet($model);
+    }
+
     // A restore is an update that clears the deletion mark, and by the time eloquent
     // fires `restored` the original is already synced: the state in the bin is gone.
     public function updated(Model $model): void

@@ -52,6 +52,10 @@ return [
         'password_reset' => 'reset the password of',
     ],
 
+    'transitions' => [
+        'illegal' => ':subject cannot move its :attribute from :from to :to.',
+    ],
+
     'integrity' => [
         'hash_mismatch' => 'Audit :id no longer reproduces its own hash at sequence :sequence of stream :stream.',
         'link_mismatch' => 'Audit :id does not link to the entry before it at sequence :sequence of stream :stream.',

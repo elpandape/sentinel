@@ -52,6 +52,10 @@ return [
         'password_reset' => 'restableció la contraseña de',
     ],
 
+    'transitions' => [
+        'illegal' => ':subject no puede mover su :attribute de :from a :to.',
+    ],
+
     'integrity' => [
         'hash_mismatch' => 'El asiento :id ya no reproduce su propio hash en la secuencia :sequence del stream :stream.',
         'link_mismatch' => 'El asiento :id no enlaza con el anterior en la secuencia :sequence del stream :stream.',
