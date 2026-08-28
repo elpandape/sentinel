@@ -20,7 +20,7 @@ return [
         'reference' => ':type #:id',
         'someone' => 'Someone',
         'something' => 'something',
-        'field' => 'v:version  :value',
+        'field' => ':ordinal. v:version  :value',
         'timeline' => ':time  :line',
         'nothing' => 'nothing',
         'yes' => 'yes',

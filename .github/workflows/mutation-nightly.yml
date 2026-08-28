@@ -30,7 +30,7 @@ jobs:
         # letting a missed minimum abort it would leave the modules queued behind that one unmeasured
         # for as long as it stays below its threshold — which is exactly when their numbers matter.
         run: |
-          set -- "src/Integrity:95" "src/Context:95" "src/Pipeline:90" "src/Security:90" "src/Diff:90" "src/Ledger:90" "src/Query:90" "src/Snapshot:90" "src/Http:90" "src/Capture:0" "src/Concerns:0" "src/Support:0" "src/Models:0" "src/SentinelServiceProvider.php:0"
+          set -- "src/Integrity:95" "src/Context:95" "src/Pipeline:90" "src/Security:90" "src/Diff:90" "src/Ledger:90" "src/Query:90" "src/Presentation:95" "src/Snapshot:90" "src/Http:90" "src/Capture:0" "src/Concerns:0" "src/Support:0" "src/Models:0" "src/SentinelServiceProvider.php:0"
           below=""
           for entry in "$@"; do
             path="${entry%%:*}"

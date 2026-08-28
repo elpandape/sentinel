@@ -104,6 +104,11 @@ it('reads a repeated call as one question with both versions', function (): void
         ->toBe([2, 5]);
 });
 
+it('carries every version asked for across calls, once each, as a list', function (): void {
+    expect(Sentinel::audits()->whereVersion(2, 5, 2)->whereVersion(5, 7)->versions)
+        ->toBe([2, 5, 7]);
+});
+
 it('names whereVersion as the method that reaches the version filter', function (): void {
     expect(Filter::Version->method())->toBe('whereVersion')
         ->and(Filter::assumed())->not->toContain(Filter::Version);

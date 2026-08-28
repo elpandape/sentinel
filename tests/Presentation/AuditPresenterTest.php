@@ -96,7 +96,7 @@ it('reads the history of a field as the values it took', function (): void {
     $history = Sentinel::audits()->for('App\\Models\\User', 1)->whereFieldChanged('email')->get();
 
     expect(presenter()->fieldHistory($history, 'email'))->toBe(
-        "v1  a@example.com\nv2  b@example.com\nv3  c@example.com",
+        "1. v1  a@example.com\n2. v2  b@example.com\n3. v3  c@example.com",
     );
 });
 
@@ -113,7 +113,7 @@ it('keeps the version a subject really reached when a field skipped some', funct
 
     $history = Sentinel::audits()->for('App\\Models\\User', 1)->whereFieldChanged('email')->get();
 
-    expect(presenter()->fieldHistory($history, 'email'))->toBe("v1  a@example.com\nv3  b@example.com");
+    expect(presenter()->fieldHistory($history, 'email'))->toBe("1. v1  a@example.com\n2. v3  b@example.com");
 });
 
 it('says what a value that is not a word is', function (mixed $value, string $rendered): void {
@@ -125,7 +125,7 @@ it('says what a value that is not a word is', function (mixed $value, string $re
 
     $history = Sentinel::audits()->for('App\\Models\\User', 1)->whereFieldChanged('flag')->get();
 
-    expect(presenter()->fieldHistory($history, 'flag'))->toBe("v1  {$rendered}");
+    expect(presenter()->fieldHistory($history, 'flag'))->toBe("1. v1  {$rendered}");
 })->with([
     'true' => [true, 'yes'],
     'false' => [false, 'no'],
@@ -157,6 +157,45 @@ it('reads a timeline as one line per entry, stamped with when it happened', func
 it('reads an empty trail as nothing at all', function (): void {
     expect(presenter()->timeline(new AuditCollection))->toBeEmpty()
         ->and(presenter()->fieldHistory(new AuditCollection, 'email'))->toBeEmpty();
+});
+
+it('shows the two numberings apart, so a skipped version reads as one', function (): void {
+    $ledger = app(DatabaseLedger::class);
+
+    foreach ([['/email', 'a@example.com'], ['/name', 'Ada'], ['/email', 'b@example.com']] as [$path, $value]) {
+        $ledger->write(auditData([
+            'subject_type' => 'App\\Models\\User',
+            'subject_id' => '1',
+            'changes' => [['path' => $path, 'op' => 'replace', 'old' => null, 'new' => $value]],
+        ]));
+    }
+
+    $history = Sentinel::audits()->for('App\\Models\\User', 1)->whereFieldChanged('email')->get();
+    $lines = explode(PHP_EOL, presenter()->fieldHistory($history, 'email'));
+
+    expect($lines[1])->toStartWith('2. v3')
+        ->and($lines[1])->not->toStartWith('3.')
+        ->and($lines[1])->not->toStartWith('2. v2');
+});
+
+it('says version zero for an entry the ledger never numbered', function (): void {
+    app(DatabaseLedger::class)->write(auditData([
+        'changes' => [['path' => '/email', 'op' => 'replace', 'old' => null, 'new' => 'a@example.com']],
+    ]));
+
+    $history = Sentinel::audits()->whereFieldChanged('email')->get();
+
+    expect(presenter()->fieldHistory($history, 'email'))->toBe('1. v0  a@example.com');
+});
+
+it('names nobody when only half a reference was recorded', function (): void {
+    $audit = app(DatabaseLedger::class)->write(auditData([
+        'event' => 'created',
+        'subject_type' => 'App\\Models\\Invoice',
+        'actor_type' => 'App\\Models\\User',
+    ]));
+
+    expect(presenter()->entry($audit))->toBe('Someone created something');
 });
 
 it('is resolved from the container', function (): void {

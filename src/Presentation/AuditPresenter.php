@@ -53,8 +53,8 @@ final readonly class AuditPresenter
                 $ordinal++;
 
                 return $this->line('field', [
-                    'ordinal' => (string) $ordinal,
-                    'version' => (string) ($audit->version ?? 0),
+                    'ordinal' => $ordinal,
+                    'version' => $audit->version ?? 0,
                     'value' => $this->value($audit, $pointer),
                 ]);
             })
@@ -99,19 +99,29 @@ final readonly class AuditPresenter
 
     private function event(string $event): string
     {
-        $key = "sentinel::sentinel.events.{$event}";
-        $line = $this->translator->get($key);
-
-        return is_string($line) && $line !== $key ? $line : $event;
+        return $this->translated("events.{$event}") ?? $event;
     }
 
     /**
-     * @param  array<string, string>  $replace
+     * @param  array<string, int|string>  $replace
      */
     private function line(string $key, array $replace = []): string
     {
-        $line = $this->translator->get("sentinel::sentinel.presenter.{$key}", $replace);
+        return $this->translated("presenter.{$key}", $replace) ?? $key;
+    }
 
-        return is_string($line) ? $line : $key;
+    /**
+     * The one place that decides whether a line exists. Null covers both ways it can be missing:
+     * the translator hands the key back when nothing answers it, and hands an array back when the
+     * key names a group rather than a line.
+     *
+     * @param  array<string, int|string>  $replace
+     */
+    private function translated(string $key, array $replace = []): ?string
+    {
+        $namespaced = "sentinel::sentinel.{$key}";
+        $line = $this->translator->get($namespaced, $replace);
+
+        return is_string($line) && $line !== $namespaced ? $line : null;
     }
 }

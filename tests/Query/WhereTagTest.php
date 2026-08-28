@@ -80,7 +80,28 @@ it('names whereTag as the method that reaches the label filter', function (): vo
         ->and(Filter::assumed())->not->toContain(Filter::Tag);
 });
 
-it('says a label once when the same one is asked for twice', function (): void {
-    expect(new TagCriteria()->requiring(['billing'])->requiring(['billing'])->all)->toBe(['billing'])
-        ->and(new TagCriteria()->including(['billing'])->including(['billing'])->any)->toBe(['billing']);
+it('says a label once when the same one is asked for twice, and keeps the list a list', function (): void {
+    expect(new TagCriteria()->requiring(['billing', 'refund'])->requiring(['billing', 'payroll'])->all)
+        ->toBe(['billing', 'refund', 'payroll'])
+        ->and(new TagCriteria()->including(['billing', 'refund'])->including(['billing', 'payroll'])->any)
+        ->toBe(['billing', 'refund', 'payroll']);
+});
+
+it('keeps the two lists apart', function (): void {
+    $criteria = new TagCriteria()->requiring(['billing'])->including(['refund']);
+
+    expect($criteria->all)->toBe(['billing'])
+        ->and($criteria->any)->toBe(['refund']);
+});
+
+it('carries every label asked for across calls, not only the last', function (): void {
+    expect(Sentinel::audits()->whereTag('billing')->whereTag('refund')->tags?->all)
+        ->toBe(['billing', 'refund'])
+        ->and(Sentinel::audits()->whereAnyTag('billing')->whereAnyTag('refund')->tags?->any)
+        ->toBe(['billing', 'refund']);
+});
+
+it('says a label once when one call repeats it, and keeps the list a list', function (): void {
+    expect(Sentinel::audits()->whereTag(['billing', 'refund', 'billing', 'payroll'])->tags?->all)
+        ->toBe(['billing', 'refund', 'payroll']);
 });
