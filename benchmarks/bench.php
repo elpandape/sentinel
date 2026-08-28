@@ -19,6 +19,7 @@ use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Sentinel;
 use ElPandaPe\Sentinel\SentinelServiceProvider;
@@ -505,6 +506,67 @@ for ($i = 0; $i < TRANSITION_ITERATIONS; $i++) {
 
 $transitionResults['transition stated outright'] = (hrtime(true) - $start) / 1_000_000;
 
+// What putting a record back costs, against the audited update it replaces rather than against the
+// v0.4.0 baseline: that one measures a created, which builds one snapshot where an update builds
+// two and compares them. A restoration does everything an audited update does and, before it, reads
+// the entry's own hash back, photographs the record, and asks the schema which columns still exist.
+//
+// Each row gets its own record, for the reason the transition rows do: they all write the same
+// number of entries about their subject, so the ledger's max('version') costs them the same.
+const RESTORE_ITERATIONS = 1000;
+
+$restoring = static function (Audit $first, Audit $second, int $times, bool $whole): float {
+    $fields = $whole ? null : ['score'];
+
+    for ($i = 0; $i < WARMUP; $i++) {
+        ($i % 2 === 0 ? $first : $second)->restore($fields);
+    }
+
+    $start = hrtime(true);
+
+    for ($i = 0; $i < $times; $i++) {
+        ($i % 2 === 0 ? $first : $second)->restore($fields);
+    }
+
+    return (hrtime(true) - $start) / 1_000_000;
+};
+
+/**
+ * Two entries that portray the same record with a different score, so alternating between them
+ * always has something to move. A restoration that finds the value already there writes nothing,
+ * and a row of those would be measuring the refusal instead of the restoration.
+ *
+ * @return array{Audit, Audit}
+ */
+$anchored = static function (int $offset) use ($mover): array {
+    $record = $mover(BenchAudited::class, $offset);
+    $record->forceFill(['score' => 1])->save();
+
+    $key = $record->getKey();
+
+    /** @var array{Audit, Audit} $anchors */
+    $anchors = Audit::query()
+        ->where('subject_type', $record->getMorphClass())
+        ->where('subject_id', is_string($key) || is_int($key) ? (string) $key : '')
+        ->orderBy('id')
+        ->take(2)
+        ->get()
+        ->all();
+
+    return $anchors;
+};
+
+$offset += WARMUP + TRANSITION_ITERATIONS;
+$restoreReference = $moving($mover(BenchAudited::class, $offset), RESTORE_ITERATIONS, false);
+
+$offset += WARMUP + RESTORE_ITERATIONS;
+[$first, $second] = $anchored($offset);
+$restoreWhole = $restoring($first, $second, RESTORE_ITERATIONS, true);
+
+$offset += WARMUP + RESTORE_ITERATIONS;
+[$first, $second] = $anchored($offset);
+$restoreOneField = $restoring($first, $second, RESTORE_ITERATIONS, false);
+
 $baseline = $results['plain (not audited)'];
 
 echo '| Variant | Writes | Total (ms) | Per write (µs) | Δ vs plain |', PHP_EOL;
@@ -601,6 +663,25 @@ foreach ($transitionResults as $label => $total) {
         $total,
         $total * 1000 / TRANSITION_ITERATIONS,
         $total === $transitionBaseline ? '—' : sprintf('%+.1f%%', ($total / $transitionBaseline - 1) * 100),
+        PHP_EOL,
+    );
+}
+
+echo PHP_EOL, '| Restore variant | Writes | Total (ms) | Per write (µs) | Δ vs an audited update |', PHP_EOL;
+echo '|---|---|---|---|---|', PHP_EOL;
+
+foreach ([
+    'audited update of one column' => $restoreReference,
+    'restore, whole recorded state' => $restoreWhole,
+    'restore, one named field' => $restoreOneField,
+] as $label => $total) {
+    printf(
+        '| %s | %d | %.1f | %.1f | %s |%s',
+        $label,
+        RESTORE_ITERATIONS,
+        $total,
+        $total * 1000 / RESTORE_ITERATIONS,
+        $total === $restoreReference ? '—' : sprintf('%+.1f%%', ($total / $restoreReference - 1) * 100),
         PHP_EOL,
     );
 }
