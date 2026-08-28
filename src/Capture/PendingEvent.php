@@ -7,6 +7,8 @@ namespace ElPandaPe\Sentinel\Capture;
 use Carbon\CarbonImmutable;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
+use ElPandaPe\Sentinel\Exceptions\QueryException;
 use ElPandaPe\Sentinel\Sentinel;
 use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Support\Reference;
@@ -26,9 +28,20 @@ final class PendingEvent
 {
     public const string AUDIT_TYPE = 'custom';
 
+    /**
+     * What the event column holds. Refused here rather than at the ledger, for the reason the
+     * label guard gives: there it would arrive as a constraint violation on a write that had
+     * already sealed a chain. Worse than the labels, in fact — the name is inside the canonical
+     * payload, so an engine that truncates instead of raising leaves an entry whose stored hash
+     * covers a value the row no longer holds, and it never verifies again.
+     */
+    public const int MAX_NAME_LENGTH = 64;
+
     private ?Reference $actor = null;
 
     private ?Model $subject = null;
+
+    private ?string $subjectId = null;
 
     private ?Severity $severity = null;
 
@@ -47,7 +60,11 @@ final class PendingEvent
         private readonly Sentinel $sentinel,
         private readonly Recorder $recorder,
         private readonly Config $config,
-    ) {}
+    ) {
+        if (mb_strlen($name) > self::MAX_NAME_LENGTH) {
+            throw ConfigurationException::eventTooLong($name, self::MAX_NAME_LENGTH);
+        }
+    }
 
     public function actor(object|string $actor, int|string|null $id = null): self
     {
@@ -59,10 +76,21 @@ final class PendingEvent
     /**
      * A fact with no subject stays subjectless. Some things that happen are not about a record,
      * and giving them one would be inventing it.
+     *
+     * A model with no key is refused rather than half-recorded: an entry naming the type and not
+     * the row says it is about something nobody can go and look at, which is worse than saying
+     * nothing. It is the same refusal Reference::to() makes for an actor.
      */
     public function subject(Model $subject): self
     {
+        $key = $subject->getKey();
+
+        if (! is_string($key) && ! is_int($key)) {
+            throw QueryException::unsavedModel($subject::class);
+        }
+
         $this->subject = $subject;
+        $this->subjectId = (string) $key;
 
         return $this;
     }
@@ -107,19 +135,12 @@ final class PendingEvent
                 severity: $this->severity ?? $this->config->defaultSeverity($this->name),
                 occurred_at: CarbonImmutable::now(),
                 subject_type: $this->subject?->getMorphClass(),
-                subject_id: $this->key(),
+                subject_id: $this->subjectId,
                 metadata: $this->metadata,
                 tags: $this->tags,
             ),
             $this->subject,
             $this->actor,
         );
-    }
-
-    private function key(): ?string
-    {
-        $key = $this->subject?->getKey();
-
-        return is_string($key) || is_int($key) ? (string) $key : null;
     }
 }

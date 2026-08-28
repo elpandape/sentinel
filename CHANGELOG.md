@@ -22,7 +22,8 @@ through the same pipeline and the same ledger.
   and subject so `->by()` and `->for()` both find it. The retention policy for `auth` finally has
   something to purge, and the timeline stops promising a type nobody wrote.
 - **Severity defaults for the auth events**, in the `severity.events` section that already existed:
-  getting in is `info`, being refused is `warning`, being shut out is `critical`.
+  `failed` is `warning`, `lockout` is `critical`, `password_reset` is `notice`. `login` and
+  `logout` name no override and fall through to `severity.default`, which ships as `info`.
 - README: *Custom events* and *Authentication events*.
 
 ### Notes
@@ -36,7 +37,14 @@ through the same pipeline and the same ledger.
 - Registering nothing writes nothing. A package that started recording who logs in the moment it
   was upgraded would be making that decision for you.
 - An actor named outright is reapplied after the pipeline, because the context stage reassigns that
-  column on every pass by design. The chain is unaffected: the hash is sealed after.
+  column on every pass by design. The chain is unaffected: the hash is sealed after. Two
+  consequences worth knowing: a resolved impersonator is dropped along with the resolved actor,
+  because it stood in for that actor and not for the one you named; and a `Sentinel::filter()`
+  policy sees the **resolved** actor, since policies run inside the pipeline and the swap happens
+  after it.
+- An event name longer than the 64 characters the column holds is refused at the call that wrote
+  it, the way an over-long label already was. It has to be: the name is inside the hash, so an
+  engine that truncated instead of raising would leave an entry that never verifies again.
 
 No migration, no schema change, `payload_version` stays at `1`.
 

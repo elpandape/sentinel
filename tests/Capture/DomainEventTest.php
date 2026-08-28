@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Capture\PendingEvent;
 use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
+use ElPandaPe\Sentinel\Exceptions\QueryException;
 use ElPandaPe\Sentinel\Facades\Sentinel;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Models\AuditTransaction;
@@ -12,6 +14,7 @@ use ElPandaPe\Sentinel\Tests\Fixtures\AuditedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\ProtectedSubject;
 use Illuminate\Support\Facades\DB;
 
+use function ElPandaPe\Sentinel\Tests\httpRequest;
 use function ElPandaPe\Sentinel\Tests\presenter;
 
 it('settles a fact that no model change describes', function (): void {
@@ -163,4 +166,53 @@ it('reads back with the name the application gave the event, untranslated', func
     Sentinel::event('invoice.approved')->record();
 
     expect(presenter()->entry(Audit::query()->firstOrFail()))->toContain('invoice.approved');
+});
+
+it('refuses an event name longer than the column holds, at the call that wrote it', function (): void {
+    expect(fn (): mixed => Sentinel::event(str_repeat('a', 65)))
+        ->toThrow(ConfigurationException::class);
+});
+
+it('takes a name of exactly the width the column holds', function (): void {
+    Sentinel::event(str_repeat('a', 64))->record();
+
+    expect(Audit::query()->firstOrFail()->verifyIntegrity())->toBeTrue();
+});
+
+it('refuses a subject with no key rather than naming a type nobody can look up', function (): void {
+    expect(fn (): mixed => Sentinel::event('invoice.approved')->subject(new AuditedSubject))
+        ->toThrow(QueryException::class);
+});
+
+it('drops the resolved impersonator when the caller names the actor', function (): void {
+    $impersonator = ActingUser::query()->create(['name' => 'Support']);
+    $user = ActingUser::query()->create(['name' => 'Ada']);
+    $named = ActingUser::query()->create(['name' => 'Third Party']);
+
+    auth()->guard()->setUser($user);
+    $request = httpRequest('/invoices');
+    $request->setLaravelSession(app('session.store'));
+    $request->session()->put('impersonated_by', $impersonator->getKey());
+
+    Sentinel::event('invoice.approved')->actor($named)->record();
+
+    $audit = Audit::query()->firstOrFail();
+
+    expect($audit->actor_id)->toBe((string) $named->getKey())
+        ->and($audit->impersonator_type)->toBeNull()
+        ->and($audit->impersonator_id)->toBeNull();
+});
+
+it('keeps the resolved impersonator when the caller names nobody', function (): void {
+    $impersonator = ActingUser::query()->create(['name' => 'Support']);
+    $user = ActingUser::query()->create(['name' => 'Ada']);
+
+    auth()->guard()->setUser($user);
+    $request = httpRequest('/invoices');
+    $request->setLaravelSession(app('session.store'));
+    $request->session()->put('impersonated_by', $impersonator->getKey());
+
+    Sentinel::event('invoice.approved')->record();
+
+    expect(Audit::query()->firstOrFail()->impersonator_id)->toBe((string) $impersonator->getKey());
 });

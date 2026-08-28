@@ -67,6 +67,10 @@ final readonly class Recorder
      * reassigns that column on every pass — deliberately, so a second pass leaves none of the first
      * one's residue. A severity does not need this: it is decided at capture and no stage touches
      * it. The chain is unaffected either way, since the hash is sealed in the ledger, after this.
+     *
+     * The impersonator goes with it. Whoever the session resolved was standing in for the actor
+     * that was resolved alongside them, not for the one the caller has just named, and an entry
+     * pairing the two would claim a delegation that never happened.
      */
     private function attribute(AuditData $audit, ?Reference $actor): void
     {
@@ -76,6 +80,8 @@ final readonly class Recorder
 
         $audit->actor_type = $actor->type;
         $audit->actor_id = $actor->id;
+        $audit->impersonator_type = null;
+        $audit->impersonator_id = null;
     }
 
     /**

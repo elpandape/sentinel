@@ -44,6 +44,15 @@ final class ConfigurationException extends InvalidArgumentException
         ));
     }
 
+    public static function eventTooLong(string $event, int $limit): self
+    {
+        return new self(sprintf(
+            'Sentinel was given the event name [%s], longer than the %d characters the column holds. The name is inside the hash, so an engine that truncated it would leave an entry that can never reproduce its own.',
+            substr($event, 0, 80),
+            $limit,
+        ));
+    }
+
     public static function tagTooLong(string $tag, int $limit): self
     {
         return new self(sprintf(

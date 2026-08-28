@@ -1150,7 +1150,14 @@ exist yet when the call comes back, so returning it would have to mean two diffe
 - **Leave out `subject()`** and the entry has none. Some facts are not about a record, and giving
   them one would be inventing it.
 - **Leave out `actor()`** and the context engine names whoever is authenticated. Pass one and it
-  wins — including `->actor('system', 'nightly-billing')` for an actor that is not a model.
+  wins — including `->actor('system', 'nightly-billing')` for an actor that is not a model. Naming
+  one also clears the resolved impersonator: whoever the session had standing in was standing in
+  for the actor that was resolved, not for the one you just named. And a `Sentinel::filter()`
+  policy still sees the **resolved** actor, because policies run inside the pipeline and the swap
+  happens after it — filter on the subject or the event, not on a declared actor.
+- **The name is capped at 64 characters**, the width of the column, and refused at the call rather
+  than at the write. The name is inside the hash, so an engine that truncated it instead of raising
+  would leave an entry that can never reproduce its own.
 - **Leave out `severity()`** and it comes from `severity.events` keyed by your event name, falling
   back to `severity.default`.
 - **Labels go to the labels table**, so `whereTag()` still finds them.
