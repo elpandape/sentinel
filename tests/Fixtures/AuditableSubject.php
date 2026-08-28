@@ -78,6 +78,14 @@ final class AuditableSubject extends Model implements Auditable
         return [];
     }
 
+    /**
+     * @return list<string>
+     */
+    public function auditTags(): array
+    {
+        return ['contract'];
+    }
+
     public function auditSnapshotsEnabled(): bool
     {
         return true;

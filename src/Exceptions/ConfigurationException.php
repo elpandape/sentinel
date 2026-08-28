@@ -44,6 +44,15 @@ final class ConfigurationException extends InvalidArgumentException
         ));
     }
 
+    public static function tagTooLong(string $tag, int $limit): self
+    {
+        return new self(sprintf(
+            'Sentinel was given the label [%s], longer than the %d characters the column holds. A label is a whole word or it is not the label that was meant, so it is never truncated.',
+            substr($tag, 0, 80),
+            $limit,
+        ));
+    }
+
     public static function streamEmpty(): self
     {
         return new self('Sentinel resolved an empty stream name; every entry belongs to a named chain.');

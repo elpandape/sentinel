@@ -14,6 +14,7 @@ use ElPandaPe\Sentinel\Pipeline\Stages\FilterUnchanged;
 use ElPandaPe\Sentinel\Pipeline\Stages\MaskSensitiveData;
 use ElPandaPe\Sentinel\Pipeline\Stages\NormalizeData;
 use ElPandaPe\Sentinel\Pipeline\Stages\ResolveContext;
+use ElPandaPe\Sentinel\Pipeline\Stages\ResolveTags;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Contracts\Events\Dispatcher;
@@ -31,6 +32,7 @@ final readonly class Pipeline
     public const array DEFAULT_STAGES = [
         FilterUnchanged::class,
         ResolveContext::class,
+        ResolveTags::class,
         NormalizeData::class,
         MaskSensitiveData::class,
         EncryptSensitiveData::class,

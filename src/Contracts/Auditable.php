@@ -41,6 +41,11 @@ interface Auditable
      */
     public function auditHashed(): array;
 
+    /**
+     * @return list<string>
+     */
+    public function auditTags(): array;
+
     public function auditSnapshotsEnabled(): bool;
 
     public function auditSeverity(): ?Severity;

@@ -52,5 +52,7 @@ final class AuditData
         public ?int $affected_rows = null,
         public ?string $source_audit_id = null,
         public ?string $capture_id = null,
+        /** @var list<string> */
+        public array $tags = [],
     ) {}
 }

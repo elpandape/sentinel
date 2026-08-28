@@ -86,6 +86,14 @@ trait Auditable
         return $this->auditFields('auditHash');
     }
 
+    /**
+     * @return list<string>
+     */
+    public function auditTags(): array
+    {
+        return $this->auditFields('auditTags');
+    }
+
     public function auditSnapshotsEnabled(): bool
     {
         $value = $this->auditProperty('auditSnapshots');

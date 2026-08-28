@@ -49,7 +49,8 @@ it('mirrors the capture time columns and leaves the ledger its own', function ()
         new ReflectionClass(AuditData::class)->getProperties(),
     );
 
-    expect($properties)->toHaveCount(27)
+    expect($properties)->toHaveCount(28)
+        ->and($properties)->toContain('tags')
         ->and($properties)->not->toContain('id', 'sequence', 'version', 'hash', 'previous_hash')
         ->and($properties)->not->toContain('payload_version', 'algorithm', 'signature', 'created_at')
         ->and($properties)->not->toContain('redacted_at', 'redaction_reason', 'redacted_hash');

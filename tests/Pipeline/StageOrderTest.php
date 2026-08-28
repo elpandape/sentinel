@@ -9,6 +9,7 @@ use ElPandaPe\Sentinel\Pipeline\Stages\FilterUnchanged;
 use ElPandaPe\Sentinel\Pipeline\Stages\MaskSensitiveData;
 use ElPandaPe\Sentinel\Pipeline\Stages\NormalizeData;
 use ElPandaPe\Sentinel\Pipeline\Stages\ResolveContext;
+use ElPandaPe\Sentinel\Pipeline\Stages\ResolveTags;
 
 use function ElPandaPe\Sentinel\Tests\auditData;
 use function ElPandaPe\Sentinel\Tests\encryptedEntry;
@@ -19,6 +20,7 @@ it('ships the order the architecture declares', function (): void {
     expect(Pipeline::DEFAULT_STAGES)->toBe([
         FilterUnchanged::class,
         ResolveContext::class,
+        ResolveTags::class,
         NormalizeData::class,
         MaskSensitiveData::class,
         EncryptSensitiveData::class,

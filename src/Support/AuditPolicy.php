@@ -22,6 +22,7 @@ final readonly class AuditPolicy
      * @param  list<string>  $redacted
      * @param  list<string>  $encrypted
      * @param  list<string>  $hashed
+     * @param  list<string>  $tags
      */
     private function __construct(
         public array $included,
@@ -29,13 +30,14 @@ final readonly class AuditPolicy
         public array $redacted,
         public array $encrypted,
         public array $hashed,
+        public array $tags,
         public bool $snapshots,
         public ?Severity $severity,
     ) {}
 
     public static function none(): self
     {
-        return new self([], [], [], [], [], true, null);
+        return new self([], [], [], [], [], [], true, null);
     }
 
     public static function of(Model $model): self
@@ -51,6 +53,7 @@ final readonly class AuditPolicy
             $model->auditRedacted(),
             $model->auditEncrypted(),
             $model->auditHashed(),
+            $model->auditTags(),
             $model->auditSnapshotsEnabled(),
             $model->auditSeverity(),
         );

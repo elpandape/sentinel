@@ -24,6 +24,7 @@ it('answers with no field policy when the model declares none', function (): voi
         ->and($subject->auditRedacted())->toBeEmpty()
         ->and($subject->auditEncrypted())->toBeEmpty()
         ->and($subject->auditHashed())->toBeEmpty()
+        ->and($subject->auditTags())->toBeEmpty()
         ->and($subject->auditSnapshotsEnabled())->toBeTrue()
         ->and($subject->auditSeverity())->toBeNull();
 });
@@ -35,6 +36,7 @@ it('reads every field policy the model declares', function (): void {
     $subject->auditRedact = ['email'];
     $subject->auditEncrypt = ['price'];
     $subject->auditHash = ['status'];
+    $subject->auditTags = ['billing'];
     $subject->auditSnapshots = false;
 
     expect($subject->auditIncluded())->toBe(['name'])
@@ -42,6 +44,7 @@ it('reads every field policy the model declares', function (): void {
         ->and($subject->auditRedacted())->toBe(['email'])
         ->and($subject->auditEncrypted())->toBe(['price'])
         ->and($subject->auditHashed())->toBe(['status'])
+        ->and($subject->auditTags())->toBe(['billing'])
         ->and($subject->auditSnapshotsEnabled())->toBeFalse();
 });
 

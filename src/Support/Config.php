@@ -140,6 +140,20 @@ final readonly class Config
             ?? throw ConfigurationException::unknown("severity.events.{$name}", $value, $this->accepted(Severity::class));
     }
 
+    public function tagsEnabled(): bool
+    {
+        return $this->boolean('tags.enabled');
+    }
+
+    /**
+     * @param  list<string>  $declared
+     * @return list<string>
+     */
+    public function tags(array $declared): array
+    {
+        return $this->union($declared, 'tags.default', 'labels');
+    }
+
     public function snapshotsEnabled(): bool
     {
         return $this->boolean('snapshots.enabled');
@@ -227,9 +241,14 @@ final readonly class Config
     }
 
     /**
-     * An empty list falls back to the package order rather than to no pipeline at all: the
-     * config published in v0.1.0 ships `pipeline => []`, and a shallow merge would leave those
-     * installations transforming nothing. Dropping a stage means declaring the list without it.
+     * An empty list falls back to the package order rather than to no pipeline at all, so a
+     * shallow merge over an empty declaration cannot leave an installation transforming nothing.
+     * A non-empty list is taken verbatim: dropping a stage means declaring the list without it.
+     *
+     * The consequence runs the other way too, and it is the one that bites. The published config
+     * names every stage, so an installation that published it is pinned to the list it published:
+     * a stage this package adds later will not run there until the list names it. Any version that
+     * adds one says so in UPGRADE.md.
      *
      * @param  list<class-string<Transformer>>  $default
      * @return list<class-string<Transformer>>
@@ -495,7 +514,7 @@ final readonly class Config
      * @param  list<string>  $declared
      * @return list<string>
      */
-    private function union(array $declared, string $key): array
+    private function union(array $declared, string $key, string $of = 'field names'): array
     {
         $value = $this->repository->get("sentinel.{$key}");
 
@@ -504,7 +523,7 @@ final readonly class Config
         }
 
         if (! is_array($value)) {
-            throw ConfigurationException::expected($key, 'a list of field names', get_debug_type($value));
+            throw ConfigurationException::expected($key, "a list of {$of}", get_debug_type($value));
         }
 
         $fields = $declared;
@@ -512,7 +531,7 @@ final readonly class Config
         foreach ($value as $field) {
             $fields[] = is_string($field)
                 ? $field
-                : throw ConfigurationException::expected($key, 'a list of field names', get_debug_type($field));
+                : throw ConfigurationException::expected($key, "a list of {$of}", get_debug_type($field));
         }
 
         return array_values(array_unique($fields));

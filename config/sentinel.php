@@ -100,6 +100,7 @@ return [
     'pipeline' => [
         ElPandaPe\Sentinel\Pipeline\Stages\FilterUnchanged::class,
         ElPandaPe\Sentinel\Pipeline\Stages\ResolveContext::class,
+        ElPandaPe\Sentinel\Pipeline\Stages\ResolveTags::class,
         ElPandaPe\Sentinel\Pipeline\Stages\NormalizeData::class,
         ElPandaPe\Sentinel\Pipeline\Stages\MaskSensitiveData::class,
         ElPandaPe\Sentinel\Pipeline\Stages\EncryptSensitiveData::class,
@@ -177,6 +178,9 @@ return [
 
     'tags' => [
         'enabled' => true,
+
+        // Labels every entry is born with, on top of whatever the model declares.
+        'default' => [],
     ],
 
     'transactions' => [
