@@ -82,6 +82,8 @@ class Audit extends Model
 
     public const UPDATED_AT = null;
 
+    private const string SERIALIZED_AT = 'Y-m-d\\TH:i:s.uP';
+
     /**
      * @return HasMany<AuditTag, $this>
      */
@@ -138,6 +140,54 @@ class Audit extends Model
         $after = $this->getAttribute('after');
 
         return Diff::between($before ?? [], $after ?? []);
+    }
+
+    /**
+     * The entry as data. Not a frozen contract yet: keys can move in any minor until the version
+     * that declares it stable and pins it with a snapshot. What is tested here is the behaviour,
+     * not the shape.
+     *
+     * changes keeps the pointer list the column already holds rather than a map keyed by field,
+     * because a map cannot represent /profile/address/city without flattening it, and flattening
+     * collides with an attribute literally named that.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'audit_type' => $this->audit_type,
+            'event' => $this->event,
+            'severity' => $this->severity->value,
+            'source' => $this->source->value,
+            'subject' => $this->reference($this->subject_type, $this->subject_id),
+            'actor' => $this->reference($this->actor_type, $this->actor_id),
+            'impersonator' => $this->reference($this->impersonator_type, $this->impersonator_id),
+            'tenant_id' => $this->tenant_id,
+            'version' => $this->version,
+            'changes' => $this->getAttribute('changes') === null ? null : $this->diff()->toArray(),
+            'before' => $this->before,
+            'after' => $this->after,
+            'metadata' => $this->metadata,
+            'tags' => $this->tags->map(static fn (AuditTag $tag): string => $tag->tag)->values()->all(),
+            'context' => $this->context,
+            'transaction_id' => $this->transaction_id,
+            'request_id' => $this->request_id,
+            'trace_id' => $this->trace_id,
+            'span_id' => $this->span_id,
+            'integrity' => [
+                'stream' => $this->stream,
+                'sequence' => $this->sequence,
+                'algorithm' => $this->algorithm,
+                'payload_version' => $this->payload_version,
+                'previous_hash' => $this->previous_hash,
+                'hash' => $this->hash,
+                'signature_key_id' => $this->signature_key_id,
+            ],
+            'occurred_at' => $this->occurred_at->format(self::SERIALIZED_AT),
+            'created_at' => $this->created_at->format(self::SERIALIZED_AT),
+        ];
     }
 
     /**
@@ -249,6 +299,14 @@ class Audit extends Model
     protected static function newFactory(): AuditFactory
     {
         return AuditFactory::new();
+    }
+
+    /**
+     * @return array{type: string, id: string}|null
+     */
+    private function reference(?string $type, ?string $id): ?array
+    {
+        return $type === null || $id === null ? null : ['type' => $type, 'id' => $id];
     }
 
     private function config(): Config
