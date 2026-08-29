@@ -255,19 +255,17 @@ final readonly class Restorer
     /**
      * What the restoration decided, inside the payload the chain seals. An entry that said only
      * what it applied would leave the reader unable to tell a field that was never asked for from
-     * one that a lost key refused.
+     * one that a lost key refused. The plan hands both back in a fixed order, which is what keeps
+     * the same restoration producing the same bytes on every engine.
      *
      * @return array{applied: list<string>, skipped: array<string, string>}
      */
     private function summary(Plan $plan): array
     {
-        $applied = $plan->keys();
-        $skipped = array_map(static fn (Omission $reason): string => $reason->value, $plan->skipped);
-
-        sort($applied);
-        ksort($skipped);
-
-        return ['applied' => $applied, 'skipped' => $skipped];
+        return [
+            'applied' => $plan->keys(),
+            'skipped' => array_map(static fn (Omission $reason): string => $reason->value, $plan->skipped),
+        ];
     }
 
     private function severity(Model $subject): Severity
