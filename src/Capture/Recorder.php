@@ -12,6 +12,7 @@ use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Support\Reference;
 use ElPandaPe\Sentinel\Transactions\TransactionScope;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 
 /**
  * The one door from a capture to the ledger. Capture decides what happened; this decides what
@@ -47,6 +48,8 @@ final readonly class Recorder
      */
     public function record(AuditData $audit, ?Model $subject = null, ?Reference $actor = null, ?Closure $settled = null): ?Audit
     {
+        $this->identify($audit);
+
         $this->transactions->stamp($audit);
 
         $transformed = $this->pipeline->process($audit);
@@ -58,6 +61,23 @@ final readonly class Recorder
         $this->attribute($transformed, $actor);
 
         return $this->dispatcher->dispatch($transformed, $subject, $settled);
+    }
+
+    /**
+     * What the capture calls this entry, so the entry it becomes can be recognised as the same one.
+     * Stamped here rather than at each point of capture for the reason the whole class exists: an
+     * identifier that has to be on every entry belongs where every entry goes past.
+     *
+     * It is the correlation and the idempotency key at once. Nothing outside the ledger reads it
+     * yet, and it is deliberately outside the canonical payload — the entry is about what happened,
+     * not about how it travelled — so writing it changes no hash.
+     *
+     * A caller that brought its own keeps it. Retrying a unit of work means retrying it under the
+     * name it already had, and generating a second one here would make the retry a second fact.
+     */
+    private function identify(AuditData $audit): void
+    {
+        $audit->capture_id ??= (string) Str::ulid();
     }
 
     /**
