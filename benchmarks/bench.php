@@ -15,6 +15,7 @@ use ElPandaPe\Sentinel\Benchmarks\BenchProtected;
 use ElPandaPe\Sentinel\Benchmarks\BenchSnapshotless;
 use ElPandaPe\Sentinel\Benchmarks\BenchTeam;
 use ElPandaPe\Sentinel\Benchmarks\BenchTransitioning;
+use ElPandaPe\Sentinel\Buffer\Flusher;
 use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Context\Runtime;
 use ElPandaPe\Sentinel\Data\AuditData;
@@ -29,6 +30,7 @@ use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Sentinel;
 use ElPandaPe\Sentinel\SentinelServiceProvider;
 use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Artisan;
@@ -703,6 +705,35 @@ $app->forgetScopedInstances();
 $settling(WARMUP);
 $workerSettling = $settling(MODE_ITERATIONS);
 
+/*
+ * The buffered mode, against the same Redis the suite covers it with. What the request pays is the
+ * push on its own, with the size threshold set past what the pass writes so nothing flushes in the
+ * middle of the measurement; what the flush pays is the batch, which is the number the other two
+ * modes have no equivalent of — they settle one entry at a time by construction.
+ */
+$app->make('config')->set('database.redis.default.host', getenv('REDIS_HOST') ?: '127.0.0.1');
+$app->make('config')->set('database.redis.default.database', 14);
+$app->make('config')->set('sentinel.mode', 'buffered');
+$app->make('config')->set('sentinel.buffer.key', 'sentinel:bench');
+$app->make('config')->set('sentinel.buffer.size', 1_000_000);
+$app->make('config')->set('sentinel.buffer.flush_interval', 86_400);
+$app->forgetScopedInstances();
+
+$app->make(Redis::class)->connection()->command('del', ['sentinel:bench']);
+
+$run(BenchAudited::class, WARMUP, $offset);
+$offset += WARMUP;
+$bufferedRequest = $run(BenchAudited::class, MODE_ITERATIONS, $offset);
+$offset += MODE_ITERATIONS;
+
+$app->make('config')->set('sentinel.buffer.size', 500);
+
+$start = hrtime(true);
+$flushed = $app->make(Flusher::class)->flush();
+$bufferedFlush = (hrtime(true) - $start) / 1_000_000;
+
+$app->make(Redis::class)->connection()->command('del', ['sentinel:bench']);
+
 $baseline = $results['plain (not audited)'];
 
 echo '| Variant | Writes | Total (ms) | Per write (µs) | Δ vs plain |', PHP_EOL;
@@ -851,6 +882,8 @@ foreach ([
     'queue, what the request pays, snapshots on' => $queuedRequest,
     'queue, what the request pays, snapshots off' => $queuedRequestBare,
     'queue, what the worker pays to settle one' => $workerSettling,
+    'buffered, what the request pays' => $bufferedRequest,
+    'buffered, what the flush pays per entry' => $bufferedFlush * MODE_ITERATIONS / max(1, $flushed),
 ] as $label => $total) {
     printf(
         '| %s | %d | %.1f | %.1f | %s |%s',

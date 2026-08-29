@@ -2,115 +2,86 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
-## v0.16.0 — Performance modes: the dispatcher, sync and queue - 2026-08-29
+## v0.16.1 — Buffer and flush (2026-08-29)
 
-Where an entry settles becomes a setting. The layer the architecture always drew between the
-pipeline and the ledger exists now, `queue` is a mode you turn on rather than a thing you build, and
-a fact captured in one process and settled in another is still settled exactly once.
+The third mode. `v0.16.0` left the dispatcher with a strategy per mode and `writeMany()` ready
+without a consumer; this adds `buffered` without touching the first and gives the second the
+consumer it was missing.
 
-The `buffered` mode, the Redis buffer and `sentinel:flush` are `v0.16.1`, which is the other half of
-this milestone.
+With it comes what it drags in: a buffer with a contract of its own and two implementations, a flush
+on two thresholds, one at the end of the request and one at worker shutdown, and the first artisan
+command the package has ever shipped. And the trade this mode is defined by, written down rather
+than implied — what a lost buffer costs, and why the chain cannot tell you about it.
 
 ### Added
 
-- **`Dispatch\Dispatcher`, with one strategy per mode.** It is the only place that decides how an
-  entry the pipeline approved reaches the ledger, so turning a mode on is configuration and not a
-  change to any code that captures. It never assigns a sequence and never computes a hash: those
-  stay in the ledger, inside the same operation as the write, in every mode. That is the rule that
-  makes a tamper-evident chain and an asynchronous write compatible at all.
-- **The `queue` mode.** `mode = queue` moves the write off the request into a job of its own, with
-  `sentinel.queue.connection` and `sentinel.queue.queue` deciding where it waits. The pipeline still
-  runs in the request — filters, redaction, hashing, encryption and your own policies — so nothing
-  sensitive ever waits untransformed, and what travels is the finished entry rather than a model the
-  worker would have to re-read.
-- **`capture_id` on every captured entry.** The column has had a unique index since the schema was
-  written and nothing filled it. It is stamped at the one door every capture goes through, and it is
-  what makes a retry recognisable as the same unit of work rather than a second fact.
-- **Settlement is idempotent.** A job the queue hands back settles the same capture once. The
-  database enforces it; `Contracts\Deduplicates` is an opt-in capability that lets a driver be asked
-  first, so a retry of something that already landed costs a query instead of a sealed chain the
-  database throws away.
-- **`Events\Audited`**, the tenth class of the cycle. It says the process that captured is done with
-  the entry, and carries the entry only where capture and settlement are the same place. A `null`
-  there means "settled elsewhere", never "not settled".
-- **`AuditData::toPayload()` and `::fromPayload()`.** The entry as something that can cross a process
-  boundary: unknown keys are dropped and missing ones take their defaults, so a worker on the
-  previous release can read a payload the current one wrote. A payload naming its own `sequence`,
-  `hash` or `previous_hash` is refused.
-- README: *Performance modes*, with the trade-off table, the measured cost of each mode and what
-  changes about the two clocks.
+- **The `buffered` mode.** Entries wait in Redis and settle in batches. The pipeline still runs in
+  the request, exactly as in the other two, so nothing sensitive ever waits untransformed and the
+  entry carries the context of the request that captured it rather than of whatever process vacates
+  it. It is a strategy of the dispatcher `v0.16.0` built: nothing about the other two modes changed.
+- **`Contracts\Buffer`**, with `Buffer\RedisBuffer` and `Buffer\MemoryBuffer`. Taking is
+  destructive and atomic, because two flushes at once is the normal case rather than the edge one —
+  a request terminating while the scheduled command runs.
+- **A batch that could not settle goes back**, at the head, in order. A ledger briefly unreachable
+  costs a retry on the next trigger and nothing else: what is lost is what a process dies holding,
+  never what a write handed back.
+- **`Dispatch\Settlement::settleBatch()`**, the consumer `writeMany()` was left without. Reading the
+  tail of a stream is the part two writes cannot share, so doing it once for five hundred entries is
+  the difference between a mode that scales and one that only defers. The cycle is still announced
+  once per entry.
+- **Four flush triggers**, and only two are thresholds: `buffer.size` and `buffer.flush_interval`
+  when an entry arrives, `terminating` at the end of the request, and `WorkerStopping` — a worker
+  never passes through `terminating` between jobs.
+- **`php artisan sentinel:flush`**, the fifth, on demand. It is the first command the package ships,
+  so it brings the console registration nothing needed until now. It reports how many entries
+  settled, exits non-zero on a failure with the reason, and two of them running at once settle the
+  same buffer exactly once. Its strings, including its own description, go through `en` and `es`.
+- **`sentinel.buffer.connection`**, naming the Redis connection, with its default in code. `store`
+  names the driver the way `ledger.default` does, and a store this release does not know is refused
+  rather than served by the one that keeps everything on the instance.
+- README: *The buffered mode, and what it can lose*, with the four triggers and the reason
+  `verifyIntegrity()` cannot report a loss.
+- Redis in the dev image, in compose, and in every CI job that runs tests — including the one that
+  holds the coverage gate, which had no services at all.
 
 ### Changed
 
-- **`writeMany()` has a consumer.** A batch takes one sequence assignment and one tail read instead
-  of one per entry, and produces the same chain as the same entries written one at a time.
-- **`Context\Runtime` suspends and restores instead of assigning.** Artisan announces a command run
-  from inside another exactly as it announces the outer one, so clearing on the way out told the
-  outer command it had ended — after which every entry named no command and resolved the wrong
-  source. `writingAuditEntry()` becomes the scope `whileWritingAudit()`, because it had no way back
-  at all and is the first branch the source resolver takes.
-- **An operation counts what it handed over** when the entry settles elsewhere.
-  `sentinel_transactions.audits_count` would otherwise read zero for every operation under an
-  asynchronous mode, since the header closes before the worker runs.
-- **A mode this release has no strategy for is refused by name** rather than quietly served by the
-  synchronous one. `mode = buffered` names `v0.16.1`.
-- The retry that exists for the chain's unique index no longer replays a whole batch over a capture
-  identifier. Each attempt drops what settled since the last one, and a batch with nothing left is
-  handed back its own violation rather than a silence that reads as success.
-
-### Fixed
-
-- **A restoration asked the schema for its column list on every call.** It is the part of the restore
-  cost that does not depend on how many fields are being put back, and on two of the three engines it
-  is a round trip to `information_schema`. The answer is now held for the scope. Measured against the
-  audited update it replaces: a whole-state restore goes from **+47.3 %** to **+38.2 %**, and one
-  named field from **+46.3 %** to **+32.1 %** — the fewer the fields, the larger the share of the
-  cost that was fixed overhead.
+- Every mode now has a strategy, so the exception for one that had none is gone with the branch that
+  raised it.
+- Mutation testing covers the paths `v0.16.0` and this version added. They were writing the whole
+  audit path and none of it was being mutated.
 
 ### Performance
 
-Median of three passes, on the same machine and in the same run, SQLite with `synchronous` and the
-journal off:
+Median of three passes, on the same machine and in the same run:
 
 | | Per write (µs) | vs. `sync` |
 |---|---|---|
-| Not audited | 160 | — |
-| `sync`, in the request | 1991 | — |
-| `queue`, what the request pays | 1041 | **−48 %** |
-| `queue`, what the worker pays to settle one | 1071 | — |
+| Not audited | 179 | — |
+| `sync`, in the request | 2068 | — |
+| `queue`, what the request pays | 1077 | −48 % |
+| `queue`, what the worker pays to settle one | 1161 | — |
+| `buffered`, what the request pays | 1194 | −42 % |
+| `buffered`, what the flush pays per entry | 655 | — |
 
-`queue` halves what the request pays and adds about six per cent to the total. Deferring moves work;
-it does not remove it.
-
-**`sync` is unchanged.** Three passes per side with `src/` swapped in the same session put it at
-+1.2 %, with the ranges overlapping entirely — the dispatcher is a container resolution and one more
-call per write, and what the recorder used to do another class does now.
+**`buffered` is the only mode that costs less end to end than `sync`** — about eleven per cent less,
+against `queue`'s eight per cent more. The batch amortises what a single write cannot share: one
+tail read, one transaction, one sequence assignment for five hundred entries. `queue` moves work off
+the request and adds a little; `buffered` moves it and removes some. What it asks for in exchange is
+the only thing it can lose.
 
 ### Upgrade notes
 
 Nothing to migrate: no new columns, no new tables, and `payload_version` stays at `1`. The default
-mode is `sync`, which is what the package already did, so an installation that changes nothing
-behaves exactly as it did.
+mode is still `sync`.
 
-`capture_id` starts being written on new entries. It is outside the canonical payload, so no hash
-changes and entries written before this tag keep verifying with the column empty.
+`sentinel.buffer.connection` is new. If you published `config/sentinel.php` before this tag you do
+not have that key, which is fine — it defaults in code to your application's default Redis
+connection. Add it if you want audits on a Redis of their own.
 
-Before turning `mode` to `queue`, three things are worth checking:
-
-- **Anything ordering by `created_at` to rebuild a lifeline.** Under `queue` that column is the order
-  entries settled, not the order things happened. `Sentinel::timeline()` and
-  `Sentinel::audits()->byOccurrence()` read the clock of the fact and are unaffected.
-- **Listeners on `AuditCreated`.** It is announced where the ledger assigns identity, which is now
-  the worker. `Events\Audited` is the one that fires in the process that captured.
-- **Code reading `RestoreResult::$entry`.** It is `null` under an asynchronous mode, the way it
-  already was inside a transaction of your own.
-
-**Drain the queue before deploying a change to what an entry means.** The job payload tolerates keys
-it does not know and fills in ones it is missing, so a rolling deploy with both releases running is
-safe for anything additive; it cannot rescue a payload whose fields have been reinterpreted.
-
-`Context\Runtime::writingAuditEntry()` is gone, replaced by `whileWritingAudit()`. It is internal
-plumbing for the source resolver and is not part of any documented surface.
+Before turning `mode` to `buffered`, read the section the README added: this mode can lose entries,
+the two thresholds are what bounds that, and the chain will not tell you when it happens. Schedule
+`sentinel:flush` if you need a ceiling on how long anything waits.
 
 ## v0.16.0 — Performance modes: the dispatcher, `sync` and `queue` (2026-08-29)
 
@@ -559,8 +530,8 @@ One new migration, `sentinel_transactions`. It is additive and reversible and do
 ```bash
 php artisan vendor:publish --tag=sentinel-migrations   # only if you publish them
 php artisan migrate
-
 ```
+
 Existing entries keep `transaction_id = null` and the new table starts empty. There is no backfill
 and there will not be one: inferring operations over history already settled would be inventing
 facts.
@@ -1199,8 +1170,8 @@ This version introduces the first migration of the package.
 ```bash
 composer update elpandape/sentinel
 php artisan migrate
-
 ```
+
 Publishing the migration is optional. If you publish it
 (`php artisan vendor:publish --tag=sentinel-migrations`), the package stops loading its own copy, so
 the migration never runs twice. Nothing writes to the table yet: entries start being written in

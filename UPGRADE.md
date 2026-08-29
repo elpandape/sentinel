@@ -9,6 +9,58 @@ before `1.0.0`.
 
 ---
 
+## v0.16.0 → v0.16.1
+
+Nothing to migrate: no new columns, no new tables, and `payload_version` stays at `1`. The default
+mode is still `sync`, so an installation that changes nothing behaves exactly as it did.
+
+### `sentinel.buffer.connection` is new
+
+If you published `config/sentinel.php` before this tag, your `buffer` section does not have that key.
+That is fine — every key in it defaults in code, and `connection` defaults to your application's
+default Redis connection. Add it only if audits should wait on a Redis of their own:
+
+    'buffer' => [
+        'store' => env('SENTINEL_BUFFER_STORE', 'redis'),
+        'connection' => env('SENTINEL_BUFFER_CONNECTION'),
+        'key' => 'sentinel:buffer',
+        'size' => 500,
+        'flush_interval' => 60,
+    ],
+
+`store` names the driver, the way `ledger.default` does: `redis` or `memory`. Anything else is
+refused at the point of use rather than served by the one that keeps everything on the instance.
+
+### Before turning `mode` to `buffered`
+
+Everything the `queue` section of the previous entry says still applies — `created_at` becomes the
+order entries settled, `AuditCreated` fires where the flush runs, `RestoreResult::$entry` is `null`,
+and an operation counts what it handed over. On top of that, one thing is true of this mode and of
+no other:
+
+**Entries a process dies holding are lost.** They never reached the ledger: no sequence, no hash, no
+place in any chain. `buffer.size` and `buffer.flush_interval` are what bounds that window, and they
+are evaluated when an entry arrives — nothing in PHP watches a clock between requests. A buffer that
+stops receiving entries stops being evaluated, so schedule the command if you need a ceiling:
+
+    Schedule::command('sentinel:flush')->everyMinute();
+
+**The chain will not tell you when it happens.** An entry that never reached the ledger consumed no
+sequence, so it leaves no gap and `verifyIntegrity()` reports a shorter chain as intact — correctly.
+Detect loss by counting what you handed over against what landed; the count and the exit code of
+`sentinel:flush` are there for that. If you cannot accept that, this is not your mode.
+
+Nothing else is a loss. A batch the ledger refused goes back into the buffer at the head, in order,
+and a flush that runs twice settles once.
+
+### Redis is now a test dependency of this package
+
+Only if you run Sentinel's own suite. `make test` brings the service up for you; a CI job that runs
+the suite needs a Redis service and the `redis` extension. Nothing changes for an application that
+depends on the package: Redis is required only by the mode that uses it.
+
+---
+
 ## v0.15.0 → v0.16.0
 
 Nothing to migrate: no new columns, no new tables, and `payload_version` stays at `1`. The default

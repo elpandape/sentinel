@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.16.0-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.16.1-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -49,9 +49,10 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.14.0` | The Restore Engine: `$audit->restore()`, granular and relation restores, `RestoreResult`, and two cancellable lifecycle events |
 | `v0.15.0` | The lifecycle events, a write-failure policy, and `toArray()` frozen as a public contract |
 | `v0.16.0` | Performance modes: the dispatcher, the `queue` mode with a job of its own, `capture_id` and idempotent settlement, and `Audited` |
+| `v0.16.1` | The `buffered` mode: a Redis buffer with its own contract, batched settlement, four flush triggers and `sentinel:flush` |
 
 Everything else is on the roadmap: advanced verification (checkpoints and signatures), retention and
-compliance, the buffered mode and distributed tracing.
+compliance, mass operations and distributed tracing.
 
 `v0.4.0` is the version that starts auditing: a model with the trait writes its own chained entries.
 `v0.5.0` is the one that answers what changed, instead of leaving you two states to compare.
@@ -74,7 +75,8 @@ row of it puts the record back the way it found it, and says what it could not. 
 that lets something else react to all of it without reaching inside, and that stops the serialised
 entry from being a shape that can move under you. `v0.16.0` is the one that stops the trail from
 costing the request the whole write: where an entry settles becomes a setting, and a fact captured
-here and settled somewhere else is still settled exactly once.
+here and settled somewhere else is still settled exactly once. `v0.16.1` finishes that thought with
+the mode that batches, and writes down exactly what it can lose and what it cannot.
 
 ## Quick start
 
@@ -471,10 +473,7 @@ audited is still a restore.
 |---|---|---|---|---|---|
 | `sync` | capture → pipeline → ledger | The whole write | Maximum: the entry exists before the call returns | Nothing the database kept | The order things happened |
 | `queue` | capture → pipeline → job → ledger | The pipeline and one enqueue | The queue's: a job that fails is retried, and what never lands is in `failed_jobs` | Nothing the queue kept | The order entries **settled** |
-| `buffered` | capture → pipeline → buffer → flush | The pipeline and one buffer write | Least: the buffer is not a durable store | Everything not yet flushed | The order entries settled |
-
-`buffered` arrives in `v0.16.1`. Until then, setting it is refused at the point of use rather than
-served by `sync`: a mode nobody chose is a durability guarantee nobody made.
+| `buffered` | capture → pipeline → buffer → flush | The pipeline and one buffer write | Least: the buffer is not a durable store | Everything a process dies holding | The order entries settled |
 
 **The pipeline always runs in the request.** Filters, redaction, hashing, encryption and your own
 policies happen where the capture happened, in every mode. Nothing sensitive ever waits
@@ -488,20 +487,75 @@ passes, SQLite on the same machine and in the same run:
 
 | | Per write (µs) | vs. `sync` |
 |---|---|---|
-| Not audited | 160 | — |
-| `sync`, in the request | 1991 | — |
-| `queue`, what the request pays | 1041 | **−48 %** |
-| `queue`, what the worker pays to settle one | 1071 | — |
+| Not audited | 179 | — |
+| `sync`, in the request | 2068 | — |
+| `queue`, what the request pays | 1077 | **−48 %** |
+| `queue`, what the worker pays to settle one | 1161 | — |
+| `buffered`, what the request pays | 1194 | **−42 %** |
+| `buffered`, what the flush pays per entry | 655 | — |
 
-**`queue` halves what the request pays and adds about six per cent to the total.** Deferring moves
-work; it does not remove it. Choose it when the latency of the request is what you are protecting,
-not when you want the audit to be cheaper overall.
+**Both asynchronous modes roughly halve what the request pays**, and they differ in what happens
+after. `queue` settles one entry per job, so the total comes to about eight per cent more than
+`sync` — deferring moves work, it does not remove it. `buffered` settles in batches, and the batch
+amortises what a single write cannot share: one tail read, one transaction and one sequence
+assignment for five hundred entries. At about eleven per cent less than `sync` in total, it is the
+only mode that is cheaper end to end — and the only one that can lose an entry.
 
-Turning snapshots off changes little either way — `sync` 1919, `queue` 1008. The snapshot was never
-the dominant cost.
+Turning snapshots off changes little either way. The snapshot was never the dominant cost.
 
 Run `make bench` to reproduce it against your own schema. The numbers above put `sync` first in the
 pass, so the queued figure is measured against a larger table than the one it is compared with.
+
+### The buffered mode, and what it can lose
+
+```php
+'mode' => env('SENTINEL_MODE', 'buffered'),
+
+'buffer' => [
+    'store' => 'redis',        // or memory — a reference implementation, never a store
+    'connection' => null,      // null uses the application's default Redis connection
+    'key' => 'sentinel:buffer',
+    'size' => 500,             // flush when this many are waiting
+    'flush_interval' => 60,    // or when the oldest has waited this long, in seconds
+],
+```
+
+**What a process dies holding is gone.** Those entries never reached the ledger: they have no
+sequence, no hash, and no place in any chain. That is the trade, and the two thresholds are what
+bounds it — nothing else about the mode is negotiable.
+
+Everything else is not a loss:
+
+- A batch the ledger refused goes **back into the buffer**, at the head, in order. A database that
+  was briefly unreachable costs you nothing but a retry on the next trigger.
+- A flush that runs twice settles once. Taking from the buffer is atomic and every entry carries a
+  `capture_id` the database will not accept twice, so a scheduled flush racing the one at the end of
+  a request is safe rather than merely unlikely.
+
+**Four things vacate the buffer**, and only the first two are thresholds:
+
+| | When |
+|---|---|
+| `buffer.size` | An entry arrives and that many are waiting |
+| `buffer.flush_interval` | An entry arrives and the oldest has waited longer than that |
+| End of the request | `terminating`, after the response has gone out |
+| Worker shutdown | `WorkerStopping` — a worker never passes through `terminating` between jobs |
+
+```bash
+php artisan sentinel:flush     # and the fifth, on demand
+```
+
+> **The thresholds are read when an entry arrives.** Nothing inside PHP is watching a clock between
+> requests, so a buffer that stops receiving entries stops being evaluated. What bounds a quiet one
+> is the flush at the end of the request, the one at worker shutdown, and the command — schedule it
+> if you need a ceiling on how long anything waits.
+
+**The chain cannot tell you what the buffer lost.** An entry that never reached the ledger consumed
+no sequence, so it leaves no gap: `verifyIntegrity()` walks a shorter chain and reports it intact,
+correctly. The chain proves that what settled was not tampered with, never that everything that
+happened settled. If you need to detect loss, count what you handed over against what landed — the
+exit code and the count from `sentinel:flush` are there for that. If you cannot accept that, use
+`sync` or `queue`.
 
 ### `created_at` stops being the order things happened in
 
@@ -524,7 +578,7 @@ in every mode, and it is what `verifyIntegrity()` walks.
 ### What else changes under an asynchronous mode
 
 - **`Audited` arrives without an entry.** It says the process that captured is done; under `queue`
-  the entry does not exist yet. `AuditCreated` is announced where the ledger assigns identity, which
+  and `buffered` the entry does not exist yet. `AuditCreated` is announced where the ledger assigns identity, which
   is the worker — a listener that needs the settled entry belongs there.
 - **`$audit->restore()` returns a result with no entry.** `RestoreResult::$entry` is `null`, the way
   it already was inside a transaction of your own: the record moved, and the entry recording it has
@@ -1826,7 +1880,7 @@ Five sections are live today beyond the basics: `resolvers` decides who and wher
 from, `pipeline` is the ordered list of stages every entry travels through, `security` holds the
 redaction mask and field lists, the encryption keyring and the hashing salt, `on_write_failure` with
 `log_channel` decides what a write that did not complete does to the request, and `mode` with
-`queue` decides [where an entry settles](#performance-modes).
+`queue` and `buffer` decides [where an entry settles](#performance-modes).
 
 Every one of those keys also has its default **in code**. Laravel merges a published config file one
 level deep, so an installation that published `sentinel.php` before a subtree existed would
