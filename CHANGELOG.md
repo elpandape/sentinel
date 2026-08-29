@@ -2,6 +2,88 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.17.0 — Mass operations (2026-08-29)
+
+The blind spot every auditing package in this ecosystem documents as a limitation. Eloquent fires no
+model event for `Builder::update()`, `Builder::delete()` or `Builder::upsert()`: the rows change and
+nothing announces it. From this version you can close it — per query, by asking.
+
+What does not change is everything else. A query that does not call `auditing()` costs exactly what
+it cost before: no listener, no extra statement, no branch. Intercepting every mass update would
+turn a one-line statement into thousands of inserts nobody asked for, on queries that have nothing
+to do with this package, and there is no flag to turn that on.
+
+### Added
+
+- **`auditing()` on the Eloquent builder**, with `update()`, `delete()` and `upsert()` behind it.
+  A macro rather than a replacement of the builder, because replacing it would put this package on
+  the path of every query an application makes.
+- **Three modes as three strategies.** `summary` writes one entry whatever the size of the set and
+  reads nothing. `individual` reads the rows first and describes each of them, plus the summary over
+  them. `hybrid` does the second while the set fits under `mass_operations.threshold` and the first
+  the moment it does not, deciding by reading one row past the limit rather than by counting.
+- **The criteria, recorded as a structure and never as SQL with its values in it.** Column, operator
+  and the value as a binding. A raw fragment or a subquery records its shape and nothing else,
+  because it can carry literals no declaration of your model reaches — and so can a clause a future
+  framework release invents, which is why the serialiser names what it understands one by one and
+  treats everything else as opaque.
+- **Bindings go through redaction, hashing and encryption**, exactly as the snapshots do. A
+  `where('email', $x)` on a model with `email` in `$auditRedact` records the mask. The criteria is
+  the same territory as `before` and `after`, not an exception to it.
+- **`mass_operations.sample`**, bounding what a long set leaves behind: a `whereIn` over five
+  thousand identifiers records the count and a sample, never the list.
+- **`criteria` and `affected_rows` in `toArray()`**, which the frozen shape named absent "because
+  v0.17.0 produces them and owns their shape". They are `null` on every entry that is not a mass
+  operation.
+- **`upserted`** in the event vocabulary, and a readable line for a mass entry — "Someone changed
+  3500 User records" — since an entry about a set has no subject id to name.
+- **A batch path through the dispatcher**, so entries one operation produced reach the ledger in one
+  assignment of the sequence rather than one per row. Present in all three write modes.
+- README: *Mass operations*, with the three modes, what each costs per row, and the ✅/❌ block on
+  why a query that did not ask records nothing.
+
+### Fixed
+
+- **A batch larger than one statement could hold was lost, quietly.** PostgreSQL and the MySQL
+  prepared protocol both stop at 65,535 placeholders, which an entry of thirty-odd columns reaches
+  at around eighteen hundred rows. The defect is `v0.16.0`'s and was unreachable until now — the
+  only caller batching at all was the flush, bounded by the buffer size — and it failed silently
+  because a deferred write is announced and recorded rather than thrown. The rows are now divided
+  across as many statements as the ceiling requires; the chain is not divided, and the transaction
+  around it is unchanged.
+
+### Performance
+
+Median of five passes over a set of five hundred rows, on the same machine and in the same run:
+
+| Mass variant | Per row (µs) | vs. not audited |
+|---|---|---|
+| not audited | 0.7 | — |
+| `summary`, sync | 4.6 | +579% |
+| `hybrid` over its threshold, sync | 19.6 | +2,791% |
+| `individual`, sync | 889.7 | +131,194% |
+| `individual`, queue — what the request pays | 483.2 | +71,208% |
+| `individual`, buffered — what the request pays | 257.0 | +37,829% |
+| `individual`, buffered — what the flush then pays | 636.3 | +93,795% |
+
+`summary` is 2.3 ms for the whole operation and stays 2.3 ms for a set of any size. `individual` is
+about nine hundred microseconds a row and is never the default. The three write modes move that cost
+rather than remove it: buffered's total across request and flush lands where sync does, because the
+saving `v0.16.1` measured was the batching and a mass operation already arrives batched.
+
+### Upgrade notes
+
+Nothing to migrate. `criteria` and `affected_rows` have been in `sentinel_audits` since `v0.2.0` and
+this is the first version that writes them; `payload_version` stays at 1, since both are already
+inside the canonical payload. `mass_operations.sample` is one additive config key with its default
+in code, so a published config file keeps working untouched.
+
+Two additive changes are worth knowing about before you upgrade. `toArray()` gains `criteria` and
+`affected_rows` — additive, like every change to that shape, but a consumer asserting on an exact
+key list will see them. And `auditing` is now a macro on `Illuminate\Database\Eloquent\Builder`:
+if something else in your application registers that name on the Eloquent builder, one of the two
+wins by boot order.
+
 ## v0.16.1 — Buffer and flush (2026-08-29)
 
 The third mode. `v0.16.0` left the dispatcher with a strategy per mode and `writeMany()` ready

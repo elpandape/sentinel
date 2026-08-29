@@ -9,6 +9,63 @@ before `1.0.0`.
 
 ---
 
+## v0.16.1 → v0.17.0
+
+Nothing to migrate: no new columns, no new tables, and `payload_version` stays at `1`. `criteria`
+and `affected_rows` have been in `sentinel_audits` since `v0.2.0` and are already inside the
+canonical payload — this is simply the first version that writes them.
+
+An installation that changes nothing behaves exactly as it did. Mass operations are opt-in per
+query, so until something calls `auditing()` no statement in your application is audited, read or
+slowed by any of this.
+
+### `toArray()` gains two keys
+
+`criteria` and `affected_rows` join the serialised shape, `null` on every entry that is not a mass
+operation. Keys are only ever added to that shape, so this is the ordinary kind of change — but a
+consumer asserting on an exact key list will see them:
+
+```php
+// Fine, and what the contract is for
+$entry['changes'];
+
+// Will now find two more keys than it did
+expect(array_keys($audit->toArray()))->toBe([...]);
+```
+
+### `auditing` is a global name
+
+It is registered as a macro on `Illuminate\Database\Eloquent\Builder`, which is what lets a query
+opt in without this package sitting on the path of every query you make. A macro has no namespace:
+if something else in your application or another package registers `auditing` on the Eloquent
+builder, one of the two wins by boot order.
+
+Nothing in this ecosystem has claimed the name so far. If yours has, rename it before upgrading.
+
+### `mass_operations.sample` is new
+
+If you published `config/sentinel.php` before this tag, your `mass_operations` section does not have
+that key. That is fine — it defaults in code to `20`, the number of values of a long set the
+criteria keeps. Add it if you want a different one:
+
+```php
+'mass_operations' => [
+    'mode' => 'summary',
+    'threshold' => 100,
+    'sample' => 20,
+],
+```
+
+### Before you turn on `individual`
+
+It writes one entry per row plus the summary over them, at roughly nine hundred microseconds a row.
+Over a set of three thousand five hundred rows that is three thousand five hundred and one entries
+in one operation. That is the mode working as designed, and it is why `summary` is the default and
+why `hybrid` has a threshold. Read *Mass operations* in the README before changing
+`mass_operations.mode` globally.
+
+---
+
 ## v0.16.0 → v0.16.1
 
 Nothing to migrate: no new columns, no new tables, and `payload_version` stays at `1`. The default

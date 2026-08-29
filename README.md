@@ -50,9 +50,10 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.15.0` | The lifecycle events, a write-failure policy, and `toArray()` frozen as a public contract |
 | `v0.16.0` | Performance modes: the dispatcher, the `queue` mode with a job of its own, `capture_id` and idempotent settlement, and `Audited` |
 | `v0.16.1` | The `buffered` mode: a Redis buffer with its own contract, batched settlement, four flush triggers and `sentinel:flush` |
+| `v0.17.0` | Mass operations: `auditing()` on the query builder, three modes, the criteria recorded without its values, and `upserted` |
 
 Everything else is on the roadmap: advanced verification (checkpoints and signatures), retention and
-compliance, mass operations and distributed tracing.
+compliance, partitioning and distributed tracing.
 
 `v0.4.0` is the version that starts auditing: a model with the trait writes its own chained entries.
 `v0.5.0` is the one that answers what changed, instead of leaving you two states to compare.
@@ -76,7 +77,10 @@ that lets something else react to all of it without reaching inside, and that st
 entry from being a shape that can move under you. `v0.16.0` is the one that stops the trail from
 costing the request the whole write: where an entry settles becomes a setting, and a fact captured
 here and settled somewhere else is still settled exactly once. `v0.16.1` finishes that thought with
-the mode that batches, and writes down exactly what it can lose and what it cannot.
+the mode that batches, and writes down exactly what it can lose and what it cannot. `v0.17.0` closes
+the blind spot every auditing package in this ecosystem documents as a limitation: a mass update, a
+mass delete and an upsert can be audited by asking for it on the query, and a query that does not
+ask goes on costing nothing.
 
 ## Quick start
 
@@ -1316,6 +1320,189 @@ the type as well as the key, so it is refused by name rather than half-audited. 
 the hand-over — creating or deleting the child writes no relation entry, because the child's own
 entry already carries the foreign key.
 
+## Mass operations
+
+Eloquent fires no model event for `Builder::update()`, `Builder::delete()` or `Builder::upsert()`.
+The row changes and nothing announces it — the blind spot every auditing package in this ecosystem
+documents as a limitation. From `v0.17.0` you can close it, per query, by asking:
+
+```php
+User::query()->where('active', false)->auditing()->update(['status' => 'archived']);
+```
+
+**Without `auditing()`, nothing happens.** No listener, no extra statement, no branch — a mass
+update in an application that never uses the feature costs exactly what it cost before. That is the
+decision, and it is worth stating plainly rather than defending later:
+
+| | |
+|---|---|
+| ✅ | You ask, on the query that should be audited |
+| ✅ | Every other query in your application is untouched, and pays nothing |
+| ❌ | Sentinel does **not** intercept mass updates globally |
+| ❌ | There is no config flag to turn that on |
+
+Intercepting every mass update would turn a one-line statement into thousands of inserts nobody
+asked for, and would put this package on the path of queries that have nothing to do with it.
+
+The model has to use `Auditable`. Its `$auditExclude`, `$auditRedact`, `$auditEncrypt` and
+`$auditHash` are what govern which columns of the criteria may be written down, so a model that
+declared none is refused outright rather than audited with nothing protecting it.
+
+### The three modes
+
+```php
+User::query()->where(...)->auditing('individual')->update([...]);   // per call
+```
+
+Without an argument it takes `mass_operations.mode` from the config, which ships as `summary`.
+
+| Mode | What it writes | Extra reads | Cost |
+|---|---|---|---|
+| `summary` | One entry: the criteria, the columns written, `affected_rows` | None | Constant |
+| `individual` | The summary **and** one entry per row, each with its real `before` | One: the rows, before the statement |  Linear in rows |
+| `hybrid` | The summary always; the per-row entries while the set fits under `threshold` | One, bounded to `threshold + 1` | Constant above the threshold |
+
+Measured on the write-path benchmark, over a set of five hundred rows on SQLite:
+
+| Mode | Per row | Against the same update unaudited |
+|---|---|---|
+| not audited | 0.7 µs | — |
+| `summary` | 4.6 µs | +579% |
+| `hybrid`, over its threshold | 19.6 µs | +2,791% |
+| `individual` | 889.7 µs | +131,194% |
+
+Read the middle column, not the last one. `summary` is 2.3 ms for the whole operation and stays 2.3
+ms for a set of any size — it reads nothing and writes one entry. `individual` is about nine hundred
+microseconds a **row**, and five hundred rows means five hundred and one entries. It is never the
+default and it never will be: an installation that wants that has asked for it.
+
+`hybrid` over its threshold costs four times `summary` rather than anything like `individual`. The
+difference is the bounded read, and the figure above is its worst case — a threshold one row short
+of the set. At the shipped default of a hundred it reads a hundred and one rows and stops.
+
+`hybrid` decides by reading one row past the threshold instead of counting. A `count(*)` is a second
+statement over the same predicate; this way the price of asking is bounded by the threshold itself,
+and the set is never materialised whole.
+
+### What an entry says
+
+`audit_type` is `mass`. The summary has `subject_type` and **no** `subject_id` — there is no one
+row, there is a set — and it reads as one:
+
+```text
+Someone changed 3500 User records
+```
+
+`changes` holds the columns that were written, with **no old side**: nothing was read, so there is
+no earlier value and none is invented. `Change::oldKnown` is what says so, rather than a `null`
+pretending to be the old value. This is the structural cost of `summary`, and it is exactly why
+`individual` exists.
+
+`criteria` holds the `where` as a structure — column, operator and the value as a binding — and
+never as SQL with its values interpolated back in. `affected_rows` holds what the engine reported.
+
+```json
+{
+  "wheres": [
+    {"type": "basic", "boolean": "and", "column": "active", "operator": "=", "value": false},
+    {"type": "in", "boolean": "and", "column": "id", "count": 5000, "values": [1, 2, 3]}
+  ]
+}
+```
+
+A long set records its size and a sample of it, bounded by `mass_operations.sample`. Five thousand
+identifiers written out in full would make the entry about the list rather than about the operation.
+
+**A raw fragment or a subquery records its shape and nothing else** — `{"type": "raw", "boolean":
+"and"}`. A `whereRaw` can carry literals no declaration of your model reaches, so its body is not
+written down. Same for any clause a future framework release invents: the serialiser names the
+clauses it understands one by one and everything else is opaque, rather than the other way round.
+
+Bindings go through the same redaction, hashing and encryption as the snapshots. A `where('email',
+$x)` on a model with `email` in `$auditRedact` records the mask, not the address — the criteria is
+the same territory as `before` and `after`, not an exception to it.
+
+A value that is not a scalar, a date or an enum is left out: the clause keeps saying which column it
+compared, and says nothing about what it was compared to.
+
+### An entry per row
+
+```php
+User::query()->where('active', false)->auditing('individual')->update(['status' => 'archived']);
+```
+
+The rows are read **before** the statement runs — after an update the earlier state is gone, and
+after a delete the row is — and the read and the statement share one database transaction, because
+between a select and an update a row can arrive that no entry would describe.
+
+Every entry of the operation shares one `transaction_id`, so the summary and its rows read as the
+one thing they were. Inside a [business transaction](#business-transactions) they take that one
+instead of opening another.
+
+A per-row entry carries no `criteria` and no `affected_rows`: it is about a row, and the summary it
+shares a transaction with is about the set. Three thousand copies of one fact is not three thousand
+facts.
+
+The batch reaches the ledger in one assignment of the sequence, so the chain is extended once rather
+than once per row. Under `queue` it is one job per entry; under `buffered` it goes into the buffer
+whole and settles on the next flush.
+
+### `delete()` and `upsert()`
+
+A mass `delete()` under `individual` captures the full `before` of every row, because after the
+statement there is nowhere left to read it from. It costs more than an update and this is where that
+is written down.
+
+An `upsert()` is **always** recorded as a summary, whatever the mode says. It names its own rows, so
+there is no criteria to read them back by, and a composite `uniqueBy` is not a `where`:
+
+```json
+{"columns": ["id", "name"], "unique_by": ["id"], "update": ["name"], "rows": 2}
+```
+
+### `affected_rows` means what your engine says it means
+
+The entry stores what the driver reported, without normalising it. That number is not the same
+question on all three:
+
+| Engine | On `update()` | On `upsert()` |
+|---|---|---|
+| SQLite | Rows matched | Rows inserted or updated |
+| MySQL 9 | Rows **changed** — a row written with the value it already held does not count | Counts **two** for a row that was updated rather than inserted |
+| PostgreSQL 16 | Rows matched | Rows inserted or updated |
+
+Normalising it in silence would mean the entry no longer said what the database said. If you compare
+`affected_rows` across engines, compare it knowing this.
+
+An operation that reported zero writes **no entry at all**. It is discarded in the pipeline, before
+the ledger assigns anything, so it leaves no gap in the chain.
+
+### A column written from an expression
+
+```php
+User::query()->auditing()->update(['score' => DB::raw('score + 1')]);
+```
+
+The formula is the database's to evaluate, so it is not recorded and neither is a value for that
+column. It is named in `criteria.writes` instead — its name, never its body, the same trade a raw
+fragment gets:
+
+```json
+{"wheres": [], "writes": ["score"]}
+```
+
+Under `individual`, an operation like this gives its rows a `before` and **no** `after`. An after
+carrying that column's earlier value would say it did not move, and one side of a comparison is
+better than a mixture of the two that lies.
+
+### The name `auditing` is global
+
+It is a macro on `Illuminate\Database\Eloquent\Builder`, which is what makes it reachable without
+this package sitting on the path of every query you make. A macro has no namespace: a second package
+registering `auditing` on the Eloquent builder would win or lose by boot order. Nothing has claimed
+it in this ecosystem so far, and this line exists so it is a thing you know rather than a thing you
+find out.
+
 ## Business transactions
 
 A payment is not four things that happened to share a request. `Sentinel::transaction()` gives the
@@ -1814,6 +2001,8 @@ freeze English word order into every translation that came after.
 | `before`, `after`, `metadata`, `context` | `object` \| `null` (`context` is never null) |
 | `tags` | `list<string>` |
 | `transaction_id`, `request_id`, `trace_id`, `span_id`, `source_audit_id` | `string` \| `null` |
+| `criteria` | `object` \| `null` — the shape of a mass operation |
+| `affected_rows` | `int` \| `null` |
 | `integrity` | `{stream, sequence, algorithm, payload_version, previous_hash, hash, signature_key_id, verified}` |
 | `occurred_at`, `created_at` | `string`, ISO-8601 with microseconds |
 
@@ -1852,8 +2041,9 @@ ciphertext and its `key_id` stay where they are — and publishing that block wo
 consumer which fields are protected and which key is current. `signature` waits for `v0.18.0`, which
 is what fills it.
 
-`capture_id` is absent because no capture writes one yet; `criteria` and `affected_rows` because
-`v0.17.0` produces them and owns their shape; the redaction block because `v0.19.0` defines it.
+`capture_id` is absent because no capture writes one yet, and the redaction block because `v0.19.0`
+defines it. `criteria` and `affected_rows` arrived in `v0.17.0`, which is the version that produces
+them; they are `null` on every entry that is not a mass operation.
 There is **no top-level `relation` key**: a relation entry's lines live inside `changes`, which is
 what the chain seals. `sentinel_audit_relations` is a queryable projection of exactly those lines —
 an index, not the fact.
@@ -1865,8 +2055,10 @@ writes, it also orders: the diff entries and the relation lines inside `changes`
 inside those lines, and the labels. The same entry serialises identically on SQLite, MySQL and
 PostgreSQL.
 
-Inside `before`, `after`, `context`, `metadata` and the `old`/`new` of a change, the key order is
-your data's and the engine's. That is not part of the contract — the keys are.
+Inside `before`, `after`, `context`, `metadata`, `criteria` and the `old`/`new` of a change, the key
+order is your data's and the engine's — MySQL and PostgreSQL both reorder the keys of a JSON object
+on the way in. That is not part of the contract; the keys are. The hash is unaffected either way:
+canonicalisation sorts before it hashes, so the same entry hashes the same on all three engines.
 
 `RestoreResult` and `Enums\Omission` are frozen under the same only-ever-added rule, and stay
 outside `toArray()`: they answer a call, they are not part of an entry.
