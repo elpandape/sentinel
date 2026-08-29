@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Restore;
 
 use Carbon\CarbonImmutable;
+use Closure;
 use ElPandaPe\Sentinel\Capture\Recorder;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Data\RelationLine;
@@ -80,11 +81,7 @@ final readonly class Restorer
             return RestoreResult::refused(Omission::Cancelled);
         }
 
-        $result = $this->apply($audit, $subject, $plan);
-
-        $this->events->dispatch(new AuditRestored($audit, $subject, $result));
-
-        return $result;
+        return $this->apply($audit, $subject, $plan);
     }
 
     /**
@@ -114,47 +111,25 @@ final readonly class Restorer
             return RestoreResult::refused(Omission::Cancelled);
         }
 
-        $result = $this->reattach($audit, $subject, $plan, $name);
-
-        $this->events->dispatch(new AuditRestored($audit, $subject, $result));
-
-        return $result;
+        return $this->reattach($audit, $subject, $plan, $name);
     }
 
-    /**
-     * The whole restoration is one database transaction: either the applicable set goes back and
-     * the ledger settles the entry, or the record is untouched. The entry is asked for by callback
-     * because the ledger may be waiting for that same commit — with the deferral on, which is the
-     * default, every restoration takes that path, since the transaction opened here is one.
-     */
     private function apply(Audit $audit, Model $subject, Plan $plan): RestoreResult
     {
-        $entry = null;
-
-        $subject->getConnection()->transaction(function () use ($audit, $subject, $plan, &$entry): void {
+        return $this->settle($audit, $subject, $plan, function () use ($audit, $subject, $plan): AuditData {
             $before = $this->snapshots->build($subject, $subject->getAttributes());
 
             $this->sentinel->withoutAuditing(static function () use ($subject, $plan): void {
                 $subject->forceFill($plan->applying)->save();
             });
 
-            $this->recorder->record(
-                $this->entry($audit, $subject, $plan, $before),
-                $subject,
-                settled: static function (Audit $written) use (&$entry): void {
-                    $entry = $written;
-                },
-            );
+            return $this->entry($audit, $subject, $plan, $before);
         });
-
-        return RestoreResult::of($plan->keys(), $plan->skipped, $entry);
     }
 
     private function reattach(Audit $audit, Model $subject, Plan $plan, string $name): RestoreResult
     {
-        $entry = null;
-
-        $subject->getConnection()->transaction(function () use ($audit, $subject, $plan, $name, &$entry): void {
+        return $this->settle($audit, $subject, $plan, function () use ($audit, $subject, $plan, $name): AuditData {
             $lines = [];
 
             $this->sentinel->withoutAuditing(function () use ($subject, $plan, $name, &$lines): void {
@@ -165,16 +140,42 @@ final readonly class Restorer
                 }
             });
 
-            $this->recorder->record(
-                $this->relationEntry($audit, $subject, $plan, $lines),
-                $subject,
-                settled: static function (Audit $written) use (&$entry): void {
-                    $entry = $written;
-                },
-            );
+            return $this->relationEntry($audit, $subject, $plan, $lines);
+        });
+    }
+
+    /**
+     * The whole restoration is one database transaction: either the applicable set goes back and
+     * the ledger settles the entry, or the record is untouched. The entry is asked for by callback
+     * because the ledger may be waiting for that same commit — with the deferral on, which is the
+     * default, every restoration takes that path, since the transaction opened here is one.
+     *
+     * What the call returns is what was true when it returned, which inside a transaction of the
+     * application's own is a result with no entry: the record moved, the entry is still waiting for
+     * a commit that has not happened. The event does not have that problem, because it is announced
+     * from a commit callback registered after the ledger's own — so whichever branch wrote the
+     * entry, it exists by the time a listener is told a restoration did.
+     *
+     * @param  Closure(): AuditData  $entry
+     */
+    private function settle(Audit $audit, Model $subject, Plan $plan, Closure $entry): RestoreResult
+    {
+        $connection = $subject->getConnection();
+        $result = RestoreResult::of($plan->keys(), $plan->skipped);
+
+        $connection->transaction(function () use ($audit, $subject, $plan, $entry, $connection, &$result): void {
+            $data = $entry();
+
+            $this->recorder->record($data, $subject, settled: static function (Audit $written) use ($plan, &$result): void {
+                $result = RestoreResult::of($plan->keys(), $plan->skipped, $written);
+            });
+
+            $connection->afterCommit(function () use ($audit, $subject, &$result): void {
+                $this->events->dispatch(new AuditRestored($audit, $subject, $result));
+            });
         });
 
-        return RestoreResult::of($plan->keys(), $plan->skipped, $entry);
+        return $result;
     }
 
     /**

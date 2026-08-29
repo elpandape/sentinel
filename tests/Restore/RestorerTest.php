@@ -13,6 +13,7 @@ use ElPandaPe\Sentinel\Tests\Fixtures\SoftDeletingSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\TransitioningSubject;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 use function ElPandaPe\Sentinel\Tests\auditsOf;
 use function ElPandaPe\Sentinel\Tests\refuseToSave;
@@ -135,6 +136,52 @@ it('announces the restoration once it is true, with the result closed', function
     expect($announced?->result->applied)->toBe(['name'])
         ->and($announced?->result->entry)->toBeInstanceOf(Audit::class)
         ->and($announced?->entry->id)->toBe($opening->id);
+});
+
+it('waits for the transaction of the application before it announces anything', function (): void {
+    $record = AuditedSubject::query()->create(['name' => 'Ada']);
+    $opening = auditsOf($record)->first();
+    $record->update(['name' => 'Grace']);
+
+    $announced = null;
+    $returned = null;
+
+    app(Dispatcher::class)->listen(AuditRestored::class, static function (AuditRestored $event) use (&$announced): void {
+        $announced = $event;
+    });
+
+    DB::transaction(static function () use ($opening, &$returned, &$announced): void {
+        $returned = $opening->restore();
+
+        expect($announced)->toBeNull();
+    });
+
+    expect($returned?->entry)->toBeNull()
+        ->and($announced?->result->entry)->toBeInstanceOf(Audit::class)
+        ->and($announced?->result->applied)->toBe(['name']);
+});
+
+it('announces nothing at all when the transaction of the application rolls back', function (): void {
+    $record = AuditedSubject::query()->create(['name' => 'Ada']);
+    $opening = auditsOf($record)->first();
+    $record->update(['name' => 'Grace']);
+
+    $announced = null;
+
+    app(Dispatcher::class)->listen(AuditRestored::class, static function (AuditRestored $event) use (&$announced): void {
+        $announced = $event;
+    });
+
+    rescue(static function () use ($opening): void {
+        DB::transaction(static function () use ($opening): void {
+            $opening->restore();
+
+            throw new RuntimeException('undo');
+        });
+    }, report: false);
+
+    expect($announced)->toBeNull()
+        ->and($record->fresh()->name)->toBe('Grace');
 });
 
 it('rolls the whole thing back when applying it fails halfway', function (): void {
