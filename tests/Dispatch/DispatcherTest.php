@@ -26,15 +26,12 @@ it('hands the settled entry to the callback that asked for it', function (): voi
     expect($handed)->toBeString();
 });
 
-it('refuses a mode this release has no strategy for, naming the version it arrives in', function (string $mode, string $version): void {
-    config()->set('sentinel.mode', $mode);
+it('refuses a mode this release has no strategy for, naming the version it arrives in', function (): void {
+    config()->set('sentinel.mode', 'buffered');
 
     expect(fn (): ?Audit => app(Dispatcher::class)->dispatch(auditData()))
-        ->toThrow(ConfigurationException::class, "arrives in {$version}");
-})->with([
-    'queue' => ['queue', 'v0.16.0'],
-    'buffered' => ['buffered', 'v0.16.1'],
-]);
+        ->toThrow(ConfigurationException::class, 'arrives in v0.16.1');
+});
 
 it('leaves the trail empty when it refuses the mode', function (): void {
     config()->set('sentinel.mode', 'buffered');
@@ -47,7 +44,7 @@ it('leaves the trail empty when it refuses the mode', function (): void {
 it('reads the strategy again on every entry, so the mode can change between two of them', function (): void {
     app(Dispatcher::class)->dispatch(auditData());
 
-    config()->set('sentinel.mode', 'queue');
+    config()->set('sentinel.mode', 'buffered');
 
     expect(fn (): ?Audit => app(Dispatcher::class)->dispatch(auditData()))
         ->toThrow(ConfigurationException::class)

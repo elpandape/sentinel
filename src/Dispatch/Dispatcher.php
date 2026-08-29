@@ -83,7 +83,7 @@ final readonly class Dispatcher
     {
         return match ($this->config->mode()) {
             Mode::Sync => $this->container->make(SyncStrategy::class),
-            Mode::Queue => throw ConfigurationException::modeNotYetAvailable('queue', 'v0.16.0'),
+            Mode::Queue => $this->container->make(QueueStrategy::class),
             Mode::Buffered => throw ConfigurationException::modeNotYetAvailable('buffered', 'v0.16.1'),
         };
     }

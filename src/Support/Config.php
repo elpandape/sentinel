@@ -33,6 +33,21 @@ final readonly class Config
         return $this->enum('mode', Mode::class);
     }
 
+    /**
+     * The connection the settling job is dispatched on, and the queue it waits in. Null on either
+     * means the application's own default, which is what an installation that never thought about
+     * it should get — and what an installation that gave audits a queue of their own can name.
+     */
+    public function queueConnection(): ?string
+    {
+        return $this->nullableString('queue.connection');
+    }
+
+    public function queueName(): ?string
+    {
+        return $this->nullableString('queue.queue');
+    }
+
     public function table(string $name): string
     {
         return $this->string('tables.prefix').$this->string("tables.{$name}");
