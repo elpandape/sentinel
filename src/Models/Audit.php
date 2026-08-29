@@ -213,6 +213,7 @@ class Audit extends Model
             'request_id' => $this->request_id,
             'trace_id' => $this->trace_id,
             'span_id' => $this->span_id,
+            'source_audit_id' => $this->source_audit_id,
             'integrity' => [
                 'stream' => $this->stream,
                 'sequence' => $this->sequence,
@@ -221,6 +222,7 @@ class Audit extends Model
                 'previous_hash' => $this->previous_hash,
                 'hash' => $this->hash,
                 'signature_key_id' => $this->signature_key_id,
+                'verified' => null,
             ],
             'occurred_at' => $this->occurred_at->format(self::SERIALIZED_AT),
             'created_at' => $this->created_at->format(self::SERIALIZED_AT),
