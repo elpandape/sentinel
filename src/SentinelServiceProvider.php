@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel;
 
+use ElPandaPe\Sentinel\Buffer\Flusher;
 use ElPandaPe\Sentinel\Buffer\MemoryBuffer;
 use ElPandaPe\Sentinel\Buffer\RedisBuffer;
 use ElPandaPe\Sentinel\Context\ContextEngine;
@@ -12,6 +13,7 @@ use ElPandaPe\Sentinel\Context\Runtime;
 use ElPandaPe\Sentinel\Contracts\Buffer;
 use ElPandaPe\Sentinel\Contracts\Canonicalizer;
 use ElPandaPe\Sentinel\Contracts\Ledger;
+use ElPandaPe\Sentinel\Enums\Mode;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
 use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
 use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
@@ -38,6 +40,7 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Queue\Events\WorkerStopping;
 use Illuminate\Routing\Events\Routing;
 use Illuminate\Support\ServiceProvider;
 
@@ -100,6 +103,8 @@ final class SentinelServiceProvider extends ServiceProvider
 
         $this->latchRuntimeSignals();
 
+        $this->flushWhatIsWaiting();
+
         $this->loadMigrationsFrom($this->migrations()->unpublished());
 
         if ($this->app->runningInConsole()) {
@@ -155,6 +160,36 @@ final class SentinelServiceProvider extends ServiceProvider
         $events->listen(JobProcessed::class, static function () use ($runtime): void {
             $runtime()->leftJob();
         });
+    }
+
+    /**
+     * The two moments a process that has been buffering is about to stop being one. Neither is a
+     * threshold: they are what keeps the last few entries of a quiet request from waiting for a
+     * next one that may never come.
+     *
+     * The request has `terminating`, which runs after the response has gone out. A worker does not
+     * pass through it between jobs — it is one long-lived process — so the shutdown of the worker
+     * is `WorkerStopping`, which both a clean stop and a signal go through; the signal handler
+     * itself only raises a flag.
+     *
+     * Reported rather than thrown. By the time either of these runs there is nobody left to tell,
+     * and a batch that failed is already back in the buffer waiting for the next trigger.
+     */
+    private function flushWhatIsWaiting(): void
+    {
+        $app = $this->app;
+
+        $flush = static function () use ($app): void {
+            if ($app->make(Config::class)->mode() !== Mode::Buffered) {
+                return;
+            }
+
+            rescue(static fn (): int => $app->make(Flusher::class)->flush());
+        };
+
+        $app->terminating($flush);
+
+        $this->app->make(Dispatcher::class)->listen(WorkerStopping::class, $flush);
     }
 
     private function driver(Application $app, string $name, string $key): Ledger
