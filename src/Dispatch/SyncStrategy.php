@@ -7,7 +7,6 @@ namespace ElPandaPe\Sentinel\Dispatch;
 use ElPandaPe\Sentinel\Capture\WriteFailure;
 use ElPandaPe\Sentinel\Contracts\DispatchStrategy;
 use ElPandaPe\Sentinel\Data\AuditData;
-use ElPandaPe\Sentinel\Models\Audit;
 use Throwable;
 
 /**
@@ -26,14 +25,14 @@ final readonly class SyncStrategy implements DispatchStrategy
      * The write that happens in the request, where the configured policy is free to decide: the
      * caller is still on the stack and an exception reaches whoever caused the entry.
      */
-    public function inRequest(AuditData $audit): ?Audit
+    public function inRequest(AuditData $audit): Handover
     {
         try {
-            return $this->settlement->settle($audit);
+            return Handover::settled($this->settlement->settle($audit));
         } catch (Throwable $failure) {
             $this->failures->inRequest($audit, $failure);
 
-            return null;
+            return Handover::refused();
         }
     }
 
@@ -44,14 +43,14 @@ final readonly class SyncStrategy implements DispatchStrategy
      * losing the rest of an operation because the first entry hit a constraint — and would
      * surface out of a DB::transaction() that has already committed.
      */
-    public function afterCommit(AuditData $audit): ?Audit
+    public function afterCommit(AuditData $audit): Handover
     {
         try {
-            return $this->settlement->settle($audit);
+            return Handover::settled($this->settlement->settle($audit));
         } catch (Throwable $failure) {
             $this->failures->afterCommit($audit, $failure);
 
-            return null;
+            return Handover::refused();
         }
     }
 }

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Contracts;
 
 use ElPandaPe\Sentinel\Data\AuditData;
-use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Dispatch\Handover;
 
 /**
  * How an entry the pipeline already approved reaches the ledger. One implementation per mode,
@@ -16,14 +16,10 @@ use ElPandaPe\Sentinel\Models\Audit;
  * the transaction that produced the fact has committed. It is not a flag on one method because
  * the branches are not variations of a policy: a write in the request may refuse the request,
  * and one running from a commit callback may never do so.
- *
- * Null means the entry did not settle here. In a synchronous mode that is a failure that was
- * swallowed; in an asynchronous one it is the normal answer, because the entry settles in a
- * process that is not this one.
  */
 interface DispatchStrategy
 {
-    public function inRequest(AuditData $audit): ?Audit;
+    public function inRequest(AuditData $audit): Handover;
 
-    public function afterCommit(AuditData $audit): ?Audit;
+    public function afterCommit(AuditData $audit): Handover;
 }

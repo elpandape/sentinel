@@ -8,11 +8,13 @@ use Closure;
 use ElPandaPe\Sentinel\Contracts\DispatchStrategy;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Enums\Mode;
+use ElPandaPe\Sentinel\Events\Audited;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Transactions\TransactionScope;
 use Illuminate\Contracts\Container\Container;
+use Illuminate\Contracts\Events\Dispatcher as Events;
 use Illuminate\Database\Connection;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Database\Eloquent\Model;
@@ -34,6 +36,7 @@ final readonly class Dispatcher
         private Config $config,
         private DatabaseManager $database,
         private TransactionScope $transactions,
+        private Events $events,
     ) {}
 
     /**
@@ -59,13 +62,13 @@ final readonly class Dispatcher
         $connection = $this->connection($subject);
 
         if (! $this->config->afterCommit() || $connection->transactionLevel() === 0) {
-            return $this->handed($this->strategy()->inRequest($audit), $settled);
+            return $this->handed($this->strategy()->inRequest($audit), $audit, $settled);
         }
 
         $written = null;
 
         $connection->afterCommit(function () use ($audit, $settled, &$written): void {
-            $written = $this->handed($this->strategy()->afterCommit($audit), $settled);
+            $written = $this->handed($this->strategy()->afterCommit($audit), $audit, $settled);
         });
 
         return $written;
@@ -86,26 +89,32 @@ final readonly class Dispatcher
     }
 
     /**
-     * An operation counts what its entries settled into, not what its captures got as far as. A
-     * capture that the pipeline passed and a rollback then threw away is not something the
+     * An operation counts what its entries got as far as here, and a refused hand-off is not one
+     * of them: a capture the pipeline passed and a rollback then threw away is not something the
      * operation wrote, and a header claiming it would be a header nobody could reconcile against
      * the entries carrying its id.
      *
+     * The journey is announced from here rather than from a strategy, because it is the same fact
+     * in every mode — this process is done with this entry — and an event per strategy would make
+     * three of what is one.
+     *
      * @param  Closure(Audit): void|null  $settled
      */
-    private function handed(?Audit $audit, ?Closure $settled): ?Audit
+    private function handed(Handover $handover, AuditData $audit, ?Closure $settled): ?Audit
     {
-        if (! $audit instanceof Audit) {
+        if (! $handover->accepted) {
             return null;
         }
 
         $this->transactions->settled();
 
-        if ($settled instanceof Closure) {
-            $settled($audit);
+        $this->events->dispatch(new Audited($audit, $handover->entry));
+
+        if ($handover->entry instanceof Audit && $settled instanceof Closure) {
+            $settled($handover->entry);
         }
 
-        return $audit;
+        return $handover->entry;
     }
 
     private function connection(?Model $subject): Connection
