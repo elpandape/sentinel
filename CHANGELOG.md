@@ -62,22 +62,29 @@ this milestone.
 
 - **A restoration asked the schema for its column list on every call.** It is the part of the restore
   cost that does not depend on how many fields are being put back, and on two of the three engines it
-  is a round trip to `information_schema`. The answer is now held for the scope: a whole-state restore
-  went from **+49.6 %** over the audited update it replaces to **+37.5 %**.
+  is a round trip to `information_schema`. The answer is now held for the scope. Measured against the
+  audited update it replaces: a whole-state restore goes from **+47.3 %** to **+38.2 %**, and one
+  named field from **+46.3 %** to **+32.1 %** — the fewer the fields, the larger the share of the
+  cost that was fixed overhead.
 
 ### Performance
 
-Measured against the write-path baseline of `v0.4.0`, on the same machine and in the same run:
+Median of three passes, on the same machine and in the same run, SQLite with `synchronous` and the
+journal off:
 
-| | Per write (µs) | vs. not audited |
+| | Per write (µs) | vs. `sync` |
 |---|---|---|
-| Not audited | 163 | — |
-| `sync`, in the request | 2066 | +1168 % |
-| `queue`, what the request pays | 1068 | +555 % |
-| `queue`, what the worker pays to settle one | 1148 | — |
+| Not audited | 160 | — |
+| `sync`, in the request | 1991 | — |
+| `queue`, what the request pays | 1041 | **−48 %** |
+| `queue`, what the worker pays to settle one | 1071 | — |
 
-`queue` halves what the request pays and adds about seven per cent to the total. Deferring moves
-work; it does not remove it. `sync` is unchanged: nothing on that path got slower.
+`queue` halves what the request pays and adds about six per cent to the total. Deferring moves work;
+it does not remove it.
+
+**`sync` is unchanged.** Three passes per side with `src/` swapped in the same session put it at
++1.2 %, with the ranges overlapping entirely — the dispatcher is a container resolution and one more
+call per write, and what the recorder used to do another class does now.
 
 ### Upgrade notes
 

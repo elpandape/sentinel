@@ -483,19 +483,22 @@ the worker would have to re-read.
 
 ### What the modes actually cost
 
-Measured on the write-path baseline of `v0.4.0`, one create per iteration, a thousand iterations
-after two hundred warm-up writes, SQLite on the same machine and in the same run:
+One create per iteration, a thousand iterations after two hundred warm-up writes, median of three
+passes, SQLite on the same machine and in the same run:
 
-| | Per write (µs) | vs. not audited |
+| | Per write (µs) | vs. `sync` |
 |---|---|---|
-| Not audited | 163 | — |
-| `sync`, in the request | 2066 | +1168 % |
-| `queue`, what the request pays | 1068 | +555 % |
-| `queue`, what the worker pays to settle one | 1148 | — |
+| Not audited | 160 | — |
+| `sync`, in the request | 1991 | — |
+| `queue`, what the request pays | 1041 | **−48 %** |
+| `queue`, what the worker pays to settle one | 1071 | — |
 
-**`queue` halves what the request pays and adds about seven per cent to the total.** Deferring moves
+**`queue` halves what the request pays and adds about six per cent to the total.** Deferring moves
 work; it does not remove it. Choose it when the latency of the request is what you are protecting,
 not when you want the audit to be cheaper overall.
+
+Turning snapshots off changes little either way — `sync` 1919, `queue` 1008. The snapshot was never
+the dominant cost.
 
 Run `make bench` to reproduce it against your own schema. The numbers above put `sync` first in the
 pass, so the queued figure is measured against a larger table than the one it is compared with.
