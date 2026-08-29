@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
 use ElPandaPe\Sentinel\Ledger\StreamGate;
+use ElPandaPe\Sentinel\Models\Audit;
 use Illuminate\Support\Facades\DB;
 
 use function ElPandaPe\Sentinel\Tests\auditData;
@@ -113,4 +114,25 @@ it('lets a writer of another stream through while one stream is locked', functio
     } finally {
         DB::rollBack();
     }
+});
+
+it('leaves neither a duplicate nor a hole when a rival races a whole batch', function (): void {
+    raceTheGate($this->rival);
+
+    $this->ledger->writeMany([auditData(), auditData(), auditData()]);
+
+    $sequences = DB::table(auditsTable())->orderBy('sequence')->pluck('sequence')->all();
+
+    expect($sequences)->toBe(range(1, count($sequences)))
+        ->and(count($sequences))->toBeGreaterThanOrEqual(3);
+});
+
+it('writes a batch whose every entry still verifies against its own row after a race', function (): void {
+    raceTheGate($this->rival);
+
+    $written = $this->ledger->writeMany([auditData(), auditData(), auditData()]);
+
+    expect($written->every(static fn (Audit $audit): bool => verifier()->verifyEntry($audit)))->toBeTrue()
+        ->and($written->pluck('previous_hash')->skip(1)->values()->all())
+        ->toBe($written->pluck('hash')->take(2)->all());
 });
