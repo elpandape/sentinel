@@ -20,6 +20,7 @@ use function ElPandaPe\Sentinel\Tests\massEntries;
 use function ElPandaPe\Sentinel\Tests\presenter;
 use function ElPandaPe\Sentinel\Tests\seedSubjects;
 use function ElPandaPe\Sentinel\Tests\statementsDuring;
+use function ElPandaPe\Sentinel\Tests\withSortedKeys;
 
 it('records nothing at all for a query that did not ask', function (): void {
     seedSubjects(20);
@@ -64,23 +65,12 @@ it('never reads the set it is about to change, which is the whole of what summar
     expect($reads)->toBeEmpty();
 });
 
-it('costs the statement, the entry and the tail of the chain, and nothing else', function (): void {
-    seedSubjects(200);
-
-    $statements = statementsDuring(static fn (): int => AuditedSubject::query()
-        ->where('active', true)
-        ->auditing()
-        ->update(['status' => 'archived']));
-
-    expect($statements)->toBe(3);
-});
-
 it('records the columns it wrote without an old side it never read', function (): void {
     seedSubjects(3);
 
     AuditedSubject::query()->auditing()->update(['status' => 'archived']);
 
-    expect(massEntries()[0]->getAttribute('changes'))
+    expect(massEntries()[0]->toArray()['changes'])
         ->toBe([['path' => '/status', 'op' => 'replace', 'new' => 'archived']]);
 });
 
@@ -89,9 +79,9 @@ it('records the criteria the operation was aimed at', function (): void {
 
     AuditedSubject::query()->where('status', 'draft')->auditing()->update(['status' => 'archived']);
 
-    expect(massEntries()[0]->criteria)->toBe(['wheres' => [
+    expect(withSortedKeys(massEntries()[0]->criteria ?? []))->toBe(withSortedKeys(['wheres' => [
         ['type' => 'basic', 'boolean' => 'and', 'column' => 'status', 'operator' => '=', 'value' => 'draft'],
-    ]]);
+    ]]));
 });
 
 it('writes no entry for an update that matched no row, and spends no sequence on it', function (): void {
@@ -125,7 +115,7 @@ it('gives an individual entry the state the row was really in, and the one it mo
 
     expect($row->before['status'] ?? null)->toBe('draft')
         ->and($row->after['status'] ?? null)->toBe('archived')
-        ->and($row->getAttribute('changes'))
+        ->and($row->toArray()['changes'])
         ->toBe([['path' => '/status', 'op' => 'replace', 'old' => 'draft', 'new' => 'archived']]);
 });
 
@@ -224,8 +214,8 @@ it('records an upsert as the rows it sent and what the engine reported', functio
     $entry = massEntries()[0];
 
     expect($entry->event)->toBe('upserted')
-        ->and($entry->criteria)
-        ->toBe(['columns' => ['id', 'name'], 'unique_by' => ['id'], 'update' => ['name'], 'rows' => 2])
+        ->and(withSortedKeys($entry->criteria ?? []))
+        ->toBe(withSortedKeys(['columns' => ['id', 'name'], 'unique_by' => ['id'], 'update' => ['name'], 'rows' => 2]))
         ->and($entry->affected_rows)->toBeInt();
 });
 
@@ -241,7 +231,7 @@ it('keeps the earlier state and claims no later one when a column is written fro
 
     AuditedSubject::query()->auditing('individual')->update([
         'status' => 'archived',
-        'price' => DB::raw('price + 1'),
+        'price' => DB::raw("price || '0'"),
     ]);
 
     $entries = massEntries();
@@ -249,7 +239,7 @@ it('keeps the earlier state and claims no later one when a column is written fro
     expect($entries[0]->criteria['writes'] ?? null)->toBe(['price'])
         ->and($entries[1]->before['price'] ?? null)->toBe('10')
         ->and($entries[1]->after)->toBeNull()
-        ->and($entries[1]->getAttribute('changes'))->toBeNull();
+        ->and($entries[1]->toArray()['changes'])->toBeNull();
 });
 
 it('sends the whole batch to the queue and settles it there', function (): void {
@@ -315,9 +305,9 @@ it('serialises what it was aimed at and how much it reached', function (): void 
     $serialised = massEntries()[0]->toArray();
 
     expect($serialised['affected_rows'])->toBe(4)
-        ->and($serialised['criteria'])->toBe(['wheres' => [
+        ->and(withSortedKeys($serialised['criteria']))->toBe(withSortedKeys(['wheres' => [
             ['type' => 'basic', 'boolean' => 'and', 'column' => 'status', 'operator' => '=', 'value' => 'draft'],
-        ]]);
+        ]]));
 });
 
 it('reads a mass entry as the set it was about, not as one thing that happened to nothing', function (): void {

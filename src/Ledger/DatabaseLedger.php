@@ -32,6 +32,18 @@ final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, Le
 {
     private const int MAX_ATTEMPTS = 3;
 
+    /**
+     * How many placeholders one statement may carry. PostgreSQL and the MySQL prepared protocol
+     * both stop at this number, which a batch reaches sooner than it looks: an entry is thirty-odd
+     * columns, so under two thousand of them is already the ceiling.
+     *
+     * Nothing enforced it until now because the only caller batching at all was the flush, and that
+     * one is bounded by the buffer size. A mass operation is not, and a batch over the limit failed
+     * as one statement — losing every entry in it, and losing them quietly when the write was
+     * deferred to a commit, where nothing is left to refuse.
+     */
+    private const int MAX_PLACEHOLDERS = 65535;
+
     public function __construct(
         private Audit $model,
         private AuditTag $labels,
@@ -181,7 +193,7 @@ final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, Le
                 }
             }
 
-            $this->model->newQuery()->insert($rows);
+            $this->insertInStatements($rows, fn (array $slice): bool => $this->model->newQuery()->insert($slice));
             $this->label($written);
             $this->project($written);
 
@@ -189,6 +201,26 @@ final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, Le
 
             return array_values($written);
         }));
+    }
+
+    /**
+     * The same rows, in as many statements as the placeholder ceiling requires. The chain is built
+     * before any of this and is not what gets divided: sequences, hashes and links are already
+     * settled, in order, and every statement runs inside the one transaction that wraps them — so
+     * a batch split into four still lands whole or not at all.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @param  Closure(list<array<string, mixed>>): mixed  $insert
+     */
+    private function insertInStatements(array $rows, Closure $insert): void
+    {
+        if ($rows === []) {
+            return;
+        }
+
+        foreach (array_chunk($rows, max(1, intdiv(self::MAX_PLACEHOLDERS, max(1, count($rows[0]))))) as $slice) {
+            $insert($slice);
+        }
     }
 
     /**
@@ -292,9 +324,10 @@ final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, Le
             }
         }
 
-        if ($rows !== []) {
-            $this->model->getConnection()->table($this->labels->getTable())->insertOrIgnore($rows);
-        }
+        $this->insertInStatements(
+            $rows,
+            fn (array $slice): int => $this->model->getConnection()->table($this->labels->getTable())->insertOrIgnore($slice),
+        );
     }
 
     /**
@@ -325,9 +358,10 @@ final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, Le
             }
         }
 
-        if ($rows !== []) {
-            $this->model->getConnection()->table($this->relations->getTable())->insert($rows);
-        }
+        $this->insertInStatements(
+            $rows,
+            fn (array $slice): bool => $this->model->getConnection()->table($this->relations->getTable())->insert($slice),
+        );
     }
 
     /**

@@ -18,6 +18,7 @@ use function ElPandaPe\Sentinel\Tests\massEntries;
 use function ElPandaPe\Sentinel\Tests\seedSubjects;
 use function ElPandaPe\Sentinel\Tests\seedTheFrozenTrail;
 use function ElPandaPe\Sentinel\Tests\verifier;
+use function ElPandaPe\Sentinel\Tests\withSortedKeys;
 
 it('counts a set of three thousand five hundred rows without reading one of them', function (): void {
     seedSubjects(3500);
@@ -103,7 +104,7 @@ it('records a raw fragment as its shape, with none of the literals inside it', f
 
     $written = json_encode(DB::table(auditsTable())->get()->all());
 
-    expect(massEntries()[0]->criteria)->toBe(['wheres' => [['type' => 'raw', 'boolean' => 'and']]])
+    expect(withSortedKeys(massEntries()[0]->criteria ?? []))->toBe(withSortedKeys(['wheres' => [['type' => 'raw', 'boolean' => 'and']]]))
         ->and($written)->toBeString()->not->toContain('subject%');
 });
 
