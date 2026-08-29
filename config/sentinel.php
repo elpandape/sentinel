@@ -226,9 +226,19 @@ return [
         'after_commit' => true,
     ],
 
+    /*
+     * What a query that asked for it with auditing() writes down. summary is one entry for the
+     * whole operation, individual is one per row with its real before, and hybrid is summary plus
+     * individuals while the set stays under the threshold. summary is the default and the only one
+     * whose cost does not grow with the size of the set.
+     *
+     * sample bounds what a long set leaves behind: a whereIn over five thousand identifiers records
+     * the count and this many of them, never the list.
+     */
     'mass_operations' => [
         'mode' => 'summary',
         'threshold' => 100,
+        'sample' => 20,
     ],
 
     /*

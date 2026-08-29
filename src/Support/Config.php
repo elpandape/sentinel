@@ -11,6 +11,7 @@ use ElPandaPe\Sentinel\Contracts\Transformer;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
 use ElPandaPe\Sentinel\Enums\FailurePolicy;
 use ElPandaPe\Sentinel\Enums\FanoutPolicy;
+use ElPandaPe\Sentinel\Enums\MassMode;
 use ElPandaPe\Sentinel\Enums\Mode;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
@@ -232,6 +233,44 @@ final readonly class Config
     public function transitionAttribute(): string
     {
         return $this->string('transitions.attribute');
+    }
+
+    /**
+     * What a query that asked to be audited writes down. Summary is the default and stays the
+     * default: it is the only one of the three whose cost does not grow with the size of the set,
+     * and a mode that turns a one-line update into thousands of entries is a decision an
+     * application makes for itself rather than one it inherits from a published file.
+     */
+    public function massMode(): MassMode
+    {
+        $value = $this->repository->get('sentinel.mass_operations.mode');
+
+        if ($value === null) {
+            return MassMode::Summary;
+        }
+
+        if (! is_string($value)) {
+            throw ConfigurationException::expected('mass_operations.mode', 'a string or null', get_debug_type($value));
+        }
+
+        return MassMode::tryFrom($value)
+            ?? throw ConfigurationException::unknown('mass_operations.mode', $value, $this->accepted(MassMode::class));
+    }
+
+    /**
+     * How many rows the hybrid mode will describe one by one, and how many values of a long set
+     * the criteria keeps. Both are floors of one: a threshold of zero would mean a hybrid that is
+     * never anything but a summary, which is the summary mode with another name, and a sample of
+     * zero would record that a set was truncated without recording any of it.
+     */
+    public function massThreshold(): int
+    {
+        return max(1, $this->integer('mass_operations.threshold', 100));
+    }
+
+    public function massSample(): int
+    {
+        return max(1, $this->integer('mass_operations.sample', 20));
     }
 
     public function tagsEnabled(): bool
