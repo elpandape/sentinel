@@ -8,6 +8,7 @@ use Closure;
 use ElPandaPe\Sentinel\Contracts\Transformer;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Events\AuditDiscarded;
+use ElPandaPe\Sentinel\Events\Auditing;
 use ElPandaPe\Sentinel\Pipeline\Stages\EncryptSensitiveData;
 use ElPandaPe\Sentinel\Pipeline\Stages\EnforcePolicies;
 use ElPandaPe\Sentinel\Pipeline\Stages\FilterUnchanged;
@@ -51,7 +52,7 @@ final readonly class Pipeline
         $this->discard->begin();
 
         try {
-            $result = $this->stack()($audit);
+            $result = $this->announce($this->stack()($audit));
         } finally {
             $discarded = $this->discard->end();
         }
@@ -61,6 +62,36 @@ final readonly class Pipeline
         }
 
         return $result;
+    }
+
+    /**
+     * The application's own say, after every stage and inside the same pass, so that refusing here
+     * leaves by the door a stage leaves by and with a reason of the listener's choosing. Last for
+     * the reason the last stage is last: an entry offered before the transformations is an entry
+     * offered in the clear.
+     *
+     * The subject is put back. It decides which chain signs the entry and what the entry is about,
+     * and both were settled before a listener saw it.
+     */
+    private function announce(?AuditData $audit): ?AuditData
+    {
+        if (! $audit instanceof AuditData) {
+            return null;
+        }
+
+        $subject = [$audit->subject_type, $audit->subject_id];
+
+        try {
+            if ($this->events->until(new Auditing($audit)) === false) {
+                $this->discard->because(Auditing::REASON);
+
+                return $this->discard->at(Auditing::class);
+            }
+        } finally {
+            [$audit->subject_type, $audit->subject_id] = $subject;
+        }
+
+        return $audit;
     }
 
     /**
