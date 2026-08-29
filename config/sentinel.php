@@ -17,8 +17,18 @@ return [
         'queue' => env('SENTINEL_QUEUE'),
     ],
 
+    /*
+     * Where entries wait under the buffered mode. The store names the driver: redis is the one the
+     * mode is for, and memory keeps everything on the instance — a reference implementation and a
+     * test double, never a store. A connection of null uses the application's default Redis one.
+     *
+     * The two thresholds bound how much can be lost, and they are evaluated when an entry arrives:
+     * nothing in PHP is watching the clock between requests. What bounds a buffer nobody is writing
+     * to is the flush at the end of the request, the one at worker shutdown, and sentinel:flush.
+     */
     'buffer' => [
         'store' => env('SENTINEL_BUFFER_STORE', 'redis'),
+        'connection' => env('SENTINEL_BUFFER_CONNECTION'),
         'key' => 'sentinel:buffer',
         'size' => 500,
         'flush_interval' => 60,

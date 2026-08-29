@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel;
 
+use ElPandaPe\Sentinel\Buffer\MemoryBuffer;
+use ElPandaPe\Sentinel\Buffer\RedisBuffer;
 use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Context\ExecutionContext;
 use ElPandaPe\Sentinel\Context\Runtime;
+use ElPandaPe\Sentinel\Contracts\Buffer;
 use ElPandaPe\Sentinel\Contracts\Canonicalizer;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
@@ -32,6 +35,7 @@ use Illuminate\Console\Events\ScheduledTaskStarting;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Routing\Events\Routing;
@@ -63,6 +67,12 @@ final class SentinelServiceProvider extends ServiceProvider
 
             return new $model;
         });
+
+        /*
+         * Scoped, so a buffer with no store keeps its entries for one request and no longer, and so
+         * the Redis one holds a connection for as long as the process that opened it is serving.
+         */
+        $this->app->scoped(Buffer::class, fn (Application $app): Buffer => $this->buffer($app));
 
         // Scoped like the manager: a ledger with no store keeps its chain on the instance.
         $this->app->scoped(Ledger::class, fn (Application $app): Ledger => $this->driver(
@@ -174,6 +184,27 @@ final class SentinelServiceProvider extends ServiceProvider
             $config->fanoutPolicy(),
             $app->make(Dispatcher::class),
         );
+    }
+
+    /**
+     * A store this release does not know is refused rather than served by the one that keeps
+     * everything on the instance. An operator who asked for Redis and silently got the process has
+     * been told nothing about the durability they actually have — which is the whole subject of
+     * this mode.
+     */
+    private function buffer(Application $app): Buffer
+    {
+        $config = $app->make(Config::class);
+        $store = $config->bufferStore();
+
+        return match ($store) {
+            'redis' => new RedisBuffer(
+                $app->make(Redis::class)->connection($config->bufferConnection()),
+                $config->bufferKey(),
+            ),
+            'memory' => new MemoryBuffer,
+            default => throw ConfigurationException::unknown('buffer.store', $store, 'redis, memory'),
+        };
     }
 
     private function migrations(): PackageMigrations

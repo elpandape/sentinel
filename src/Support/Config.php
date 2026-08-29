@@ -48,6 +48,41 @@ final readonly class Config
         return $this->nullableString('queue.queue');
     }
 
+    /**
+     * The driver entries wait in under the buffered mode, and the Redis connection it uses. Every
+     * one of these has its default here as well as in the published file: the merge is one level
+     * deep, so an installation that published the section before a key existed would otherwise win
+     * with a section that does not have it.
+     */
+    public function bufferStore(): string
+    {
+        return $this->nullableString('buffer.store') ?? 'redis';
+    }
+
+    public function bufferConnection(): ?string
+    {
+        return $this->nullableString('buffer.connection');
+    }
+
+    public function bufferKey(): string
+    {
+        return $this->nullableString('buffer.key') ?? 'sentinel:buffer';
+    }
+
+    /**
+     * How many entries may wait before an arrival flushes them, and how long the oldest may wait.
+     * Both are floors of one: a size of zero would mean flushing nothing, ever.
+     */
+    public function bufferSize(): int
+    {
+        return max(1, $this->integer('buffer.size', 500));
+    }
+
+    public function bufferInterval(): int
+    {
+        return max(1, $this->integer('buffer.flush_interval', 60));
+    }
+
     public function table(string $name): string
     {
         return $this->string('tables.prefix').$this->string("tables.{$name}");
@@ -623,6 +658,17 @@ final readonly class Config
         return is_string($value)
             ? $value
             : throw ConfigurationException::expected($key, 'a string', get_debug_type($value));
+    }
+
+    private function integer(string $key, int $default): int
+    {
+        $value = $this->repository->get("sentinel.{$key}");
+
+        return match (true) {
+            $value === null => $default,
+            is_int($value) => $value,
+            default => throw ConfigurationException::expected($key, 'an integer or null', get_debug_type($value)),
+        };
     }
 
     private function nullableString(string $key): ?string
