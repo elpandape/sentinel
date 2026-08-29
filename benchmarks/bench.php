@@ -16,8 +16,10 @@ use ElPandaPe\Sentinel\Benchmarks\BenchSnapshotless;
 use ElPandaPe\Sentinel\Benchmarks\BenchTeam;
 use ElPandaPe\Sentinel\Benchmarks\BenchTransitioning;
 use ElPandaPe\Sentinel\Context\ContextEngine;
+use ElPandaPe\Sentinel\Context\Runtime;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Diff\Diff;
+use ElPandaPe\Sentinel\Dispatch\Settlement;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Events\AuditCreated;
 use ElPandaPe\Sentinel\Events\AuditCreating;
@@ -32,6 +34,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Orchestra\Testbench\Foundation\Application;
 
 use function Orchestra\Testbench\default_skeleton_path;
@@ -601,6 +604,105 @@ $events->forget(Auditing::class);
 $events->forget(AuditCreating::class);
 $events->forget(AuditCreated::class);
 
+/*
+ * The three questions a performance mode has to answer, and they are not the same number. What the
+ * request pays is what the user waits for; what the worker pays is what the database sees; and the
+ * two together are what the mode costs, which is never less than what sync costs — deferring moves
+ * work, it does not remove it.
+ *
+ * Queued writes are measured against the database queue driver rather than a null one, because a
+ * queue that discards the job is not measuring the enqueue. Redis would be faster; this is the
+ * slowest realistic floor.
+ */
+const MODE_ITERATIONS = 1000;
+
+Schema::create('jobs', static function (Blueprint $table): void {
+    $table->id();
+    $table->string('queue')->index();
+    $table->longText('payload');
+    $table->unsignedTinyInteger('attempts');
+    $table->unsignedInteger('reserved_at')->nullable();
+    $table->unsignedInteger('available_at');
+    $table->unsignedInteger('created_at');
+});
+
+$app->make('config')->set('queue.default', 'bench');
+$app->make('config')->set('queue.connections.bench', ['driver' => 'database', 'table' => 'jobs', 'queue' => 'default']);
+
+/*
+ * The table grows through the pass, so whichever mode runs last is the one carrying the larger
+ * index. Sync runs first on purpose: it makes the queued figure the conservative one rather than
+ * the flattering one.
+ */
+$offset += WARMUP + LISTENER_ITERATIONS;
+$run(BenchPlain::class, WARMUP, $offset);
+$offset += WARMUP;
+$plainRequest = $run(BenchPlain::class, MODE_ITERATIONS, $offset);
+$offset += MODE_ITERATIONS;
+
+$app->make('config')->set('sentinel.mode', 'sync');
+$app->forgetScopedInstances();
+
+$run(BenchAudited::class, WARMUP, $offset);
+$offset += WARMUP;
+$syncRequest = $run(BenchAudited::class, MODE_ITERATIONS, $offset);
+$offset += MODE_ITERATIONS;
+
+$run(BenchSnapshotless::class, WARMUP, $offset);
+$offset += WARMUP;
+$syncRequestBare = $run(BenchSnapshotless::class, MODE_ITERATIONS, $offset);
+$offset += MODE_ITERATIONS;
+
+$app->make('config')->set('sentinel.mode', 'queue');
+$app->forgetScopedInstances();
+
+$run(BenchAudited::class, WARMUP, $offset);
+$offset += WARMUP;
+$queuedRequest = $run(BenchAudited::class, MODE_ITERATIONS, $offset);
+$offset += MODE_ITERATIONS;
+
+$run(BenchSnapshotless::class, WARMUP, $offset);
+$offset += WARMUP;
+$queuedRequestBare = $run(BenchSnapshotless::class, MODE_ITERATIONS, $offset);
+$offset += MODE_ITERATIONS;
+
+/**
+ * What the worker pays, with the queue itself left out: the payload it was handed, read back and
+ * settled. The worker loop, the reserve and the delete belong to the framework and are the same
+ * whatever is inside the job.
+ */
+$settling = static function (int $times) use ($app): float {
+    $settlement = $app->make(Settlement::class);
+    $runtime = $app->make(Runtime::class);
+
+    $payloads = [];
+
+    for ($i = 0; $i < $times; $i++) {
+        $payloads[] = new AuditData(
+            audit_type: 'model',
+            event: 'created',
+            severity: Severity::Info,
+            occurred_at: new DateTimeImmutable,
+            capture_id: (string) Str::ulid(),
+            after: ['name' => 'subject', 'email' => 'subject@example.com', 'role' => 'admin', 'score' => 1, 'active' => true],
+        )->toPayload();
+    }
+
+    $start = hrtime(true);
+
+    foreach ($payloads as $payload) {
+        $runtime->whileWritingAudit(static fn (): mixed => $settlement->settleOnce(AuditData::fromPayload($payload)));
+    }
+
+    return (hrtime(true) - $start) / 1_000_000;
+};
+
+$app->make('config')->set('sentinel.mode', 'sync');
+$app->forgetScopedInstances();
+
+$settling(WARMUP);
+$workerSettling = $settling(MODE_ITERATIONS);
+
 $baseline = $results['plain (not audited)'];
 
 echo '| Variant | Writes | Total (ms) | Per write (µs) | Δ vs plain |', PHP_EOL;
@@ -735,6 +837,28 @@ foreach ([
         $total,
         $total * 1000 / LISTENER_ITERATIONS,
         $total === $listenerReference ? '—' : sprintf('%+.1f%%', ($total / $listenerReference - 1) * 100),
+        PHP_EOL,
+    );
+}
+
+echo PHP_EOL, '| Performance mode | Writes | Total (ms) | Per write (µs) | Δ vs plain |', PHP_EOL;
+echo '|---|---|---|---|---|', PHP_EOL;
+
+foreach ([
+    'plain (not audited)' => $plainRequest,
+    'sync, in the request, snapshots on' => $syncRequest,
+    'sync, in the request, snapshots off' => $syncRequestBare,
+    'queue, what the request pays, snapshots on' => $queuedRequest,
+    'queue, what the request pays, snapshots off' => $queuedRequestBare,
+    'queue, what the worker pays to settle one' => $workerSettling,
+] as $label => $total) {
+    printf(
+        '| %s | %d | %.1f | %.1f | %s |%s',
+        $label,
+        MODE_ITERATIONS,
+        $total,
+        $total * 1000 / MODE_ITERATIONS,
+        $total === $plainRequest ? '—' : sprintf('%+.1f%%', ($total / $plainRequest - 1) * 100),
         PHP_EOL,
     );
 }
