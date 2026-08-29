@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Tests;
 
 use Carbon\CarbonImmutable;
+use Closure;
 use DateTimeImmutable;
 use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Context\Runtime;
@@ -22,6 +23,7 @@ use ElPandaPe\Sentinel\Integrity\Verifier;
 use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
 use ElPandaPe\Sentinel\Ledger\FanoutLedger;
 use ElPandaPe\Sentinel\Ledger\MemoryLedger;
+use ElPandaPe\Sentinel\Mass\Criteria;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Pipeline\Discard;
 use ElPandaPe\Sentinel\Pipeline\Pipeline;
@@ -44,6 +46,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -67,6 +70,35 @@ function sentinelConfig(array $overrides = []): Config
     }
 
     return new Config($repository);
+}
+
+/**
+ * The criteria of a query built here rather than one the package built, so what is under test is
+ * the serialiser and not the caller that reached it.
+ *
+ * @param  Closure(QueryBuilder): void  $build
+ * @param  array<string, mixed>  $overrides
+ * @return array<string, mixed>
+ */
+function massCriteria(Closure $build, array $overrides = []): array
+{
+    $query = DB::table('fixture_audited_subjects');
+
+    $build($query);
+
+    return new Criteria(sentinelConfig($overrides))->of($query);
+}
+
+/**
+ * @param  array<string, mixed>  $criteria
+ * @return list<array<string, mixed>>
+ */
+function massWheres(array $criteria): array
+{
+    /** @var list<array<string, mixed>> $wheres */
+    $wheres = $criteria['wheres'] ?? [];
+
+    return $wheres;
 }
 
 /**
