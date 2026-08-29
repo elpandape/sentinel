@@ -21,23 +21,31 @@ use function ElPandaPe\Sentinel\Tests\hasher;
 use function ElPandaPe\Sentinel\Tests\ledger;
 use function ElPandaPe\Sentinel\Tests\verifier;
 
+beforeEach(function (): void {
+    config()->set('sentinel.buffer.store', 'memory');
+    config()->set('sentinel.buffer.size', 2);
+    config()->set('queue.default', 'sync');
+});
+
 it('leaves a chain that verifies after a full cycle, whichever mode wrote it', function (string $mode): void {
     config()->set('sentinel.mode', $mode);
-    config()->set('queue.default', 'sync');
 
     $subject = AuditedSubject::query()->create(['name' => 'Ada', 'email' => 'ada@example.test']);
     $subject->update(['name' => 'Grace']);
     Sentinel::event('invoice.approved')->subject($subject)->record();
 
+    app()->terminate();
+
     expect(Audit::query()->count())->toBe(3)
         ->and(verifier()->verifyStream('global')->isIntact())->toBeTrue();
-})->with(['sync', 'queue']);
+})->with(['sync', 'queue', 'buffered']);
 
 it('still reproduces the frozen hashes after a cycle in that mode', function (string $mode): void {
     config()->set('sentinel.mode', $mode);
-    config()->set('queue.default', 'sync');
 
     AuditedSubject::query()->create(['name' => 'Ada'])->update(['name' => 'Grace']);
+
+    app()->terminate();
 
     foreach (GoldenLedger::entries() as [$attributes, $canonical, $hash]) {
         $frozen = new Audit()->forceFill($attributes);
@@ -45,7 +53,7 @@ it('still reproduces the frozen hashes after a cycle in that mode', function (st
         expect(new JsonCanonicalizer()->canonicalize(CanonicalPayload::from($frozen)))->toBe($canonical)
             ->and(hasher()->hash($frozen))->toBe($hash);
     }
-})->with(['sync', 'queue']);
+})->with(['sync', 'queue', 'buffered']);
 
 it('gives a batch the same chain as the same entries written one at a time', function (): void {
     ledger()->writeMany([
@@ -119,7 +127,7 @@ it('numbers the settlement by arrival and keeps the fact in its own order', func
 
 it('announces the cycle once per entry, wherever each part of it happens', function (string $mode, int $created): void {
     config()->set('sentinel.mode', $mode);
-    config()->set('queue.default', 'sync');
+    config()->set('sentinel.buffer.size', 1);
 
     $counts = ['auditing' => 0, 'creating' => 0, 'created' => 0, 'audited' => 0];
     $events = app(Dispatcher::class);
@@ -143,6 +151,7 @@ it('announces the cycle once per entry, wherever each part of it happens', funct
 })->with([
     'sync' => ['sync', 1],
     'queue' => ['queue', 1],
+    'buffered' => ['buffered', 1],
 ]);
 
 it('closes the journey in the process that captured, and the ledger pair where the entry lands', function (): void {
@@ -166,4 +175,55 @@ it('closes the journey in the process that captured, and the ledger pair where t
     new AuditedSubject()->forceFill(['name' => 'Ada'])->save();
 
     expect($counts)->toBe(['auditing' => 1, 'creating' => 0, 'audited' => 1]);
+});
+
+it('gives a flushed batch the same chain as the same entries settled one at a time', function (): void {
+    config()->set('sentinel.mode', 'buffered');
+    config()->set('sentinel.buffer.size', 500);
+
+    foreach (['Ada', 'Grace', 'Barbara'] as $name) {
+        new AuditedSubject()->forceFill(['name' => $name])->save();
+    }
+
+    app()->terminate();
+
+    $flushed = Audit::query()->orderBy('sequence')->get();
+
+    config()->set('sentinel.mode', 'sync');
+    config()->set('sentinel.integrity.stream', static fn (): string => 'oneByOne');
+
+    foreach (['Ada', 'Grace', 'Barbara'] as $name) {
+        new AuditedSubject()->forceFill(['name' => $name])->save();
+    }
+
+    $singly = Audit::query()->where('stream', 'oneByOne')->orderBy('sequence')->get();
+
+    expect($flushed->pluck('sequence')->all())->toBe($singly->pluck('sequence')->all())
+        ->and($flushed->pluck('previous_hash')->all())->toBe([null, $flushed[0]->hash, $flushed[1]->hash])
+        ->and($singly->pluck('previous_hash')->all())->toBe([null, $singly[0]->hash, $singly[1]->hash])
+        ->and(verifier()->verifyStream('global')->isIntact())->toBeTrue()
+        ->and(verifier()->verifyStream('oneByOne')->isIntact())->toBeTrue();
+});
+
+it('settles a flush in one tail read, however many entries were waiting', function (): void {
+    config()->set('sentinel.mode', 'buffered');
+    config()->set('sentinel.buffer.size', 500);
+
+    foreach (['Ada', 'Grace', 'Barbara'] as $name) {
+        new AuditedSubject()->forceFill(['name' => $name])->save();
+    }
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+
+    app()->terminate();
+
+    $tails = array_filter(DB::getRawQueryLog(), static function (array $query): bool {
+        $sql = strtolower((string) $query['raw_query']);
+
+        return str_contains($sql, 'sequence') && str_contains($sql, 'desc');
+    });
+
+    expect($tails)->toHaveCount(1)
+        ->and(Audit::query()->count())->toBe(3);
 });
