@@ -9,6 +9,88 @@ before `1.0.0`.
 
 ---
 
+## v0.15.0 → v0.16.0
+
+Nothing to migrate: no new columns, no new tables, and `payload_version` stays at `1`. The default
+mode is `sync`, which is what the package already did, so an installation that changes nothing
+behaves exactly as it did.
+
+### `capture_id` starts being written
+
+Every captured entry now carries an identifier of its own, stamped where the capture reaches the
+ledger. The column and its unique index have existed since `v0.2.0`; nothing filled them until now.
+
+It is outside the canonical payload, so no hash changes and entries written before this tag keep
+verifying with the column empty. What it buys is that a retry can be recognised as the same unit of
+work once the capture and the entry stop happening in the same process.
+
+Entries written by `Security\Rekeyer` have none, because rotation writes to the ledger without going
+through a capture.
+
+### `Context\Runtime::writingAuditEntry()` is gone
+
+**Before:** a latch with no way back.
+
+    app(Runtime::class)->writingAuditEntry();
+
+**After:** a scope.
+
+    app(Runtime::class)->whileWritingAudit(fn () => /* ... */);
+
+It is the first branch the source resolver takes, so once it was on, every later entry of that
+process claimed to come from a queue. It is internal plumbing for the resolver and appears in no
+documented surface; the rename is here for anyone who found it anyway.
+
+### Before turning `mode` to `queue`
+
+Three things behave differently once an entry settles somewhere other than where it was captured.
+None of them is a breaking change on `sync`.
+
+**`created_at` becomes the order entries settled.** It stops being the order things happened in.
+
+    Sentinel::audits()->get();                  // ordered by created_at — the order they settled
+    Sentinel::timeline();                       // ordered by occurred_at — the order things happened
+    Sentinel::audits()->byOccurrence()->get();  // the same query, by the clock of the fact
+
+Anything rebuilding a lifeline from `created_at` keeps working and quietly starts answering a
+different question. The chain is unaffected: `(stream, sequence)` is dense and monotonic in every
+mode, and it is what `verifyIntegrity()` walks.
+
+**`AuditCreated` fires in the worker.** It is announced wherever the ledger assigns identity. The new
+`Events\Audited` is the one announced in the process that captured — it carries the entry only when
+the two are the same place, and a `null` there means "settled elsewhere", never "not settled".
+
+    Event::listen(Audited::class, function (Audited $event): void {
+        $event->entry;   // the Audit under sync; null under queue
+    });
+
+**`RestoreResult::$entry` is `null`.** The record moved; the entry recording it has not been written
+yet. The property was already nullable and already `null` inside a transaction of your own, so no
+type changes — but code that assumed it was there stops finding it.
+
+**The write-failure policy governs the request only.** In a worker the queue is the policy: it
+retries under the same `capture_id`, which settles at most once, and what still does not land goes
+to `failed_jobs`. `on_write_failure` still decides what a queue refusing the job costs the request.
+
+**An operation counts what it handed over.** `sentinel_transactions.audits_count` is what the request
+accepted for settlement rather than what landed, because the header closes before the worker runs.
+
+### Rolling deploys
+
+The job carries the entry as an array rather than a serialised object: unknown keys are dropped and
+missing ones take their defaults, so a worker on the previous release can read a payload the current
+one wrote. That covers anything additive.
+
+It cannot rescue a payload whose fields have been reinterpreted. **Drain the queue before deploying a
+change to what an entry means**, as opposed to what it contains.
+
+### `mode = buffered` is refused
+
+It arrives in `v0.16.1`. Until then, setting it raises a `ConfigurationException` naming that version
+rather than falling back to `sync`: a mode nobody chose is a durability guarantee nobody made.
+
+---
+
 ## v0.14.0 → v0.15.0
 
 Nothing to migrate: no new columns, no new tables, and `payload_version` stays at `1`. One published

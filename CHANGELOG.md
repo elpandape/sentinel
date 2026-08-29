@@ -2,6 +2,109 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.16.0 — Performance modes: the dispatcher, `sync` and `queue` (2026-08-29)
+
+Where an entry settles becomes a setting. The layer the architecture always drew between the
+pipeline and the ledger exists now, `queue` is a mode you turn on rather than a thing you build, and
+a fact captured in one process and settled in another is still settled exactly once.
+
+The `buffered` mode, the Redis buffer and `sentinel:flush` are `v0.16.1`, which is the other half of
+this milestone.
+
+### Added
+
+- **`Dispatch\Dispatcher`, with one strategy per mode.** It is the only place that decides how an
+  entry the pipeline approved reaches the ledger, so turning a mode on is configuration and not a
+  change to any code that captures. It never assigns a sequence and never computes a hash: those
+  stay in the ledger, inside the same operation as the write, in every mode. That is the rule that
+  makes a tamper-evident chain and an asynchronous write compatible at all.
+- **The `queue` mode.** `mode = queue` moves the write off the request into a job of its own, with
+  `sentinel.queue.connection` and `sentinel.queue.queue` deciding where it waits. The pipeline still
+  runs in the request — filters, redaction, hashing, encryption and your own policies — so nothing
+  sensitive ever waits untransformed, and what travels is the finished entry rather than a model the
+  worker would have to re-read.
+- **`capture_id` on every captured entry.** The column has had a unique index since the schema was
+  written and nothing filled it. It is stamped at the one door every capture goes through, and it is
+  what makes a retry recognisable as the same unit of work rather than a second fact.
+- **Settlement is idempotent.** A job the queue hands back settles the same capture once. The
+  database enforces it; `Contracts\Deduplicates` is an opt-in capability that lets a driver be asked
+  first, so a retry of something that already landed costs a query instead of a sealed chain the
+  database throws away.
+- **`Events\Audited`**, the tenth class of the cycle. It says the process that captured is done with
+  the entry, and carries the entry only where capture and settlement are the same place. A `null`
+  there means "settled elsewhere", never "not settled".
+- **`AuditData::toPayload()` and `::fromPayload()`.** The entry as something that can cross a process
+  boundary: unknown keys are dropped and missing ones take their defaults, so a worker on the
+  previous release can read a payload the current one wrote. A payload naming its own `sequence`,
+  `hash` or `previous_hash` is refused.
+- README: *Performance modes*, with the trade-off table, the measured cost of each mode and what
+  changes about the two clocks.
+
+### Changed
+
+- **`writeMany()` has a consumer.** A batch takes one sequence assignment and one tail read instead
+  of one per entry, and produces the same chain as the same entries written one at a time.
+- **`Context\Runtime` suspends and restores instead of assigning.** Artisan announces a command run
+  from inside another exactly as it announces the outer one, so clearing on the way out told the
+  outer command it had ended — after which every entry named no command and resolved the wrong
+  source. `writingAuditEntry()` becomes the scope `whileWritingAudit()`, because it had no way back
+  at all and is the first branch the source resolver takes.
+- **An operation counts what it handed over** when the entry settles elsewhere.
+  `sentinel_transactions.audits_count` would otherwise read zero for every operation under an
+  asynchronous mode, since the header closes before the worker runs.
+- **A mode this release has no strategy for is refused by name** rather than quietly served by the
+  synchronous one. `mode = buffered` names `v0.16.1`.
+- The retry that exists for the chain's unique index no longer replays a whole batch over a capture
+  identifier. Each attempt drops what settled since the last one, and a batch with nothing left is
+  handed back its own violation rather than a silence that reads as success.
+
+### Fixed
+
+- **A restoration asked the schema for its column list on every call.** It is the part of the restore
+  cost that does not depend on how many fields are being put back, and on two of the three engines it
+  is a round trip to `information_schema`. The answer is now held for the scope: a whole-state restore
+  went from **+49.6 %** over the audited update it replaces to **+37.5 %**.
+
+### Performance
+
+Measured against the write-path baseline of `v0.4.0`, on the same machine and in the same run:
+
+| | Per write (µs) | vs. not audited |
+|---|---|---|
+| Not audited | 163 | — |
+| `sync`, in the request | 2066 | +1168 % |
+| `queue`, what the request pays | 1068 | +555 % |
+| `queue`, what the worker pays to settle one | 1148 | — |
+
+`queue` halves what the request pays and adds about seven per cent to the total. Deferring moves
+work; it does not remove it. `sync` is unchanged: nothing on that path got slower.
+
+### Upgrade notes
+
+Nothing to migrate: no new columns, no new tables, and `payload_version` stays at `1`. The default
+mode is `sync`, which is what the package already did, so an installation that changes nothing
+behaves exactly as it did.
+
+`capture_id` starts being written on new entries. It is outside the canonical payload, so no hash
+changes and entries written before this tag keep verifying with the column empty.
+
+Before turning `mode` to `queue`, three things are worth checking:
+
+- **Anything ordering by `created_at` to rebuild a lifeline.** Under `queue` that column is the order
+  entries settled, not the order things happened. `Sentinel::timeline()` and
+  `Sentinel::audits()->byOccurrence()` read the clock of the fact and are unaffected.
+- **Listeners on `AuditCreated`.** It is announced where the ledger assigns identity, which is now
+  the worker. `Events\Audited` is the one that fires in the process that captured.
+- **Code reading `RestoreResult::$entry`.** It is `null` under an asynchronous mode, the way it
+  already was inside a transaction of your own.
+
+**Drain the queue before deploying a change to what an entry means.** The job payload tolerates keys
+it does not know and fills in ones it is missing, so a rolling deploy with both releases running is
+safe for anything additive; it cannot rescue a payload whose fields have been reinterpreted.
+
+`Context\Runtime::writingAuditEntry()` is gone, replaced by `whileWritingAudit()`. It is internal
+plumbing for the source resolver and is not part of any documented surface.
+
 ## v0.15.0 — Lifecycle events and serialization (2026-08-29)
 
 The whole life of an entry is observable from outside, and what an entry looks like as data stops

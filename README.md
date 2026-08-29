@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.15.0-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.16.0-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -48,9 +48,10 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.13.0` | State transitions: `Sentinel::transition()`, `$auditTransitions`, an optional state machine, `whereType()` and the lifeline with time spent in each state |
 | `v0.14.0` | The Restore Engine: `$audit->restore()`, granular and relation restores, `RestoreResult`, and two cancellable lifecycle events |
 | `v0.15.0` | The lifecycle events, a write-failure policy, and `toArray()` frozen as a public contract |
+| `v0.16.0` | Performance modes: the dispatcher, the `queue` mode with a job of its own, `capture_id` and idempotent settlement, and `Audited` |
 
 Everything else is on the roadmap: advanced verification (checkpoints and signatures), retention and
-compliance, performance modes and distributed tracing.
+compliance, the buffered mode and distributed tracing.
 
 `v0.4.0` is the version that starts auditing: a model with the trait writes its own chained entries.
 `v0.5.0` is the one that answers what changed, instead of leaving you two states to compare.
@@ -71,7 +72,9 @@ something you reconstruct: `draft → pending → approved → paid` is a read, 
 in each. `v0.14.0` is the one that makes the trail something you can act on and not only read: a
 row of it puts the record back the way it found it, and says what it could not. `v0.15.0` is the one
 that lets something else react to all of it without reaching inside, and that stops the serialised
-entry from being a shape that can move under you.
+entry from being a shape that can move under you. `v0.16.0` is the one that stops the trail from
+costing the request the whole write: where an entry settles becomes a setting, and a fact captured
+here and settled somewhere else is still settled exactly once.
 
 ## Quick start
 
@@ -402,7 +405,8 @@ leave those installations transforming nothing and saying nothing about it. To d
 the list without it.
 
 The pipeline runs **during the capture**, inside the request — never behind the queue or the buffer.
-That is deliberate and `v0.16.0` inherits it: whatever gets queued has already been transformed.
+That is deliberate and every [performance mode](#performance-modes) keeps it: whatever gets queued
+has already been transformed.
 
 ### Discarding an entry
 
@@ -455,9 +459,115 @@ If you want those entries, take `FilterUnchanged` out of the list. Only updates 
 creation with no comparable fields still happened, and a restore whose one moved column is not
 audited is still a restore.
 
+## Performance modes
+
+**Where an entry settles is one setting, and nothing else in your application changes.**
+
+```php
+'mode' => env('SENTINEL_MODE', 'sync'),
+```
+
+| Mode | Route | Request pays | Durability | What you can lose | Order of `created_at` |
+|---|---|---|---|---|---|
+| `sync` | capture → pipeline → ledger | The whole write | Maximum: the entry exists before the call returns | Nothing the database kept | The order things happened |
+| `queue` | capture → pipeline → job → ledger | The pipeline and one enqueue | The queue's: a job that fails is retried, and what never lands is in `failed_jobs` | Nothing the queue kept | The order entries **settled** |
+| `buffered` | capture → pipeline → buffer → flush | The pipeline and one buffer write | Least: the buffer is not a durable store | Everything not yet flushed | The order entries settled |
+
+`buffered` arrives in `v0.16.1`. Until then, setting it is refused at the point of use rather than
+served by `sync`: a mode nobody chose is a durability guarantee nobody made.
+
+**The pipeline always runs in the request.** Filters, redaction, hashing, encryption and your own
+policies happen where the capture happened, in every mode. Nothing sensitive ever waits
+untransformed, and the job carries an entry that has already been through all of it — never a model
+the worker would have to re-read.
+
+### What the modes actually cost
+
+Measured on the write-path baseline of `v0.4.0`, one create per iteration, a thousand iterations
+after two hundred warm-up writes, SQLite on the same machine and in the same run:
+
+| | Per write (µs) | vs. not audited |
+|---|---|---|
+| Not audited | 163 | — |
+| `sync`, in the request | 2066 | +1168 % |
+| `queue`, what the request pays | 1068 | +555 % |
+| `queue`, what the worker pays to settle one | 1148 | — |
+
+**`queue` halves what the request pays and adds about seven per cent to the total.** Deferring moves
+work; it does not remove it. Choose it when the latency of the request is what you are protecting,
+not when you want the audit to be cheaper overall.
+
+Run `make bench` to reproduce it against your own schema. The numbers above put `sync` first in the
+pass, so the queued figure is measured against a larger table than the one it is compared with.
+
+### `created_at` stops being the order things happened in
+
+This is the one thing to check before switching. The trail records two clocks and they stop agreeing
+the moment an entry settles somewhere other than where it was captured:
+
+- **`occurred_at`** is when the fact happened, stamped at capture. It never moves.
+- **`created_at`** and `sequence` are when the entry settled, stamped in the ledger.
+
+```php
+Sentinel::timeline();                      // ✅ ordered by occurred_at — the order things happened
+Sentinel::audits()->get();                 // ordered by created_at — the order they settled
+Sentinel::audits()->byOccurrence()->get(); // ✅ the same query, by the clock of the fact
+```
+
+A lifeline built on `created_at` keeps working and quietly starts answering a different question.
+The chain is unaffected: `(stream, sequence)` is the order of the chain, it is dense and monotonic
+in every mode, and it is what `verifyIntegrity()` walks.
+
+### What else changes under an asynchronous mode
+
+- **`Audited` arrives without an entry.** It says the process that captured is done; under `queue`
+  the entry does not exist yet. `AuditCreated` is announced where the ledger assigns identity, which
+  is the worker — a listener that needs the settled entry belongs there.
+- **`$audit->restore()` returns a result with no entry.** `RestoreResult::$entry` is `null`, the way
+  it already was inside a transaction of your own: the record moved, and the entry recording it has
+  not been written yet.
+- **An operation counts what it handed over.** `sentinel_transactions.audits_count` is what the
+  request accepted for settlement rather than what landed, because the header closes before the
+  worker runs.
+- **The write-failure policy governs the request only.** In a worker the queue is the policy: it
+  retries under the same `capture_id` — which settles at most once — and what still does not land
+  goes to `failed_jobs`.
+
+### A retry is not a second entry
+
+Every capture is stamped with a `capture_id`, and the column has carried a unique index since the
+schema was written. A job the queue hands back, or a flush that repeats, settles the same fact once:
+
+```php
+$entry->capture_id;   // 01JD3K…  the capture, not the entry
+$entry->id;           // 01JD3K…  the entry
+```
+
+The database is what enforces it, not the memory of any process. A ledger that can look the
+identifier up says so by implementing `Contracts\Deduplicates`, and then a retry costs one query
+instead of a sealed chain thrown away; one that cannot is no less correct, because the unique index
+is the arbiter either way.
+
+### Choosing a queue
+
+```php
+'queue' => [
+    'connection' => env('SENTINEL_QUEUE_CONNECTION'),   // null uses the application default
+    'queue' => env('SENTINEL_QUEUE'),
+],
+```
+
+Give audits a queue of their own if the default one is where slow work lives: an audit waiting
+behind a video transcode is an audit that arrives long after the fact it describes.
+
+> **Rolling deploys.** The job carries the entry as an array, not as a serialised object, so a
+> worker on the previous release can read a payload the current one wrote — unknown keys are
+> dropped, missing ones take their defaults. Drain the queue before deploying anything that changes
+> what an entry means, rather than what it contains.
+
 ## Events
 
-Nine classes, and between them the whole life of an entry. Listen to react to what Sentinel does
+Ten classes, and between them the whole life of an entry. Listen to react to what Sentinel does
 without reaching inside it.
 
 | Event | When | Carries | Cancellable |
@@ -466,6 +576,7 @@ without reaching inside it.
 | `AuditDiscarded` | A stage returned `null`, or `Auditing` was refused | Identity, the stage and the reason | — |
 | `AuditCreating` | At the ledger's door, before `sequence` and `hash` | The `AuditData` | ❌ |
 | `AuditCreated` | The entry exists and is chained | The `Audit` | ❌ |
+| `Audited` | The capturing process is done with it | The `AuditData`, and the `Audit` where it settled here | ❌ |
 | `AuditWriteFailed` | A write did not complete | Identity and the exception | ❌ |
 | `AuditRestoring` | Before a restoration touches the record | The entry, the record, the keys | ✅ |
 | `AuditRestored` | After the commit that made it true | The entry, the record, the closed result | ❌ |
@@ -480,6 +591,13 @@ Event::listen(AuditCreated::class, function (AuditCreated $event): void {
 
 **Prefer queued listeners for anything slow.** They are dispatched inline, on the write path, so a
 listener that calls an API charges it to the request that saved the model.
+
+`AuditCreated` and `Audited` are not the same event, and the difference only shows once a mode
+separates them. `AuditCreated` is announced wherever the ledger assigned identity — under `queue`
+that is a worker. `Audited` is announced where the capture happened, and carries the entry only when
+the two are the same place; a `null` there means "settled elsewhere", never "not settled". A write
+that did not complete announces `AuditWriteFailed` instead, and the two never both go out for one
+capture.
 
 ### Cancelling is only legal before the entry has identity
 
@@ -1204,7 +1322,8 @@ Three things are worth knowing before you rely on it:
   not correctness.
 - **`occurred_at`, and only `occurred_at`, numbers the fact.** `created_at`, `sequence` and
   `version` number the settlement. Two changes to the same subject whose transactions commit out of
-  order settle in commit order, and that order is sealed into the hash.
+  order settle in commit order, and that order is sealed into the hash. Under an asynchronous
+  [mode](#performance-modes) the two clocks part company for good.
 - **Where the ledger shares the connection that rolled back, the database had already undone the
   entry.** What `after_commit` adds is the case where it does not: a dedicated
   `database.connection`, a ledger that is not this database, or a fanout to somewhere external. It
@@ -1700,10 +1819,11 @@ outside `toArray()`: they answer a call, they are not part of an entry.
 `config/sentinel.php` ships every section the package will use through 1.0, with future features
 turned off. Read it once and you know what is coming.
 
-Four sections are live today beyond the basics: `resolvers` decides who and where an entry came
+Five sections are live today beyond the basics: `resolvers` decides who and where an entry came
 from, `pipeline` is the ordered list of stages every entry travels through, `security` holds the
-redaction mask and field lists, the encryption keyring and the hashing salt, and `on_write_failure`
-with `log_channel` decides what a write that did not complete does to the request.
+redaction mask and field lists, the encryption keyring and the hashing salt, `on_write_failure` with
+`log_channel` decides what a write that did not complete does to the request, and `mode` with
+`queue` decides [where an entry settles](#performance-modes).
 
 Every one of those keys also has its default **in code**. Laravel merges a published config file one
 level deep, so an installation that published `sentinel.php` before a subtree existed would
@@ -1945,6 +2065,29 @@ driver say what it is instead of failing for being it:
   everything.
 - `settle(Ledger $ledger): void` — called between a write and the read that checks it. If your
   reads are eventually consistent, make what was just written visible here.
+
+One capability is opt-in, and only worth declaring if your store can honour it:
+
+```php
+use ElPandaPe\Sentinel\Contracts\Deduplicates;
+
+final class RedisLedger implements Deduplicates, Ledger
+{
+    /**
+     * @param  non-empty-list<string>  $captureIds
+     * @return list<string>
+     */
+    public function settled(array $captureIds): array
+    {
+        // Which of these captures already have an entry here.
+    }
+}
+```
+
+Declaring it lets an asynchronous mode ask before it writes, so a retry of something that already
+landed costs one query instead of a sealed chain the store throws away. It is not what makes the
+write idempotent — a unique constraint on the column is — and a driver that cannot answer reliably
+should not declare it: saying "no" when the answer is "yes" writes the same fact twice.
 
 Two things that are easy to get wrong and are not obvious from the interface:
 
