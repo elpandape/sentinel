@@ -9,8 +9,9 @@ use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Diff\Pointer;
 
 /**
- * Where a protected field can be hiding. Five containers, not two: a value duplicated into
- * `changes` or echoed by a resolver into `context` is the same secret in another column.
+ * Where a protected field can be hiding. Six containers, not two: a value duplicated into
+ * `changes`, echoed by a resolver into `context` or searched for in the `criteria` of a mass
+ * operation is the same secret in another column.
  *
  * Matching is by key name at any depth, so a field declared once is protected wherever it
  * surfaces — including inside the arguments of a console command.
@@ -41,6 +42,7 @@ final readonly class Fields
         $audit->metadata = self::walk($audit->metadata, $names, $record);
         $audit->context = self::walk($audit->context, $names, $record) ?? [];
         $audit->changes = self::changes($audit->changes, $names, $record);
+        $audit->criteria = self::criteria($audit->criteria, $names, $record);
 
         $found = array_keys($touched);
         sort($found);
@@ -137,5 +139,87 @@ final readonly class Fields
         }
 
         return $change;
+    }
+
+    /**
+     * What a mass operation was looking for is the same territory as what it found. A criteria
+     * naming a protected column carries the value that column was compared to, and leaving it
+     * alone would mean an engine that masks an email in a snapshot and prints it in the search
+     * that went looking for it.
+     *
+     * Only the clauses are walked. The rest of the criteria — the columns of an upsert, the tables
+     * of a join, the size of a set — is the query's own vocabulary and holds nothing of the
+     * caller's to protect.
+     *
+     * @template TKey of array-key
+     *
+     * @param  array<TKey, mixed>|null  $criteria
+     * @param  array<string, int>  $names
+     * @param  Closure(string, mixed): mixed  $transform
+     * @return array<TKey, mixed>|null
+     */
+    private static function criteria(?array $criteria, array $names, Closure $transform): ?array
+    {
+        if ($criteria === null || ! is_array($criteria['wheres'] ?? null)) {
+            return $criteria;
+        }
+
+        $criteria['wheres'] = self::clauses($criteria['wheres'], $names, $transform);
+
+        return $criteria;
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $wheres
+     * @param  array<string, int>  $names
+     * @param  Closure(string, mixed): mixed  $transform
+     * @return array<array-key, mixed>
+     */
+    private static function clauses(array $wheres, array $names, Closure $transform): array
+    {
+        foreach ($wheres as $index => $where) {
+            if (is_array($where)) {
+                $wheres[$index] = self::clause($where, $names, $transform);
+            }
+        }
+
+        return $wheres;
+    }
+
+    /**
+     * A group is descended into rather than skipped: nesting is where a clause hides from a walk
+     * that only looks at the top level.
+     *
+     * @param  array<array-key, mixed>  $where
+     * @param  array<string, int>  $names
+     * @param  Closure(string, mixed): mixed  $transform
+     * @return array<array-key, mixed>
+     */
+    private static function clause(array $where, array $names, Closure $transform): array
+    {
+        if (is_array($where['wheres'] ?? null)) {
+            $where['wheres'] = self::clauses($where['wheres'], $names, $transform);
+
+            return $where;
+        }
+
+        $column = $where['column'] ?? null;
+
+        if (! is_string($column) || ! array_key_exists($column, $names)) {
+            return $where;
+        }
+
+        if (array_key_exists('value', $where)) {
+            $where['value'] = $transform($column, $where['value']);
+        }
+
+        if (is_array($where['values'] ?? null)) {
+            $where['values'] = array_map(
+                static fn (mixed $value): mixed => $transform($column, $value),
+                $where['values'],
+            );
+        }
+
+        return $where;
     }
 }

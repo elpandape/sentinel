@@ -793,6 +793,18 @@ function protectedEntry(array $overrides = []): array
 }
 
 /**
+ * An entry whose criteria holds these clauses and nothing else, which is the shape the mass
+ * serialiser produces and the one the protected walk has to recognise.
+ *
+ * @param  list<array<string, mixed>>  $wheres
+ * @return array<string, mixed>
+ */
+function searchedFor(array $wheres): array
+{
+    return ['criteria' => ['wheres' => $wheres]];
+}
+
+/**
  * @param  array<string, mixed>  $overrides
  */
 function digester(array $overrides = []): Digester
