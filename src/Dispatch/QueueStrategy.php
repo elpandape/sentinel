@@ -61,6 +61,29 @@ final readonly class QueueStrategy implements DispatchStrategy
     }
 
     /**
+     * One job per entry, because that is what this mode is: the ledger work leaves the request and
+     * the worker picks it up. There is nothing to amortise here — the tail read happens in the
+     * worker, once per job, and batching the enqueue would only move the cost of the fan-out to
+     * whoever dequeues it.
+     *
+     * @param  non-empty-list<AuditData>  $audits
+     * @return list<Handover>
+     */
+    public function inRequestBatch(array $audits): array
+    {
+        return array_map($this->inRequest(...), $audits);
+    }
+
+    /**
+     * @param  non-empty-list<AuditData>  $audits
+     * @return list<Handover>
+     */
+    public function afterCommitBatch(array $audits): array
+    {
+        return array_map($this->afterCommit(...), $audits);
+    }
+
+    /**
      * The job is marked to wait for the commit whenever the package is, so the two never disagree.
      * With the deferral on it is belt and braces — the dispatch already happens from a commit
      * callback — and it is what covers the entry captured against one connection while a second

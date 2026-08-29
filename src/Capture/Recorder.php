@@ -9,6 +9,7 @@ use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Dispatch\Dispatcher;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Pipeline\Pipeline;
+use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Reference;
 use ElPandaPe\Sentinel\Transactions\TransactionScope;
 use Illuminate\Database\Eloquent\Model;
@@ -48,11 +49,7 @@ final readonly class Recorder
      */
     public function record(AuditData $audit, ?Model $subject = null, ?Reference $actor = null, ?Closure $settled = null): ?Audit
     {
-        $this->identify($audit);
-
-        $this->transactions->stamp($audit);
-
-        $transformed = $this->pipeline->process($audit);
+        $transformed = $this->prepared($audit);
 
         if (! $transformed instanceof AuditData) {
             return null;
@@ -61,6 +58,46 @@ final readonly class Recorder
         $this->attribute($transformed, $actor);
 
         return $this->dispatcher->dispatch($transformed, $subject, $settled);
+    }
+
+    /**
+     * Entries one operation produced together. Each goes through the pipeline on its own — a policy
+     * may refuse one row of a batch and keep the rest, and an entry the pipeline discarded is not
+     * something the operation wrote — and what survives lands in one hand-over.
+     *
+     * No actor argument and no callback. A mass operation is not something an actor is named for
+     * after the fact, and nothing is waiting for one row of a thousand to come back.
+     *
+     * @param  list<AuditData>  $audits
+     * @return AuditCollection<int, Audit>
+     */
+    public function recordMany(array $audits, ?Model $subject = null): AuditCollection
+    {
+        $transformed = [];
+
+        foreach ($audits as $audit) {
+            $passed = $this->prepared($audit);
+
+            if ($passed instanceof AuditData) {
+                $transformed[] = $passed;
+            }
+        }
+
+        return $this->dispatcher->dispatchMany($transformed, $subject);
+    }
+
+    /**
+     * Named and correlated, then transformed. Both stamps happen before the pipeline because both
+     * belong to the entry rather than to its journey through one, and the correlation in particular
+     * has to be sealed while the scope that owns it is still open.
+     */
+    private function prepared(AuditData $audit): ?AuditData
+    {
+        $this->identify($audit);
+
+        $this->transactions->stamp($audit);
+
+        return $this->pipeline->process($audit);
     }
 
     /**

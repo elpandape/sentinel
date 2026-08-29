@@ -40,6 +40,44 @@ final readonly class BufferStrategy implements DispatchStrategy
     }
 
     /**
+     * Everything is buffered and the thresholds are read once, not once per entry. A batch of three
+     * thousand would otherwise ask the store how full it is three thousand times, which is three
+     * thousand round trips to answer a question whose answer only matters at the end.
+     *
+     * @param  non-empty-list<AuditData>  $audits
+     * @return list<Handover>
+     */
+    public function inRequestBatch(array $audits): array
+    {
+        return $this->handAll($audits, $this->failures->inRequest(...));
+    }
+
+    /**
+     * @param  non-empty-list<AuditData>  $audits
+     * @return list<Handover>
+     */
+    public function afterCommitBatch(array $audits): array
+    {
+        return $this->handAll($audits, $this->failures->afterCommit(...));
+    }
+
+    /**
+     * @param  non-empty-list<AuditData>  $audits
+     * @param  callable(AuditData, Throwable): void  $failed
+     * @return list<Handover>
+     */
+    private function handAll(array $audits, callable $failed): array
+    {
+        foreach ($audits as $audit) {
+            $this->buffer->push($audit);
+        }
+
+        $this->vacate($audits[0], $failed);
+
+        return array_map(Handover::accepted(...), $audits);
+    }
+
+    /**
      * The entry is buffered first and the thresholds are read after, so a flush that fails cannot
      * cost the entry that triggered it: it is already waiting, and the failure is about the ones
      * that were there before.
@@ -53,6 +91,16 @@ final readonly class BufferStrategy implements DispatchStrategy
     {
         $this->buffer->push($audit);
 
+        $this->vacate($audit, $failed);
+
+        return Handover::accepted();
+    }
+
+    /**
+     * @param  callable(AuditData, Throwable): void  $failed
+     */
+    private function vacate(AuditData $audit, callable $failed): void
+    {
         try {
             if ($this->flusher->due()) {
                 $this->flusher->flush();
@@ -60,7 +108,5 @@ final readonly class BufferStrategy implements DispatchStrategy
         } catch (Throwable $failure) {
             $failed($audit, $failure);
         }
-
-        return Handover::accepted();
     }
 }

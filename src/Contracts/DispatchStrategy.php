@@ -22,4 +22,25 @@ interface DispatchStrategy
     public function inRequest(AuditData $audit): Handover;
 
     public function afterCommit(AuditData $audit): Handover;
+
+    /**
+     * Several entries one operation produced together, handed over together. The pair is the same
+     * decision as above and splits for the same reason; what makes a batch its own method is that
+     * the entries have to reach the ledger in one assignment of the sequence, and a caller looping
+     * over the single form would pay for one tail read per entry.
+     *
+     * One hand-over comes back per entry, in the order they went in. A batch is not all-or-nothing:
+     * a mode may settle some and refuse others — a retry of a capture that already landed is the
+     * ordinary case — and a caller that has to announce each entry needs to be told which is which.
+     *
+     * @param  non-empty-list<AuditData>  $audits
+     * @return list<Handover>
+     */
+    public function inRequestBatch(array $audits): array;
+
+    /**
+     * @param  non-empty-list<AuditData>  $audits
+     * @return list<Handover>
+     */
+    public function afterCommitBatch(array $audits): array;
 }

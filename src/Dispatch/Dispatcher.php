@@ -10,6 +10,7 @@ use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Enums\Mode;
 use ElPandaPe\Sentinel\Events\Audited;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Transactions\TransactionScope;
 use Illuminate\Contracts\Container\Container;
@@ -74,6 +75,38 @@ final readonly class Dispatcher
     }
 
     /**
+     * Several entries one operation produced, landing together. Same decision as above and same
+     * three answers to it: what a batch adds is that the entries reach the ledger in one assignment
+     * of the sequence, which is what keeps a mass operation from paying a tail read per row.
+     *
+     * What comes back is what settled in this process, which under an asynchronous mode is nothing
+     * — the same answer dispatch() gives, for the same reason.
+     *
+     * @param  list<AuditData>  $audits
+     * @return AuditCollection<int, Audit>
+     */
+    public function dispatchMany(array $audits, ?Model $subject = null): AuditCollection
+    {
+        if ($audits === []) {
+            return new AuditCollection;
+        }
+
+        $connection = $this->connection($subject);
+
+        if (! $this->config->afterCommit() || $connection->transactionLevel() === 0) {
+            return $this->handedAll($this->strategy()->inRequestBatch($audits), $audits);
+        }
+
+        $written = new AuditCollection;
+
+        $connection->afterCommit(function () use ($audits, &$written): void {
+            $written = $this->handedAll($this->strategy()->afterCommitBatch($audits), $audits);
+        });
+
+        return $written;
+    }
+
+    /**
      * Resolved per call rather than held, because the mode is configuration and configuration is
      * allowed to change between one entry and the next — in a test that asserts on both, and in
      * an application that switches under load.
@@ -114,6 +147,30 @@ final readonly class Dispatcher
         }
 
         return $handover->entry;
+    }
+
+    /**
+     * Announced one at a time, because that is what the event has always meant: this process is
+     * done with this entry. A batch that lost one to a race announces the rest, which is exactly
+     * what happened.
+     *
+     * @param  list<Handover>  $handovers
+     * @param  list<AuditData>  $audits
+     * @return AuditCollection<int, Audit>
+     */
+    private function handedAll(array $handovers, array $audits): AuditCollection
+    {
+        $written = new AuditCollection;
+
+        foreach ($handovers as $index => $handover) {
+            $entry = $this->handed($handover, $audits[$index], null);
+
+            if ($entry instanceof Audit) {
+                $written->push($entry);
+            }
+        }
+
+        return $written;
     }
 
     private function connection(?Model $subject): Connection
