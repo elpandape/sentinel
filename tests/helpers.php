@@ -793,6 +793,61 @@ function protectedEntry(array $overrides = []): array
 }
 
 /**
+ * Rows put in the table behind the model's back. Nothing about a mass operation is about model
+ * events, and seeding through the model would write an entry per row before the test began.
+ *
+ * @param  array<string, mixed>  $overrides
+ */
+function seedSubjects(int $count, array $overrides = []): void
+{
+    $rows = [];
+
+    for ($at = 1; $at <= $count; $at++) {
+        $rows[] = [
+            'name' => 'subject '.$at,
+            'email' => "subject{$at}@example.com",
+            'status' => 'draft',
+            'active' => true,
+            ...$overrides,
+        ];
+    }
+
+    foreach (array_chunk($rows, 200) as $chunk) {
+        DB::table('fixture_audited_subjects')->insert($chunk);
+    }
+}
+
+/**
+ * The entries a mass operation left, oldest first.
+ *
+ * @return list<Audit>
+ */
+function massEntries(): array
+{
+    /** @var list<Audit> $entries */
+    $entries = Audit::query()->where('audit_type', 'mass')->orderBy('id')->get()->all();
+
+    return $entries;
+}
+
+/**
+ * @param  Closure(): mixed  $work
+ */
+function statementsDuring(Closure $work): int
+{
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+
+    $work();
+
+    $count = count(DB::getRawQueryLog());
+
+    DB::disableQueryLog();
+
+    return $count;
+}
+
+/**
  * An entry whose criteria holds these clauses and nothing else, which is the shape the mass
  * serialiser produces and the one the protected walk has to recognise.
  *

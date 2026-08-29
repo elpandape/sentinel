@@ -47,6 +47,17 @@ final readonly class AuditPolicy
         return new self([], [], [], [], [], [], [], [], true, null);
     }
 
+    /**
+     * Whether the model says anything about auditing itself at all. The difference between a model
+     * with nothing declared and one that is not auditable is invisible to of() — both answer with
+     * the empty policy — and there is one caller that has to tell them apart: a mass operation
+     * refuses the second rather than recording a criteria nothing was protecting.
+     */
+    public static function declared(Model $model): bool
+    {
+        return self::answers($model);
+    }
+
     public static function of(Model $model): self
     {
         if (! self::answers($model)) {

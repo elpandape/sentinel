@@ -9,6 +9,7 @@ use ElPandaPe\Sentinel\Capture\RelationCapture;
 use ElPandaPe\Sentinel\Contracts\Transformer;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
+use ElPandaPe\Sentinel\Mass\MassCapture;
 use ElPandaPe\Sentinel\Pipeline\Discard;
 
 /**
@@ -21,6 +22,10 @@ use ElPandaPe\Sentinel\Pipeline\Discard;
  * because a sync that attaches nothing and detaches nothing did nothing at all — and it has to be
  * dropped here, before the ledger, or it would spend a sequence number on a non-event and leave
  * the chain with a link that says nothing happened.
+ *
+ * A mass operation is counted rather than compared, so what says it did nothing is its own count.
+ * An update whose where matched no row wrote no row, and an entry for it would spend a sequence
+ * number describing a set that turned out to be empty.
  */
 final readonly class FilterUnchanged implements Transformer
 {
@@ -33,13 +38,20 @@ final readonly class FilterUnchanged implements Transformer
      */
     public function handle(AuditData $audit, Closure $next): ?AuditData
     {
-        if ($audit->changes !== [] || ! $this->comparison($audit)) {
+        if (! $this->untouched($audit)) {
             return $next($audit);
         }
 
         $this->discard->because(self::REASON);
 
         return null;
+    }
+
+    private function untouched(AuditData $audit): bool
+    {
+        return $audit->audit_type === MassCapture::AUDIT_TYPE
+            ? $audit->affected_rows === 0
+            : $audit->changes === [] && $this->comparison($audit);
     }
 
     private function comparison(AuditData $audit): bool

@@ -23,9 +23,10 @@ final readonly class Writes
 {
     /**
      * @param  list<array{path: string, op: string, new: mixed}>  $changes
+     * @param  array<string, mixed>  $literals
      * @param  list<string>  $opaque
      */
-    private function __construct(public array $changes, public array $opaque) {}
+    private function __construct(public array $changes, public array $literals, public array $opaque) {}
 
     /**
      * @param  array<string, mixed>  $values
@@ -35,6 +36,7 @@ final readonly class Writes
         ksort($values);
 
         $changes = [];
+        $literals = [];
         $opaque = [];
 
         foreach ($values as $column => $value) {
@@ -50,9 +52,10 @@ final readonly class Writes
             $change = new Change('/'.Pointer::escape($column), 'replace', new: $literal[0], oldKnown: false)->toArray();
 
             $changes[] = $change;
+            $literals[$column] = $literal[0];
         }
 
-        return new self($changes, $opaque);
+        return new self($changes, $literals, $opaque);
     }
 
     /**
@@ -60,6 +63,6 @@ final readonly class Writes
      */
     public static function none(): self
     {
-        return new self([], []);
+        return new self([], [], []);
     }
 }

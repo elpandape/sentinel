@@ -14,6 +14,7 @@ use ElPandaPe\Sentinel\Context\Runtime;
 use ElPandaPe\Sentinel\Contracts\Buffer;
 use ElPandaPe\Sentinel\Contracts\Canonicalizer;
 use ElPandaPe\Sentinel\Contracts\Ledger;
+use ElPandaPe\Sentinel\Enums\MassMode;
 use ElPandaPe\Sentinel\Enums\Mode;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
 use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
@@ -21,6 +22,10 @@ use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
 use ElPandaPe\Sentinel\Ledger\FanoutLedger;
 use ElPandaPe\Sentinel\Ledger\MemoryLedger;
 use ElPandaPe\Sentinel\Ledger\NullLedger;
+use ElPandaPe\Sentinel\Mass\AuditedQuery;
+use ElPandaPe\Sentinel\Mass\Criteria;
+use ElPandaPe\Sentinel\Mass\MassCapture;
+use ElPandaPe\Sentinel\Mass\Strategies;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Models\AuditTransaction;
 use ElPandaPe\Sentinel\Pipeline\Discard;
@@ -39,6 +44,8 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Redis\Factory as Redis;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Queue\Events\WorkerStopping;
@@ -102,6 +109,8 @@ final class SentinelServiceProvider extends ServiceProvider
     {
         $this->loadTranslationsFrom(__DIR__.'/../resources/lang', 'sentinel');
 
+        $this->openTheMassOperationDoor();
+
         $this->latchRuntimeSignals();
 
         $this->flushWhatIsWaiting();
@@ -123,6 +132,39 @@ final class SentinelServiceProvider extends ServiceProvider
                 __DIR__.'/../database/migrations' => $this->app->databasePath('migrations'),
             ], 'sentinel-migrations');
         }
+    }
+
+    /**
+     * The one way in to auditing a statement Eloquent fires no model event for. It is a macro and
+     * not an override of the builder, because replacing the builder would put this package on the
+     * path of every query an application makes, and the entire design of the feature is that it is
+     * not: a query that does not call this costs exactly what it cost before.
+     *
+     * The name is global, which is what a macro is. A second package registering `auditing` on the
+     * Eloquent builder would win or lose by boot order — see the README, which says so out loud
+     * rather than leaving it to be discovered.
+     */
+    private function openTheMassOperationDoor(): void
+    {
+        $app = $this->app;
+
+        Builder::macro('auditing', function (MassMode|string|null $mode = null) use ($app): AuditedQuery {
+            /** @var Builder<Model> $this */
+            AuditedQuery::guard($this);
+
+            return new AuditedQuery(
+                $this,
+                is_string($mode) ? MassMode::tryFrom($mode) ?? throw ConfigurationException::unknown(
+                    'auditing',
+                    $mode,
+                    'summary, individual, hybrid',
+                ) : $mode,
+                $app->make(Strategies::class),
+                $app->make(Criteria::class),
+                $app->make(MassCapture::class),
+                $app->make(Sentinel::class),
+            );
+        });
     }
 
     /**

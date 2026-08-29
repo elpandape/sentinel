@@ -99,6 +99,15 @@ final class ConfigurationException extends InvalidArgumentException
         );
     }
 
+    public static function notAuditable(string $model): self
+    {
+        return new self(
+            "{$model} does not use the Auditable trait, so a mass operation over it has no ".
+            'declarations saying which of its columns may be written down. Add the trait, or drop '.
+            'the auditing() call.',
+        );
+    }
+
     public static function streamEmpty(): self
     {
         return new self('Sentinel resolved an empty stream name; every entry belongs to a named chain.');
