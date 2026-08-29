@@ -204,6 +204,18 @@ it('announces nothing at all when the transaction of the application rolls back'
         ->and($record->fresh()->name)->toBe('Grace');
 });
 
+it('records a restoration even where auditing is paused', function (): void {
+    $record = AuditedSubject::query()->create(['name' => 'Ada']);
+    $opening = auditsOf($record)->first();
+    $record->update(['name' => 'Grace']);
+
+    $result = Sentinel::withoutAuditing(static fn (): mixed => $opening->restore());
+
+    expect($record->fresh()?->name)->toBe('Ada')
+        ->and($result->entry)->toBeInstanceOf(Audit::class)
+        ->and(auditsOf($record))->toHaveCount(3);
+});
+
 it('rolls the whole thing back when applying it fails halfway', function (): void {
     $record = AuditedSubject::query()->create(['name' => 'Ada']);
     $opening = auditsOf($record)->first();

@@ -39,6 +39,12 @@ use Illuminate\Database\Eloquent\Relations\Pivot;
  * state column: it does not go through the state machine, and it is not a transition. A lifeline
  * answers which states the workflow moved through, and a correction made by an operator is not one
  * of them. What moved is still on the entry, in its changes.
+ *
+ * A restoration is recorded even inside withoutAuditing(), which is the one caller of the recorder
+ * that does not ask whether recording is on. That switch says not to audit what the application is
+ * about to do; a restoration is not that. It is the engine writing its own trail back into the
+ * business model, and a trail that can put a record back without saying so is one that misleads by
+ * omission about the only thing it does that is not merely observing.
  */
 final readonly class Restorer
 {
