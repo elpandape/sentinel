@@ -99,6 +99,19 @@ final class ConfigurationException extends InvalidArgumentException
         );
     }
 
+    /**
+     * A mode the configuration accepts and this release has no strategy for. It is refused rather
+     * than quietly served by the synchronous one: an operator who asked for a mode and silently got
+     * another has been told nothing about the durability they actually have.
+     */
+    public static function modeNotYetAvailable(string $mode, string $version): self
+    {
+        return new self(
+            "Sentinel mode [{$mode}] arrives in {$version}. Set [sentinel.mode] to one this release "
+            .'implements rather than have it fall back to another: a mode nobody chose is a durability guarantee nobody made.',
+        );
+    }
+
     public static function streamEmpty(): self
     {
         return new self('Sentinel resolved an empty stream name; every entry belongs to a named chain.');
