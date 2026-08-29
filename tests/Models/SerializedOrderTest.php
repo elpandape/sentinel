@@ -55,6 +55,11 @@ it('keeps a key the package does not know behind the ones it does', function ():
     ]);
 });
 
+/**
+ * toEqual and not toBe: a column the package did not write goes back as the engine handed it over,
+ * key order included, and that is the only honest answer for it. What the package writes it also
+ * orders, and the test below is the one that holds it to that.
+ */
 it('serialises a row whose changes it cannot read rather than refusing the whole trail', function (mixed $poison): void {
     insertAudit(['id' => frozenUlid('UNREAD'), 'sequence' => 1]);
 
@@ -62,12 +67,26 @@ it('serialises a row whose changes it cannot read rather than refusing the whole
         'changes' => json_encode($poison, JSON_THROW_ON_ERROR),
     ]);
 
-    expect(Audit::query()->findOrFail(frozenUlid('UNREAD'))->toArray()['changes'])->toBe($poison);
+    expect(Audit::query()->findOrFail(frozenUlid('UNREAD'))->toArray()['changes'])->toEqual($poison);
 })->with([
     'the map by field an early version wrote' => [['name' => ['José', 'Grace']]],
     'an operation the diff does not have' => [[['path' => '/name', 'op' => 'shrug', 'new' => 'Grace']]],
     'an entry with no new value' => [[['path' => '/name', 'op' => 'replace']]],
 ]);
+
+it('publishes a diff entry in the order the package fixed, not the one it was stored in', function (): void {
+    insertAudit(['id' => frozenUlid('DIFFORD'), 'sequence' => 1]);
+
+    DB::table(auditsTable())->where('id', frozenUlid('DIFFORD'))->update([
+        'changes' => json_encode([
+            ['new' => 'Grace', 'op' => 'replace', 'path' => '/name', 'old' => 'Ada'],
+        ], JSON_THROW_ON_ERROR),
+    ]);
+
+    $entry = Audit::query()->findOrFail(frozenUlid('DIFFORD'))->toArray()['changes'][0];
+
+    expect(array_keys($entry))->toBe(['path', 'op', 'old', 'new']);
+});
 
 it('publishes the labels in an order no collation decides', function (): void {
     $audit = app(DatabaseLedger::class)->write(auditData(['tags' => ['Refund', 'billing', 'Audit']]));
