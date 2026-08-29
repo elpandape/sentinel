@@ -1,7 +1,7 @@
 DC = docker compose
 PHP = $(DC) run --rm php
 
-.PHONY: build install update test test-quiet bench coverage types stan lint lint-fix rector rector-fix mutation validate ci shell dbs-up test-mysql test-pgsql test-dbs
+.PHONY: build install update test test-quiet bench coverage types stan lint lint-fix rector rector-fix mutation validate ci shell redis-up dbs-up test-mysql test-pgsql test-dbs
 
 build: ## Build the dev image
 	$(DC) build php
@@ -12,21 +12,27 @@ install: ## composer install
 update: ## composer update
 	$(PHP) composer update
 
-test: ## Run the test suite (make test ARGS="tests/Support/ConfigTest.php")
+# The buffered mode is covered against a real Redis, because the 100% gate admits no baseline and
+# a path nobody exercises "because it needs a service" is a path nobody covers. Already up is a
+# no-op, so this costs a second once and nothing after that.
+redis-up:
+	$(DC) up -d --wait redis
+
+test: redis-up ## Run the test suite (make test ARGS="tests/Support/ConfigTest.php")
 	$(PHP) vendor/bin/pest --parallel $(ARGS)
 
 # Paratest already prints one character per test; the colour around it is what costs.
 # --no-progress would trim further, but it drops the count of tests that passed with it.
-test-quiet: ## Same suite, output trimmed to its result
+test-quiet: redis-up ## Same suite, output trimmed to its result
 	$(PHP) vendor/bin/pest --parallel --colors=never $(ARGS)
 
 bench: ## Write-path baseline (report, not a gate)
 	$(PHP) php -d memory_limit=1G benchmarks/bench.php
 
-coverage: ## Tests + 100% coverage gate
+coverage: redis-up ## Tests + 100% coverage gate
 	$(PHP) php -d memory_limit=1G -d pcov.directory=/app -d 'pcov.exclude=~/(vendor|tests|\.cache)/~' vendor/bin/pest --ci --coverage --min=100
 
-types: ## 100% type coverage gate
+types: redis-up ## 100% type coverage gate
 	$(PHP) php -d memory_limit=1G vendor/bin/pest --type-coverage --min=100
 
 stan: ## PHPStan (level max)
@@ -54,7 +60,7 @@ shell: ## Shell inside the container
 	$(PHP) sh
 
 # pest --mutate does not accumulate repeated --path flags: one pass per path.
-MUTATION_PATHS = src/Support src/Context src/Http src/Diff src/Integrity src/Ledger src/Query src/Snapshot src/Pipeline src/Presentation src/Security src/Capture src/Concerns src/Models src/Transactions src/Transitions src/Restore src/Events src/SentinelServiceProvider.php
+MUTATION_PATHS = src/Support src/Context src/Http src/Diff src/Integrity src/Ledger src/Query src/Snapshot src/Pipeline src/Presentation src/Security src/Capture src/Concerns src/Models src/Transactions src/Transitions src/Restore src/Events src/Dispatch src/Buffer src/Jobs src/Console src/SentinelServiceProvider.php
 
 mutation: ## Mutation testing over the core, one pass per path
 	@for path in $(MUTATION_PATHS); do \
@@ -63,7 +69,7 @@ mutation: ## Mutation testing over the core, one pass per path
 			vendor/bin/pest --mutate --parallel --covered-only --path=$$path || exit 1; \
 	done
 
-dbs-up:
+dbs-up: redis-up
 	$(DC) up -d --wait mysql postgres
 
 # A pass cut in half leaves fixture tables behind and the next one fails on them, with a

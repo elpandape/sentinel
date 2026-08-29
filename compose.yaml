@@ -8,6 +8,20 @@ services:
       - .:/app
     environment:
       COMPOSER_CACHE_DIR: /app/.cache/composer
+      REDIS_HOST: redis
+
+  # The buffered mode keeps entries here until a flush settles them, so the suite that covers it
+  # needs a real one. Persistence is off for the same reason it is off for the databases: what the
+  # tests put in is disposable, and a buffer that survives a restart is not what this mode promises.
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 3s
 
   mysql:
     image: mysql:9
