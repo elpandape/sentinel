@@ -74,6 +74,18 @@ it('fails the whole write under strict when any destination refuses', function (
         ->toThrow(RuntimeException::class, FailingLedger::REASON);
 });
 
+it('names the entry that did land before failing the write that did not', function (): void {
+    Event::fake([LedgerDestinationFailed::class]);
+
+    $primary = app(MemoryLedger::class);
+
+    rescue(static fn (): mixed => fanout($primary, [new FailingLedger])->write(auditData()), report: false);
+
+    Event::assertDispatched(LedgerDestinationFailed::class, static fn (LedgerDestinationFailed $event): bool => $event->destination === FailingLedger::class
+        && $event->sequence === 1
+        && $event->stream === 'global');
+});
+
 it('settles under primary when a secondary refuses, and says which one did', function (): void {
     Event::fake([LedgerDestinationFailed::class]);
 

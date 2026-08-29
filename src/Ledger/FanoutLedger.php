@@ -84,10 +84,13 @@ final readonly class FanoutLedger implements DeclaresFilters, Ledger
             try {
                 $secondary->append($audit);
             } catch (Throwable $exception) {
-                if ($this->policy === FanoutPolicy::Strict) {
-                    throw $exception;
-                }
-
+                /*
+                 * Announced before the policy decides, because strict is the policy that most
+                 * needs the announcement: it rethrows out of a primary that has already sealed
+                 * and stored the entry, and this is the only event that names the entry that
+                 * did land. Announced after the throw, the operator would be told a write did
+                 * not complete and never told which one did.
+                 */
                 $this->events->dispatch(new LedgerDestinationFailed(
                     $secondary::class,
                     $audit->stream,
@@ -95,6 +98,10 @@ final readonly class FanoutLedger implements DeclaresFilters, Ledger
                     $audit->id,
                     $exception,
                 ));
+
+                if ($this->policy === FanoutPolicy::Strict) {
+                    throw $exception;
+                }
             }
         }
 
