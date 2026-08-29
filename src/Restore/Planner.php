@@ -35,6 +35,7 @@ final readonly class Planner
         private Config $config,
         private Keyring $keyring,
         private Verifier $verifier,
+        private Columns $columns,
     ) {}
 
     /**
@@ -93,7 +94,7 @@ final readonly class Planner
     {
         $policy = AuditPolicy::of($subject);
         $current = $this->snapshots->build($subject, $subject->getAttributes());
-        $columns = $subject->getConnection()->getSchemaBuilder()->getColumnListing($subject->getTable());
+        $columns = $this->columns->of($subject);
 
         $protections = [
             Omission::RedactedField->value => $this->config->redactedFields($policy->redacted),
