@@ -7,6 +7,8 @@ namespace ElPandaPe\Sentinel\Capture;
 use Closure;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Data\AuditData;
+use ElPandaPe\Sentinel\Events\AuditCreated;
+use ElPandaPe\Sentinel\Events\AuditCreating;
 use ElPandaPe\Sentinel\Events\AuditWriteFailed;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Pipeline\Pipeline;
@@ -109,7 +111,7 @@ final readonly class Recorder
         $connection = $this->connection($subject);
 
         if (! $this->config->afterCommit() || $connection->transactionLevel() === 0) {
-            return $this->announce($this->written($this->ledger->write($audit)), $settled);
+            return $this->announce($this->written($this->write($audit)), $settled);
         }
 
         $written = null;
@@ -117,6 +119,23 @@ final readonly class Recorder
         $connection->afterCommit(function () use ($audit, $settled, &$written): void {
             $written = $this->announce($this->deferred($audit), $settled);
         });
+
+        return $written;
+    }
+
+    /**
+     * The ledger boundary, announced from here rather than from a driver: the ledger is a contract
+     * with several implementations and a fanout that wraps them, and an event per implementation
+     * would be an event per destination for what the package treats as one write. One triple per
+     * call, on whichever branch the call took.
+     */
+    private function write(AuditData $audit): Audit
+    {
+        $this->events->dispatch(new AuditCreating($audit));
+
+        $written = $this->ledger->write($audit);
+
+        $this->events->dispatch(new AuditCreated($written));
 
         return $written;
     }
@@ -144,7 +163,7 @@ final readonly class Recorder
     private function deferred(AuditData $audit): ?Audit
     {
         try {
-            return $this->written($this->ledger->write($audit));
+            return $this->written($this->write($audit));
         } catch (Throwable $failure) {
             $this->events->dispatch(AuditWriteFailed::of($audit, $failure));
 
