@@ -10,6 +10,7 @@ use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Events\AuditCreated;
 use ElPandaPe\Sentinel\Events\AuditCreating;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Support\AuditCollection;
 use Illuminate\Contracts\Events\Dispatcher as Events;
 
 /**
@@ -39,7 +40,40 @@ final readonly class Settlement
      */
     public function settleOnce(AuditData $audit): ?Audit
     {
-        return $this->alreadySettled($audit) ? null : $this->settle($audit);
+        return $this->unsettled([$audit]) === [] ? null : $this->settle($audit);
+    }
+
+    /**
+     * A batch, settled in one assignment of the sequence instead of one per entry. It is what makes
+     * a flush viable: reading the tail of a stream is the part that cannot be shared between two
+     * writes, so doing it once for five hundred entries is the difference between a mode that
+     * scales and one that only defers.
+     *
+     * The cycle is announced per entry and not per batch, because that is what it has always meant:
+     * one entry is about to be written, one entry exists. A batch that loses an entry to a race
+     * announces the first without the second, which is exactly what happened.
+     *
+     * @param  list<AuditData>  $audits
+     */
+    public function settleBatch(array $audits): AuditCollection
+    {
+        $fresh = $this->unsettled($audits);
+
+        if ($fresh === []) {
+            return new AuditCollection;
+        }
+
+        foreach ($fresh as $audit) {
+            $this->events->dispatch(new AuditCreating($audit));
+        }
+
+        $written = $this->ledger->writeMany($fresh);
+
+        foreach ($written as $audit) {
+            $this->events->dispatch(new AuditCreated($audit));
+        }
+
+        return $written;
     }
 
     public function settle(AuditData $audit): Audit
@@ -53,10 +87,29 @@ final readonly class Settlement
         return $written;
     }
 
-    private function alreadySettled(AuditData $audit): bool
+    /**
+     * The entries of this batch that have no entry yet. A ledger that cannot look a capture up
+     * answers for none of them, and the unique index stays the arbiter it always was.
+     *
+     * @param  list<AuditData>  $audits
+     * @return list<AuditData>
+     */
+    private function unsettled(array $audits): array
     {
-        return $audit->capture_id !== null
-            && $this->ledger instanceof Deduplicates
-            && $this->ledger->settled([$audit->capture_id]) !== [];
+        $identifiers = array_values(array_filter(array_map(
+            static fn (AuditData $audit): ?string => $audit->capture_id,
+            $audits,
+        )));
+
+        if ($identifiers === [] || ! $this->ledger instanceof Deduplicates) {
+            return $audits;
+        }
+
+        $settled = $this->ledger->settled($identifiers);
+
+        return array_values(array_filter(
+            $audits,
+            static fn (AuditData $audit): bool => $audit->capture_id === null || ! in_array($audit->capture_id, $settled, true),
+        ));
     }
 }
