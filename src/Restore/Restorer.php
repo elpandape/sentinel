@@ -259,14 +259,23 @@ final readonly class Restorer
      * one that a lost key refused. The plan hands both back in a fixed order, which is what keeps
      * the same restoration producing the same bytes on every engine.
      *
-     * @return array{applied: list<string>, skipped: array<string, string>}
+     * A list of pairs and not a map keyed by field, because the security stages match a protected
+     * field by key name at any depth of metadata: keyed by field, the reason a redacted field was
+     * skipped got masked in place of the field, and a hashed one got a digest — the transformation
+     * landing on the explanation rather than on anything worth hiding, sealed where nothing can
+     * correct it afterwards.
+     *
+     * @return array{applied: list<string>, skipped: list<array{field: string, reason: string}>}
      */
     private function summary(Plan $plan): array
     {
-        return [
-            'applied' => $plan->keys(),
-            'skipped' => array_map(static fn (Omission $reason): string => $reason->value, $plan->skipped),
-        ];
+        $skipped = [];
+
+        foreach ($plan->skipped as $field => $reason) {
+            $skipped[] = ['field' => $field, 'reason' => $reason->value];
+        }
+
+        return ['applied' => $plan->keys(), 'skipped' => $skipped];
     }
 
     private function severity(Model $subject): Severity

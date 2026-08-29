@@ -9,6 +9,7 @@ use ElPandaPe\Sentinel\Facades\Sentinel;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Restore\Restorer;
 use ElPandaPe\Sentinel\Tests\Fixtures\AuditedSubject;
+use ElPandaPe\Sentinel\Tests\Fixtures\ProtectedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\SoftDeletingSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\TransitioningSubject;
 use Illuminate\Contracts\Events\Dispatcher;
@@ -72,7 +73,26 @@ it('seals what it applied and what it declined inside the entry', function (): v
     $opening->restore();
 
     expect(auditsOf($record)->last()->metadata)->toBe([
-        'restore' => ['applied' => ['name'], 'skipped' => ['id' => 'identity_field']],
+        'restore' => ['applied' => ['name'], 'skipped' => [['field' => 'id', 'reason' => 'identity_field']]],
+    ]);
+});
+
+it('never lets a protected field name a key of what it seals', function (): void {
+    $record = ProtectedSubject::query()->create(['name' => 'Ada', 'email' => 'ada@example.com', 'secret' => 'hunter2']);
+    $opening = auditsOf($record)->first();
+    $record->update(['name' => 'Grace', 'email' => 'grace@example.com']);
+
+    $opening->restore();
+
+    expect(auditsOf($record)->last()->metadata)->toBe([
+        'restore' => [
+            'applied' => ['name'],
+            'skipped' => [
+                ['field' => 'email', 'reason' => 'redacted_field'],
+                ['field' => 'id', 'reason' => 'identity_field'],
+                ['field' => 'secret', 'reason' => 'hashed_field'],
+            ],
+        ],
     ]);
 });
 
