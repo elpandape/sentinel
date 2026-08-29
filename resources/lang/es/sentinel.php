@@ -4,6 +4,15 @@ declare(strict_types=1);
 
 return [
 
+    'commands' => [
+        'flush' => [
+            'description' => 'Asienta todo lo que el buffer de auditoría está reteniendo',
+            'settled' => 'Se asentaron :count entradas del buffer.',
+            'not_buffered' => 'Sentinel está escribiendo en modo :mode, así que no hay nada esperando en un buffer. Pon el modo en buffered antes de vaciar uno.',
+            'failed' => 'El buffer no se pudo asentar: :reason. No se perdió nada: lo que no se asentó volvió al buffer.',
+        ],
+    ],
+
     'discarded' => [
         'cancelled' => 'Un listener canceló el asiento :event de :type :id antes de que llegara al ledger.',
         'policy' => 'Una policy descartó el asiento :event de :type :id antes de que llegara al ledger.',

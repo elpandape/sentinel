@@ -4,6 +4,15 @@ declare(strict_types=1);
 
 return [
 
+    'commands' => [
+        'flush' => [
+            'description' => 'Settle everything the audit buffer is holding',
+            'settled' => 'Settled :count entries from the buffer.',
+            'not_buffered' => 'Sentinel is writing in :mode mode, so nothing is waiting in a buffer. Set the mode to buffered before flushing one.',
+            'failed' => 'The buffer could not be settled: :reason. Nothing was lost: what did not settle is back in the buffer.',
+        ],
+    ],
+
     'discarded' => [
         'cancelled' => 'A listener cancelled the :event entry for :type :id before it reached the ledger.',
         'policy' => 'A policy discarded the :event entry for :type :id before it reached the ledger.',
