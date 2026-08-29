@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Ledger;
 
 use ElPandaPe\Sentinel\Contracts\DeclaresFilters;
+use ElPandaPe\Sentinel\Contracts\Deduplicates;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Contracts\LedgerStream;
 use ElPandaPe\Sentinel\Data\AuditData;
@@ -25,7 +26,7 @@ use Throwable;
  * produce two different truths about one fact. For the same reason every read goes to the
  * primary: it is the destination whose chain the sequence belongs to.
  */
-final readonly class FanoutLedger implements DeclaresFilters, Ledger
+final readonly class FanoutLedger implements DeclaresFilters, Deduplicates, Ledger
 {
     /**
      * @param  list<Ledger>  $secondaries
@@ -61,6 +62,19 @@ final readonly class FanoutLedger implements DeclaresFilters, Ledger
     public function find(string $id): ?Audit
     {
         return $this->primary->find($id);
+    }
+
+    /**
+     * Asked of the primary, like every read: it is the destination whose chain the sequence belongs
+     * to, so it is the one whose answer means anything. A primary that cannot look a capture up
+     * answers for nothing, and the unique index stays the arbiter it always was.
+     *
+     * @param  non-empty-list<string>  $captureIds
+     * @return list<string>
+     */
+    public function settled(array $captureIds): array
+    {
+        return $this->primary instanceof Deduplicates ? $this->primary->settled($captureIds) : [];
     }
 
     public function query(AuditQuery $query): AuditCollection

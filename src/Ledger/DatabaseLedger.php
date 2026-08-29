@@ -6,6 +6,7 @@ namespace ElPandaPe\Sentinel\Ledger;
 
 use Closure;
 use ElPandaPe\Sentinel\Contracts\DeclaresFilters;
+use ElPandaPe\Sentinel\Contracts\Deduplicates;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Contracts\LedgerStream;
 use ElPandaPe\Sentinel\Data\AuditData;
@@ -27,7 +28,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Database\UniqueConstraintViolationException;
 
-final readonly class DatabaseLedger implements DeclaresFilters, Ledger
+final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, Ledger
 {
     private const int MAX_ATTEMPTS = 3;
 
@@ -76,6 +77,26 @@ final readonly class DatabaseLedger implements DeclaresFilters, Ledger
     public function find(string $id): ?Audit
     {
         return $this->model->newQuery()->with('tags')->find($id);
+    }
+
+    /**
+     * Which of these captures already have an entry. One seek into the unique index the table has
+     * carried since it was written, and the only reason it is asked at all is so a retry can stop
+     * being a retry: the index is what makes the write idempotent, this is what keeps a caller from
+     * sealing a chain it is about to throw away.
+     *
+     * @param  non-empty-list<string>  $captureIds
+     * @return list<string>
+     */
+    public function settled(array $captureIds): array
+    {
+        /** @var list<string> $found */
+        $found = $this->model->newQuery()
+            ->whereIn('capture_id', $captureIds)
+            ->pluck('capture_id')
+            ->all();
+
+        return $found;
     }
 
     /**
@@ -139,7 +160,7 @@ final readonly class DatabaseLedger implements DeclaresFilters, Ledger
      */
     private function chain(array $audits): array
     {
-        return $this->attempt(fn (): array => $this->model->getConnection()->transaction(function () use ($audits): array {
+        return $this->attempt($audits, fn (array $audits): array => $this->model->getConnection()->transaction(function () use ($audits): array {
             $gate = new StreamGate($this->model->getConnection(), $this->model->getTable());
             $written = [];
             $rows = [];
@@ -385,24 +406,58 @@ final readonly class DatabaseLedger implements DeclaresFilters, Ledger
     }
 
     /**
-     * @template TReturn
+     * The unique index is the final arbiter for the chain: no row lock covers a stream with no rows
+     * yet, so a writer that lost the race reads the tail again and takes the next position.
      *
-     * @param  Closure(): TReturn  $callback
-     * @return TReturn
+     * It is also the arbiter for the capture identifier, and there a retry is the wrong answer: the
+     * position is not what was taken, the fact was, and replaying the batch would seal the same
+     * chain three times over before giving up. So each attempt drops what has settled since the last
+     * one, and a batch with nothing left is handed back its own violation rather than a silence the
+     * caller would read as success.
+     *
+     * @param  non-empty-list<AuditData>  $audits
+     * @param  Closure(non-empty-list<AuditData>): list<Audit>  $callback
+     * @return list<Audit>
      */
-    private function attempt(Closure $callback): mixed
+    private function attempt(array $audits, Closure $callback): array
     {
         $attempt = 0;
 
         while (true) {
             try {
-                return $callback();
+                return $callback($audits);
             } catch (UniqueConstraintViolationException $exception) {
-                // The unique index is the final arbiter: no row lock covers a stream with no rows yet.
-                if (++$attempt >= self::MAX_ATTEMPTS) {
+                $remaining = $this->unsettled($audits);
+
+                if ($remaining === [] || ++$attempt >= self::MAX_ATTEMPTS) {
                     throw $exception;
                 }
+
+                $audits = $remaining;
             }
         }
+    }
+
+    /**
+     * @param  non-empty-list<AuditData>  $audits
+     * @return list<AuditData>
+     */
+    private function unsettled(array $audits): array
+    {
+        $identifiers = array_values(array_filter(array_map(
+            static fn (AuditData $audit): ?string => $audit->capture_id,
+            $audits,
+        )));
+
+        if ($identifiers === []) {
+            return $audits;
+        }
+
+        $settled = $this->settled($identifiers);
+
+        return array_values(array_filter(
+            $audits,
+            static fn (AuditData $audit): bool => $audit->capture_id === null || ! in_array($audit->capture_id, $settled, true),
+        ));
     }
 }

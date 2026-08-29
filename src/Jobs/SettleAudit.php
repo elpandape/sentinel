@@ -42,6 +42,6 @@ final class SettleAudit implements ShouldQueue
     {
         $audit = AuditData::fromPayload($this->payload);
 
-        $runtime->whileWritingAudit(static fn (): mixed => $settlement->settle($audit));
+        $runtime->whileWritingAudit(static fn (): mixed => $settlement->settleOnce($audit));
     }
 }

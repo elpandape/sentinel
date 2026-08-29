@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Ledger;
 
 use ElPandaPe\Sentinel\Contracts\DeclaresFilters;
+use ElPandaPe\Sentinel\Contracts\Deduplicates;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Contracts\LedgerStream;
 use ElPandaPe\Sentinel\Data\AuditData;
@@ -24,7 +25,7 @@ use ElPandaPe\Sentinel\Support\AuditCollection;
  * reachable as a default driver: a ledger with no durability that looks like it works is
  * worse than one that fails.
  */
-final class MemoryLedger implements DeclaresFilters, Ledger
+final class MemoryLedger implements DeclaresFilters, Deduplicates, Ledger
 {
     /**
      * @var array<string, list<Audit>>
@@ -71,6 +72,25 @@ final class MemoryLedger implements DeclaresFilters, Ledger
         $this->streams[$audit->stream][] = $audit;
 
         return $audit;
+    }
+
+    /**
+     * @param  non-empty-list<string>  $captureIds
+     * @return list<string>
+     */
+    public function settled(array $captureIds): array
+    {
+        $found = [];
+
+        foreach ($this->streams as $entries) {
+            foreach ($entries as $audit) {
+                if ($audit->capture_id !== null && in_array($audit->capture_id, $captureIds, true)) {
+                    $found[] = $audit->capture_id;
+                }
+            }
+        }
+
+        return $found;
     }
 
     public function find(string $id): ?Audit

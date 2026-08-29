@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Dispatch;
 
+use ElPandaPe\Sentinel\Contracts\Deduplicates;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Events\AuditCreated;
@@ -27,6 +28,20 @@ final readonly class Settlement
         private Events $events,
     ) {}
 
+    /**
+     * The same capture, settled at most once. A queue retries and a flush repeats, and neither of
+     * those is a second fact: what tells them apart is the identifier the capture stamped, and what
+     * enforces it is the unique index the schema has carried since it was written.
+     *
+     * Asking first is not what makes it safe — two workers can both be told no and both write. It
+     * is what keeps the common case, a retry of something that already landed, from sealing a chain
+     * only to have the database throw it away.
+     */
+    public function settleOnce(AuditData $audit): ?Audit
+    {
+        return $this->alreadySettled($audit) ? null : $this->settle($audit);
+    }
+
     public function settle(AuditData $audit): Audit
     {
         $this->events->dispatch(new AuditCreating($audit));
@@ -36,5 +51,12 @@ final readonly class Settlement
         $this->events->dispatch(new AuditCreated($written));
 
         return $written;
+    }
+
+    private function alreadySettled(AuditData $audit): bool
+    {
+        return $audit->capture_id !== null
+            && $this->ledger instanceof Deduplicates
+            && $this->ledger->settled([$audit->capture_id]) !== [];
     }
 }
