@@ -9,6 +9,93 @@ before `1.0.0`.
 
 ---
 
+## v0.14.0 → v0.15.0
+
+Nothing to migrate: no new columns, no new tables, and `payload_version` stays at `1`. One published
+shape changes, and one contract is frozen.
+
+### `metadata.restore.skipped` is a list, not a map
+
+**Before:** a map keyed by field name.
+
+```json
+{"restore": {"applied": ["name"], "skipped": {"email": "redacted_field", "id": "identity_field"}}}
+```
+
+**After:** a list of pairs, in the same order.
+
+```json
+{"restore": {"applied": ["name"], "skipped": [
+  {"field": "email", "reason": "redacted_field"},
+  {"field": "id", "reason": "identity_field"}
+]}}
+```
+
+The map had to go because the security stages match a protected field **by key name** at any depth
+of `metadata`. A model declaring `email` as redacted sealed `r****d_f****d` where the word
+`redacted_field` belonged; one declaring it hashed sealed a digest of it; one declaring it encrypted
+sealed ciphertext and then advertised `email` in `encryption.fields` for a value the entry never
+carried. All of it inside the canonical payload, so nothing could correct it after the write: the
+entry verified, and what it said was wrong.
+
+Entries written before this tag keep the old shape and still reproduce their hashes. If you read
+that block, branch on it:
+
+```php
+$skipped = $entry->metadata['restore']['skipped'] ?? [];
+
+$reasons = array_is_list($skipped)
+    ? array_column($skipped, 'reason', 'field')
+    : $skipped;
+```
+
+`RestoreResult::$skipped` in PHP is unchanged — still `array<string, Omission>`.
+
+### `toArray()` is now a contract
+
+**Before:** the keys could move in any minor.
+
+**After:** they only ever grow. None is renamed, none is removed, and none is reinterpreted under
+the same name. A shape that has to change arrives beside the one it replaces, and the old one stays
+until `v2` with its deprecation documented here.
+
+Two keys arrive with this tag: `source_audit_id` at the top level, and `verified` inside
+`integrity`. Both are additions, so nothing you read today moves.
+
+`verified` is `true | false | null`, and it is `null` in every version before `v0.18.0` — it means
+"not checked in this call", never "failed". Write the three-way check:
+
+```php
+match ($entry['integrity']['verified']) {
+    true => 'verified',
+    false => 'TAMPERED',
+    null => 'not checked',
+};
+```
+
+`!$entry['integrity']['verified']` renders "not checked" as "TAMPERED", in PHP and in JavaScript
+alike.
+
+`RestoreResult` and `Enums\Omission` are frozen under the same rule, and stay outside `toArray()`.
+
+### A failed write still throws, unless you say otherwise
+
+`sentinel.on_write_failure` is new and defaults to `throw`, which is what the package already did —
+so nothing changes for anyone who does nothing. Set `SENTINEL_ON_WRITE_FAILURE=log` for a failed
+audit write to be recorded through `sentinel.log_channel` and let the request through.
+
+It governs the write that happens in the request. A write deferred to a commit never propagates
+whatever the setting says, because by then the transaction has committed.
+
+### `Events\AuditRestored` is announced later
+
+It now leaves from a commit callback rather than from the return of `restore()`, so its result
+always carries the entry that recorded the restoration. Inside a transaction of your own, the event
+arrives after your commit instead of during it — and a rollback announces nothing at all, where
+before it announced a restoration that did not survive.
+
+---
+
 ## v0.12.1 → v0.13.0
 
 One published contract changes. Nothing to migrate.

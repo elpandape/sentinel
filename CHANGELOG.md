@@ -2,6 +2,86 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.15.0 — Lifecycle events and serialization (2026-08-29)
+
+The whole life of an entry is observable from outside, and what an entry looks like as data stops
+being something that can move under you. Nine event classes, one door out for anything that gets
+stopped, one setting for what a failed write does to the request — and from this tag, the keys of
+`toArray()` only ever grow.
+
+### Added
+
+- **`Events\Auditing`, cancellable.** The application's own say over an entry, at the end of the
+  pipeline and before the ledger. A listener returning `false` stops it, and refusing there costs no
+  `sequence`, so the chain the entry never joined has no gap. It comes **after** masking, hashing
+  and encryption for the reason the policy stage is last: before them the entry holds the plaintext
+  of every declared field, and for an entry a stage is about to drop that payload is never
+  transformed at all.
+- **`Events\AuditCreating` and `Events\AuditCreated`.** The ledger boundary, on both sides of it:
+  the last word about an entry with no identity, and the first about one that has a stream, a
+  sequence and a hash. Announced from the one door to the ledger rather than from a driver, so a
+  fanout over three destinations is still one write and one pair of events. Inside a transaction
+  they wait for the commit, so a rollback announces neither.
+- **`sentinel.on_write_failure`**, `throw` or `log`, with `sentinel.log_channel`. Under `log` a
+  failed write is recorded — identity and the exception, never the payload — and the request goes
+  through. One default for every environment, and that default is `throw`, which is what the package
+  already did: nothing changes until you ask for it. `compliance` overrules the setting.
+- **`Http\Resources\AuditResource`**, the same shape over HTTP, adding no key and renaming none.
+  The package mounts no routes for it: which entries a request may see is an authorisation question.
+- **`source_audit_id` and `integrity.verified` in `toArray()`.** The first is what a restoration has
+  written since it existed and nothing published. The second is three-valued and always `null` until
+  `v0.18.0` — it means "not checked in this call" and never "failed".
+- README: *Events* and *Serialization*.
+
+### Changed
+
+- **`toArray()` is a frozen public contract.** Its top-level keys and its `integrity` block can only
+  grow from here: none is renamed, removed, or quietly reinterpreted. A snapshot test names every
+  one of them and runs over the entries frozen since `v0.3.0`.
+- **`RestoreResult` and `Enums\Omission` are frozen under the same rule**, and stay outside
+  `toArray()`: they answer a call rather than describing an entry.
+- **`Events\AuditRestored` is announced from a commit callback**, so its result always carries the
+  entry that recorded the restoration — including inside a transaction of your own, where the call
+  itself returns before that entry exists. A rollback now announces nothing.
+- **Nothing the package publishes inherits the key order an engine stored a JSON column in.**
+  Relation lines and their pivot maps come out in the order fixed at capture, and labels are ordered
+  in PHP rather than by a collation.
+- `Events\AuditWriteFailed` is now dispatched on the synchronous write as well as the deferred one.
+- A restoration is recorded even inside `Sentinel::withoutAuditing()`.
+
+### Fixed
+
+- **A restoration sealed the masked or hashed form of its own explanation.** The summary it writes
+  keyed omissions by field name, and the security stages match a protected field by key at any depth
+  of `metadata` — so a model declaring a redacted field sealed `r****d_f****d` where the word
+  `redacted_field` belonged, and a hashed one sealed a digest of it. It is inside the canonical
+  payload, so nothing could correct it after the write: the entry verified, and what it said was
+  wrong. The omissions now travel as a list of `{field, reason}` pairs.
+- **A stage that wrote to an audited model closed the discard window of the pass it was running in**,
+  after which the next stage asking to discard threw out of the application's own `save()` claiming
+  the ledger had already assigned a sequence — which had not happened. A pass now suspends the one
+  it began inside and hands it back intact.
+- **A strict fanout rethrew before announcing**, so the policy that most needs `LedgerDestinationFailed`
+  was the one that never received it, even though the primary had already sealed and stored the entry.
+- **`toArray()` threw on a `changes` column it could read as neither diff entries nor relation
+  lines**, taking the whole serialisation with it — including on one of the entries frozen to prove
+  payload version one still means what it meant. Only a row this package did not write can be in
+  that state, and it now goes back as it was found.
+
+### Upgrade notes
+
+Nothing to migrate: no new columns, no new tables, and `payload_version` stays at `1`.
+
+Two changes are visible to code that reads what a restoration produced:
+
+- `metadata.restore.skipped` inside a `restore` entry is now a list of `{field, reason}` objects
+  instead of a map keyed by field. Entries written before this tag keep the old shape and still
+  verify; the two are told apart by whether the value is a list.
+- `RestoreResult::$skipped` in PHP is unchanged — still a map of field to `Omission`.
+
+If you relied on a failed audit write never reaching your request, set
+`SENTINEL_ON_WRITE_FAILURE=log`. The default, `throw`, is what the package already did.
+
 ## v0.14.0 — The Restore Engine (2026-08-28)
 
 An entry stops being read-only. Point at any row of the trail and the record goes back the way that

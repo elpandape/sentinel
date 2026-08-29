@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.14.0-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.15.0-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -20,7 +20,7 @@ the state was before, what it is now — and whether the record itself can be pr
 
 ```json
 "repositories": [{ "type": "vcs", "url": "https://github.com/elpandape/sentinel" }],
-"require": { "elpandape/sentinel": "v0.14.0" }
+"require": { "elpandape/sentinel": "v0.15.0" }
 ```
 
 ```bash
@@ -47,6 +47,7 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.12.1` | Custom events and authentication events: `Sentinel::event()` and an opt-in subscriber over the five auth events |
 | `v0.13.0` | State transitions: `Sentinel::transition()`, `$auditTransitions`, an optional state machine, `whereType()` and the lifeline with time spent in each state |
 | `v0.14.0` | The Restore Engine: `$audit->restore()`, granular and relation restores, `RestoreResult`, and two cancellable lifecycle events |
+| `v0.15.0` | The lifecycle events, a write-failure policy, and `toArray()` frozen as a public contract |
 
 Everything else is on the roadmap: advanced verification (checkpoints and signatures), retention and
 compliance, performance modes and distributed tracing.
@@ -68,7 +69,9 @@ that stops "auditable" from meaning "a model changed" — a fact you state and a
 are entries like any other. `v0.13.0` is the one that stops a document's lifeline from being
 something you reconstruct: `draft → pending → approved → paid` is a read, with how long it spent
 in each. `v0.14.0` is the one that makes the trail something you can act on and not only read: a
-row of it puts the record back the way it found it, and says what it could not.
+row of it puts the record back the way it found it, and says what it could not. `v0.15.0` is the one
+that lets something else react to all of it without reaching inside, and that stops the serialised
+entry from being a shape that can move under you.
 
 ## Quick start
 
@@ -433,6 +436,9 @@ For a policy you do not want to write a stage for:
 Sentinel::filter(fn (AuditData $audit): bool => $audit->subject_type !== Session::class);
 ```
 
+And for one you would rather put in a listener than in the config file, there is the `Auditing`
+event at the end of the pass — see [Events](#events).
+
 ### Updates that changed nothing
 
 An `updated` whose diff came back empty writes no entry. It happens more than you would think — a
@@ -448,6 +454,92 @@ $post->update(['title' => 'A new title']);            // ✅ entry written
 If you want those entries, take `FilterUnchanged` out of the list. Only updates are filtered: a
 creation with no comparable fields still happened, and a restore whose one moved column is not
 audited is still a restore.
+
+## Events
+
+Nine classes, and between them the whole life of an entry. Listen to react to what Sentinel does
+without reaching inside it.
+
+| Event | When | Carries | Cancellable |
+|---|---|---|---|
+| `Auditing` | End of the pipeline, before the ledger | The `AuditData`, transformed | ✅ |
+| `AuditDiscarded` | A stage returned `null`, or `Auditing` was refused | Identity, the stage and the reason | — |
+| `AuditCreating` | At the ledger's door, before `sequence` and `hash` | The `AuditData` | ❌ |
+| `AuditCreated` | The entry exists and is chained | The `Audit` | ❌ |
+| `AuditWriteFailed` | A write did not complete | Identity and the exception | ❌ |
+| `AuditRestoring` | Before a restoration touches the record | The entry, the record, the keys | ✅ |
+| `AuditRestored` | After the commit that made it true | The entry, the record, the closed result | ❌ |
+| `IntegrityVerificationFailed` | A stream or range failed verification | The stream, the reason, the sequence, the id | ❌ |
+| `LedgerDestinationFailed` | A fanout destination refused a sealed entry | The destination, the coordinate, the exception | ❌ |
+
+```php
+Event::listen(AuditCreated::class, function (AuditCreated $event): void {
+    Notification::route('slack', $channel)->notify(new Recorded($event->entry));
+});
+```
+
+**Prefer queued listeners for anything slow.** They are dispatched inline, on the write path, so a
+listener that calls an API charges it to the request that saved the model.
+
+### Cancelling is only legal before the entry has identity
+
+`Auditing` is the application's own say, at the end of the pipeline and before the ledger:
+
+```php
+Event::listen(Auditing::class, function (Auditing $event): bool|null {
+    if ($event->audit->subject_type === Session::class) {
+        app(Discard::class)->because('sessions are not kept');
+
+        return false;
+    }
+
+    return null;
+});
+```
+
+It comes **after** masking, hashing and encryption, for the reason the policy stage is last: before
+them, the entry holds the plaintext of every declared field — and for an entry a stage is about to
+drop, that payload is never transformed at all. A listener putting that on a queue is the one route
+the pipeline exists to close.
+
+The subject is not a listener's to rewrite. It says what the entry is about and which chain signs
+it, and both were settled before the listener saw it; anything the listener does to
+`subject_type` or `subject_id` is put back.
+
+Refusing here costs no `sequence`, so the chain the entry never joined has no gap. Past the ledger
+it is a usage error and throws — `AuditCreating` is announced, not consulted:
+
+```php
+Event::listen(AuditCreating::class, fn () => app(Discard::class)->because('too late'));  // ❌ throws
+```
+
+However an entry is stopped — a stage returning `null`, a policy, or a listener here — it leaves
+through **one door**, `AuditDiscarded`, with the reason whoever stopped it gave.
+
+### When a write fails
+
+```php
+'on_write_failure' => env('SENTINEL_ON_WRITE_FAILURE', 'throw'),
+'log_channel' => env('SENTINEL_LOG_CHANNEL'),
+```
+
+`throw` propagates the failure to whoever caused the entry. `log` records it through the channel
+above — identity and the exception, never the payload — and lets the request through. One default
+for every environment, because a policy that differs between them is a policy nobody has tested.
+Compliance overrules it: a ledger that can lose entries in silence proves nothing.
+
+`AuditWriteFailed` is dispatched either way, so the policy decides what happens to the request and
+not whether you are told.
+
+**A write deferred to a commit never propagates**, whatever the policy says. By then the transaction
+has committed: an exception would report the failure of something that succeeded, and would stop
+every later entry of the same operation from even being attempted. It is announced and recorded
+instead. If you need a failed audit to fail the operation, turn `transactions.after_commit` off —
+and give up discarding on rollback in exchange.
+
+One more ordering worth knowing, because two settings sound alike: `ledger.ledgers.fanout.on_failure`
+decides whether a *secondary destination* refusing an entry counts as a failed write at all;
+`on_write_failure` decides what a failed write does to the request.
 
 ## Protecting sensitive data
 
@@ -1482,8 +1574,13 @@ Event::listen(function (AuditRestoring $event): bool {
 
 `AuditRestoring` carries the entry, the record and the keys about to move — keys, not values, so a
 field the pipeline masked on the way in does not escape in an event payload on the way out.
-`AuditRestored` follows **after** the commit, with the closed result. Announcing it any earlier
-would tell listeners about a change a rollback is still free to undo.
+`AuditRestored` follows **after** the commit, with the closed result — its `entry` is always there,
+even where the call that returned it had none yet because your own transaction had not committed.
+Announcing it any earlier would tell listeners about a change a rollback is still free to undo.
+
+A restoration is recorded even inside `Sentinel::withoutAuditing()`. That switch says not to audit
+what you are about to do, and a restoration is not that: it is the engine writing its own trail back
+into your model, and a trail that can put a record back without saying so misleads by omission.
 
 ### A restoration is not a transition
 
@@ -1527,23 +1624,86 @@ An impersonated entry has its **own** language key rather than a clause appended
 the two languages do not put "on behalf of" in the same place, and a conditional concatenation would
 freeze English word order into every translation that came after.
 
-### `toArray()` is not a contract yet
+## Serialization
 
-`RestoreResult` and `Omission` are not frozen either, and move under the same rule.
+`$audit->toArray()` gives the entry as data, and from `v0.15.0` its shape is a **public contract**:
 
-`$audit->toArray()` gives the entry as data — who, what, the changes as the pointer list the column
-holds, the context, the labels, the correlation ids and the integrity block. **Its keys can move in
-any minor** until `v0.15.0`, which declares it stable and pins it with a snapshot test. Build against
-it if you like; do not build a public API on it yet.
+| Key | Shape |
+|---|---|
+| `id` | `string` (ULID) |
+| `audit_type`, `event`, `severity`, `source` | `string` |
+| `subject`, `actor`, `impersonator` | `{type, id}` \| `null` |
+| `tenant_id`, `version` | `string` \| `null`, `int` \| `null` |
+| `changes` | `list<{path, op, old, new}>` \| `list<relation line>` \| `null` |
+| `before`, `after`, `metadata`, `context` | `object` \| `null` (`context` is never null) |
+| `tags` | `list<string>` |
+| `transaction_id`, `request_id`, `trace_id`, `span_id`, `source_audit_id` | `string` \| `null` |
+| `integrity` | `{stream, sequence, algorithm, payload_version, previous_hash, hash, signature_key_id, verified}` |
+| `occurred_at`, `created_at` | `string`, ISO-8601 with microseconds |
+
+**Keys are only ever added.** None is renamed, none is removed, and none is quietly reinterpreted:
+a shape that has to change arrives beside the one it replaces, and the old one stays until `v2` with
+its deprecation in `UPGRADE.md`. A snapshot test names every key above, so one arriving or leaving
+is a decision somebody made rather than a detail that slipped out.
+
+`AuditResource` is the same shape over HTTP and adds nothing to it:
+
+```php
+return AuditResource::collection(Sentinel::audits()->for($invoice)->paginate(50));
+```
+
+The package mounts no routes for it. Which entries a request may see is an authorisation question,
+and Sentinel has no standing to answer it for your application.
+
+### `verified` has three states, and `null` is not failure
+
+```php
+match ($entry['integrity']['verified']) {
+    true => 'verified',
+    false => 'TAMPERED',
+    null => 'not checked',       // ← the only value until v0.18.0
+};
+```
+
+`toArray()` does not walk the chain to verify, so it says `null` rather than guessing. Write the
+three-way check: `!$entry['integrity']['verified']` renders "not checked" as "TAMPERED" in PHP and
+in JavaScript alike. To actually verify, ask: `$audit->verifyIntegrity()`.
+
+### What is deliberately not there
+
+`encryption` and `signature` are absent for different reasons. `toArray()` never decrypts, so the
+ciphertext and its `key_id` stay where they are — and publishing that block would tell every API
+consumer which fields are protected and which key is current. `signature` waits for `v0.18.0`, which
+is what fills it.
+
+`capture_id` is absent because no capture writes one yet; `criteria` and `affected_rows` because
+`v0.17.0` produces them and owns their shape; the redaction block because `v0.19.0` defines it.
+There is **no top-level `relation` key**: a relation entry's lines live inside `changes`, which is
+what the chain seals. `sentinel_audit_relations` is a queryable projection of exactly those lines —
+an index, not the fact.
+
+### Two orders the package fixes, and the ones it does not
+
+MySQL and PostgreSQL both reorder the keys of a JSON object on the way in. So everything the package
+writes, it also orders: the diff entries and the relation lines inside `changes`, the pivot maps
+inside those lines, and the labels. The same entry serialises identically on SQLite, MySQL and
+PostgreSQL.
+
+Inside `before`, `after`, `context`, `metadata` and the `old`/`new` of a change, the key order is
+your data's and the engine's. That is not part of the contract — the keys are.
+
+`RestoreResult` and `Enums\Omission` are frozen under the same only-ever-added rule, and stay
+outside `toArray()`: they answer a call, they are not part of an entry.
 
 ## Configuration
 
 `config/sentinel.php` ships every section the package will use through 1.0, with future features
 turned off. Read it once and you know what is coming.
 
-Three sections are live today beyond the basics: `resolvers` decides who and where an entry came
-from, `pipeline` is the ordered list of stages every entry travels through, and `security` holds the
-redaction mask and field lists, the encryption keyring and the hashing salt.
+Four sections are live today beyond the basics: `resolvers` decides who and where an entry came
+from, `pipeline` is the ordered list of stages every entry travels through, `security` holds the
+redaction mask and field lists, the encryption keyring and the hashing salt, and `on_write_failure`
+with `log_channel` decides what a write that did not complete does to the request.
 
 Every one of those keys also has its default **in code**. Laravel merges a published config file one
 level deep, so an installation that published `sentinel.php` before a subtree existed would
