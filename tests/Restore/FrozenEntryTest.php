@@ -32,12 +32,13 @@ it('restores from an entry sealed before the engine that restores it existed', f
 
     $result = $frozen->restore();
 
+    $record = AuditedSubject::query()->findOrFail(1);
+
     expect($frozen->payload_version)->toBe(1)
         ->and($result->applied)->toBe(['active', 'name', 'published_at'])
-        ->and(AuditedSubject::query()->findOrFail(1))
-        ->name->toBe('Grace')
-        ->active->toBe(0)
-        ->published_at->toBeNull();
+        ->and($record->getAttribute('name'))->toBe('Grace')
+        ->and($record->getAttribute('published_at'))->toBeNull()
+        ->and($record->getAttribute('active'))->toBeFalsy();
 });
 
 it('chains the restoration onto the frozen trail without touching what was there', function (): void {
