@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use ElPandaPe\Sentinel\Data\RelationLine;
 use ElPandaPe\Sentinel\Database\Factories\AuditFactory;
 use ElPandaPe\Sentinel\Diff\Diff;
+use ElPandaPe\Sentinel\Diff\DiffException;
 use ElPandaPe\Sentinel\Diff\Pointer;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
@@ -175,13 +176,17 @@ class Audit extends Model
     }
 
     /**
-     * The entry as data. Not a frozen contract yet: keys can move in any minor until the version
-     * that declares it stable and pins it with a snapshot. What is tested here is the behaviour,
-     * not the shape.
+     * The entry as data, and a frozen contract from v0.15.0: the keys of the top level and of the
+     * integrity block only ever grow. A key is never renamed and never reinterpreted — a shape
+     * that has to change arrives beside the old one, which stays until v2.
      *
      * changes keeps the pointer list the column already holds rather than a map keyed by field,
      * because a map cannot represent /profile/address/city without flattening it, and flattening
      * collides with an attribute literally named that.
+     *
+     * Nothing here inherits the order an engine happened to store a JSON column in. What the
+     * package writes it also orders; what it did not write goes back untouched, which is the only
+     * honest answer for it.
      *
      * @return array<string, mixed>
      */
@@ -202,7 +207,7 @@ class Audit extends Model
             'before' => $this->before,
             'after' => $this->after,
             'metadata' => $this->metadata,
-            'tags' => $this->tags->map(static fn (AuditTag $tag): string => $tag->tag)->values()->all(),
+            'tags' => $this->tags->map(static fn (AuditTag $tag): string => $tag->tag)->sort()->values()->all(),
             'context' => $this->context,
             'transaction_id' => $this->transaction_id,
             'request_id' => $this->request_id,
@@ -361,11 +366,15 @@ class Audit extends Model
     }
 
     /**
-     * A relation entry's changes are its lines, and they go out as they are stored. Reading them
-     * through the diff would hand back a presentation of the lines rather than the lines, and this
-     * is the serialised entry, not a rendering of it.
+     * A relation entry's changes are its lines, and they go out as lines rather than as the diff
+     * they can be read as: this is the serialised entry, not a rendering of it. They go out in the
+     * package's key order all the same, because the order they come back in is the engine's.
      *
-     * @return list<array<array-key, mixed>>|null
+     * A column holding neither shape goes back exactly as it was found. Only a row this package
+     * did not write can be in that state, and refusing to serialise it would let one such row stop
+     * a whole page of the trail from being read.
+     *
+     * @return array<array-key, mixed>|null
      */
     private function serialized(): ?array
     {
@@ -376,11 +385,18 @@ class Audit extends Model
             return null;
         }
 
-        if (! $this->carriesRelationLines($changes)) {
-            return $this->diff()->toArray();
+        if ($this->carriesRelationLines($changes)) {
+            return array_values(array_map(
+                RelationLine::ordered(...),
+                array_filter($changes, is_array(...)),
+            ));
         }
 
-        return array_values(array_filter($changes, is_array(...)));
+        try {
+            return $this->diff()->toArray();
+        } catch (DiffException) {
+            return $changes;
+        }
     }
 
     /**

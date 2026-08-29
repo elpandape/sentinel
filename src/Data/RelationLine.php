@@ -21,6 +21,11 @@ use ElPandaPe\Sentinel\Enums\RelationOperation;
 final readonly class RelationLine
 {
     /**
+     * @var list<string>
+     */
+    private const array KEYS = ['relation', 'operation', 'related_type', 'related_id', 'pivot_before', 'pivot_after'];
+
+    /**
      * @param  array<string, mixed>|null  $pivot_before  null means the row did not exist; an empty map, that it existed and carried nothing
      * @param  array<string, mixed>|null  $pivot_after
      */
@@ -32,6 +37,36 @@ final readonly class RelationLine
         public ?array $pivot_before = null,
         public ?array $pivot_after = null,
     ) {}
+
+    /**
+     * One stored line with the package's key order put back on it. A JSON column hands its objects
+     * back in whatever order the engine kept them — MySQL and PostgreSQL both reorder an object's
+     * keys on the way in — so a line read back and published as it came would be a different shape
+     * on each of the three engines the chain is verified on.
+     *
+     * Anything the line carries that is not one of the six travels behind them, by name, so a
+     * reordering is never also a loss.
+     *
+     * @param  array<array-key, mixed>  $line
+     * @return array<string, mixed>
+     */
+    public static function ordered(array $line): array
+    {
+        $ordered = [];
+
+        foreach (self::KEYS as $key) {
+            $ordered[$key] = self::sortedValue($line[$key] ?? null);
+        }
+
+        $rest = array_diff_key($line, array_flip(self::KEYS));
+        ksort($rest);
+
+        foreach ($rest as $key => $value) {
+            $ordered[(string) $key] = $value;
+        }
+
+        return $ordered;
+    }
 
     /**
      * The lines as the entry carries them: ordered, with the pivot maps ordered too, so the same
@@ -145,5 +180,16 @@ final readonly class RelationLine
         ksort($pivot);
 
         return $pivot;
+    }
+
+    private static function sortedValue(mixed $value): mixed
+    {
+        if (! is_array($value)) {
+            return $value;
+        }
+
+        ksort($value);
+
+        return $value;
     }
 }
