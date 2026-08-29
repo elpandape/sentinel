@@ -117,3 +117,25 @@ it('drops an element it did not write rather than abandon the entries behind it'
     expect($taken)->toHaveCount(1)
         ->and($taken[0]->capture_id)->toBe(frozenUlid('SURVIVOR'));
 });
+
+it('puts entries back at the head, in the order they were taken', function (Closure $make): void {
+    $buffer = $make();
+
+    $buffer->push(auditData(['capture_id' => frozenUlid('FIRST001')]));
+    $buffer->push(auditData(['capture_id' => frozenUlid('SECOND01')]));
+    $buffer->push(auditData(['capture_id' => frozenUlid('THIRD001')]));
+
+    $buffer->putBack($buffer->take(2));
+
+    expect(array_map(static fn (AuditData $a): ?string => $a->capture_id, $buffer->take(10)))
+        ->toBe([frozenUlid('FIRST001'), frozenUlid('SECOND01'), frozenUlid('THIRD001')]);
+})->with('buffers');
+
+it('puts nothing back without touching what is waiting', function (Closure $make): void {
+    $buffer = $make();
+
+    $buffer->push(auditData());
+    $buffer->putBack([]);
+
+    expect($buffer->size())->toBe(1);
+})->with('buffers');

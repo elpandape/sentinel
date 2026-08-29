@@ -9,7 +9,6 @@ use ElPandaPe\Sentinel\Contracts\DispatchStrategy;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Enums\Mode;
 use ElPandaPe\Sentinel\Events\Audited;
-use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Transactions\TransactionScope;
@@ -84,7 +83,7 @@ final readonly class Dispatcher
         return match ($this->config->mode()) {
             Mode::Sync => $this->container->make(SyncStrategy::class),
             Mode::Queue => $this->container->make(QueueStrategy::class),
-            Mode::Buffered => throw ConfigurationException::modeNotYetAvailable('buffered', 'v0.16.1'),
+            Mode::Buffered => $this->container->make(BufferStrategy::class),
         };
     }
 

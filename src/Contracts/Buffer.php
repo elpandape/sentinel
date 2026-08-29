@@ -30,6 +30,18 @@ interface Buffer
      */
     public function take(int $limit): array;
 
+    /**
+     * Entries a flush took and could not settle, put back at the head in the order they were taken.
+     *
+     * Taking is destructive, so without this a ledger that was briefly unreachable would turn a
+     * flush into the loss the mode is careful to bound: those entries never reached a chain, but
+     * they were not lost to a crash either — nothing happened to them at all. What is lost is what
+     * a process dies holding, not what a failed write handed back.
+     *
+     * @param  list<AuditData>  $audits
+     */
+    public function putBack(array $audits): void;
+
     public function size(): int;
 
     /**

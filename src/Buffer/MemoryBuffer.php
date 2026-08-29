@@ -45,6 +45,14 @@ final class MemoryBuffer implements Buffer
         return $taken;
     }
 
+    /**
+     * @param  list<AuditData>  $audits
+     */
+    public function putBack(array $audits): void
+    {
+        $this->waiting = [...$audits, ...$this->waiting];
+    }
+
     public function size(): int
     {
         return count($this->waiting);

@@ -49,6 +49,22 @@ final readonly class RedisBuffer implements Buffer
         return is_array($taken) ? $this->decode($taken) : [];
     }
 
+    /**
+     * Reversed on the way in, because each argument of the pushing command lands in front of the
+     * one before it: handing them over in order would put them back backwards, and the order the
+     * head of the list is in is the order a flush settles them in.
+     *
+     * @param  list<AuditData>  $audits
+     */
+    public function putBack(array $audits): void
+    {
+        if ($audits === []) {
+            return;
+        }
+
+        $this->connection->command('lpush', [$this->key, ...array_map($this->encode(...), array_reverse($audits))]);
+    }
+
     public function size(): int
     {
         $size = $this->connection->command('llen', [$this->key]);

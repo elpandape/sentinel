@@ -2,9 +2,12 @@
 
 declare(strict_types=1);
 
+use ElPandaPe\Sentinel\Contracts\Buffer;
+use ElPandaPe\Sentinel\Dispatch\BufferStrategy;
 use ElPandaPe\Sentinel\Dispatch\Dispatcher;
+use ElPandaPe\Sentinel\Dispatch\QueueStrategy;
 use ElPandaPe\Sentinel\Dispatch\SyncStrategy;
-use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
+use ElPandaPe\Sentinel\Enums\Mode;
 use ElPandaPe\Sentinel\Models\Audit;
 
 use function ElPandaPe\Sentinel\Tests\auditData;
@@ -26,29 +29,30 @@ it('hands the settled entry to the callback that asked for it', function (): voi
     expect($handed)->toBeString();
 });
 
-it('refuses a mode this release has no strategy for, naming the version it arrives in', function (): void {
-    config()->set('sentinel.mode', 'buffered');
+it('has a strategy for every mode the configuration accepts', function (Mode $mode, string $strategy): void {
+    config()->set('sentinel.mode', $mode->value);
+    config()->set('sentinel.buffer.store', 'memory');
 
-    expect(fn (): ?Audit => app(Dispatcher::class)->dispatch(auditData()))
-        ->toThrow(ConfigurationException::class, 'arrives in v0.16.1');
-});
+    app(Dispatcher::class)->dispatch(auditData());
 
-it('leaves the trail empty when it refuses the mode', function (): void {
-    config()->set('sentinel.mode', 'buffered');
-
-    rescue(fn (): ?Audit => app(Dispatcher::class)->dispatch(auditData()), report: false);
-
-    expect(Audit::query()->count())->toBe(0);
-});
+    expect(app($strategy))->toBeInstanceOf($strategy);
+})->with([
+    'sync' => [Mode::Sync, SyncStrategy::class],
+    'queue' => [Mode::Queue, QueueStrategy::class],
+    'buffered' => [Mode::Buffered, BufferStrategy::class],
+]);
 
 it('reads the strategy again on every entry, so the mode can change between two of them', function (): void {
     app(Dispatcher::class)->dispatch(auditData());
 
     config()->set('sentinel.mode', 'buffered');
+    config()->set('sentinel.buffer.store', 'memory');
+    config()->set('sentinel.buffer.size', 500);
 
-    expect(fn (): ?Audit => app(Dispatcher::class)->dispatch(auditData()))
-        ->toThrow(ConfigurationException::class)
-        ->and(Audit::query()->count())->toBe(1);
+    app(Dispatcher::class)->dispatch(auditData(['occurred_at' => new DateTimeImmutable]));
+
+    expect(Audit::query()->count())->toBe(1)
+        ->and(app(Buffer::class)->size())->toBe(1);
 });
 
 it('resolves the synchronous strategy through the container, so an application may replace it', function (): void {
