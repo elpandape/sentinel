@@ -31,6 +31,7 @@ use ElPandaPe\Sentinel\Sentinel;
 use ElPandaPe\Sentinel\SentinelServiceProvider;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Redis\Factory as Redis;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Artisan;
@@ -892,6 +893,115 @@ foreach ([
         $total,
         $total * 1000 / MODE_ITERATIONS,
         $total === $plainRequest ? '—' : sprintf('%+.1f%%', ($total / $plainRequest - 1) * 100),
+        PHP_EOL,
+    );
+}
+
+/*
+ * The one place in the package where the cost of auditing is not per write but per row of a set the
+ * caller never enumerated. Summary is flat by construction — it reads nothing and writes one entry
+ * whatever the size — so what is worth measuring is the distance between it and the two modes that
+ * describe rows, and what each of the three write modes does to that distance.
+ *
+ * The set is the same rows every pass and the value alternates, so every pass really does move
+ * every row: an update that changes nothing reports no affected rows on MySQL, and an operation
+ * with none is one the pipeline discards.
+ */
+const MASS_ROWS = 500;
+
+$massTarget = static fn (): Builder => BenchAudited::query()->whereBetween('id', [1, MASS_ROWS]);
+
+$mass = static function (?string $mode, int $pass) use ($app, $massTarget): float {
+    $app->forgetScopedInstances();
+
+    $value = $pass % 2 === 0 ? 'admin' : 'editor';
+    $query = $massTarget();
+
+    $start = hrtime(true);
+
+    if ($mode === null) {
+        $query->update(['role' => $value]);  // @phpstan-ignore-line argument.type
+    } else {
+        $query->auditing($mode)->update(['role' => $value]);
+    }
+
+    return (hrtime(true) - $start) / 1_000_000;
+};
+
+$massMedian = static function (?string $mode, string $writeMode) use ($app, $mass): float {
+    $app->make('config')->set('sentinel.mode', $writeMode);
+
+    $passes = [];
+
+    for ($pass = 0; $pass < 5; $pass++) {
+        $passes[] = $mass($mode, $pass);
+    }
+
+    sort($passes);
+
+    return $passes[2];
+};
+
+$massPlain = $massMedian(null, 'sync');
+$massSummary = $massMedian('summary', 'sync');
+$massIndividualSync = $massMedian('individual', 'sync');
+
+// One row of room, so the set fits and every row of it is described.
+$app->make('config')->set('sentinel.mass_operations.threshold', MASS_ROWS);
+$massHybridUnder = $massMedian('hybrid', 'sync');
+
+// One row short, which is what degrading costs: the bounded read, and then a summary.
+$app->make('config')->set('sentinel.mass_operations.threshold', MASS_ROWS - 1);
+$massHybridOver = $massMedian('hybrid', 'sync');
+
+$app->make('config')->set('sentinel.mass_operations.threshold', MASS_ROWS);
+$massIndividualQueue = $massMedian('individual', 'queue');
+
+/*
+ * The buffered pair, measured as a pair and in one pass rather than as a median of several. What
+ * the request pays and what the flush then pays are the mode; either one alone is half of it, and
+ * they can only be read off the same batch — the buffer is scoped, so resolving the container again
+ * between them would be asking a different buffer how much it was holding.
+ *
+ * The buffer is given room for the whole batch, so the flush is the one below and not one that
+ * happened to land inside the request being timed.
+ */
+$app->make('config')->set('sentinel.mode', 'buffered');
+$app->make('config')->set('sentinel.buffer.store', 'memory');
+$app->make('config')->set('sentinel.buffer.size', MASS_ROWS * 4);
+$app->make('config')->set('sentinel.buffer.flush_interval', 3600);
+$app->forgetScopedInstances();
+
+$massBufferedStart = hrtime(true);
+$massTarget()->auditing('individual')->update(['role' => 'buffered']);
+$massIndividualBuffered = (hrtime(true) - $massBufferedStart) / 1_000_000;
+
+$massFlushStart = hrtime(true);
+$app->make(Flusher::class)->flush();
+$massFlush = (hrtime(true) - $massFlushStart) / 1_000_000;
+
+$app->make('config')->set('sentinel.mode', 'sync');
+
+echo PHP_EOL, '| Mass variant | Rows | Total (ms) | Per row (µs) | Δ vs not audited |', PHP_EOL;
+echo '|---|---|---|---|---|', PHP_EOL;
+
+foreach ([
+    'not audited' => $massPlain,
+    'summary, sync' => $massSummary,
+    'hybrid under the threshold, sync' => $massHybridUnder,
+    'hybrid over the threshold, sync' => $massHybridOver,
+    'individual, sync' => $massIndividualSync,
+    'individual, queue (what the request pays)' => $massIndividualQueue,
+    'individual, buffered (what the request pays)' => $massIndividualBuffered,
+    'individual, buffered (what the flush then pays)' => $massFlush,
+] as $label => $total) {
+    printf(
+        '| %s | %d | %.1f | %.1f | %s |%s',
+        $label,
+        MASS_ROWS,
+        $total,
+        $total * 1000 / MASS_ROWS,
+        $total === $massPlain ? '—' : sprintf('%+.1f%%', ($total / $massPlain - 1) * 100),
         PHP_EOL,
     );
 }
