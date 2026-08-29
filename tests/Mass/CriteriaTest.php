@@ -190,6 +190,15 @@ it('records an unfiltered operation as one with no clauses, which is the fact wo
     expect(massCriteria(static fn (Builder $query): Builder => $query))->toBe(['wheres' => []]);
 });
 
+it('names the columns it will not say the value of, beside the rest of what stays opaque', function (): void {
+    $criteria = new Criteria(sentinelConfig())->of(
+        DB::table('fixture_audited_subjects')->where('active', true),
+        ['score'],
+    );
+
+    expect($criteria['writes'])->toBe(['score']);
+});
+
 it('records an upsert as the shape of what was sent, because it names its own rows', function (): void {
     expect(new Criteria(sentinelConfig())->ofRows(['id', 'name'], ['id'], ['name'], 3))
         ->toBe(['columns' => ['id', 'name'], 'unique_by' => ['id'], 'update' => ['name'], 'rows' => 3]);

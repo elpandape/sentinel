@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Mass;
 
-use BackedEnum;
-use DateTimeInterface;
-use ElPandaPe\Sentinel\Diff\Normalizer;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Query\JoinClause;
@@ -52,9 +49,15 @@ final readonly class Criteria
     public function __construct(private Config $config) {}
 
     /**
+     * The shape of the operation: what it was aimed at, what it reached through, and the columns it
+     * wrote whose value is not something to write down. The last of those lives here rather than in
+     * `changes` because it is the same kind of fact as a raw fragment — a name, with the body left
+     * out — and a change is not allowed to be silent about what it changed to.
+     *
+     * @param  list<string>  $opaque
      * @return array<string, mixed>
      */
-    public function of(Builder $query): array
+    public function of(Builder $query, array $opaque = []): array
     {
         $criteria = ['wheres' => $this->wheres($query->wheres)];
 
@@ -62,6 +65,10 @@ final readonly class Criteria
 
         if ($joins !== []) {
             $criteria['joins'] = $joins;
+        }
+
+        if ($opaque !== []) {
+            $criteria['writes'] = $opaque;
         }
 
         return $criteria;
@@ -212,7 +219,7 @@ final readonly class Criteria
      */
     private function valued(array $where): array
     {
-        $written = $this->written($where['value'] ?? null);
+        $written = Literal::of($where['value'] ?? null);
 
         return $written === [] ? [] : ['value' => $written[0]];
     }
@@ -226,7 +233,7 @@ final readonly class Criteria
         $written = [];
 
         foreach ($values as $value) {
-            $one = $this->written($value);
+            $one = Literal::of($value);
 
             if ($one === []) {
                 return null;
@@ -236,23 +243,6 @@ final readonly class Criteria
         }
 
         return $written;
-    }
-
-    /**
-     * The value, in a list of one, or an empty list when there is no writing it down. Anything but
-     * a scalar, a date or an enum is refused outright — a binding holding an object of the
-     * application's own is the case where dumping what it contains is exactly wrong.
-     *
-     * @return list<mixed>
-     */
-    private function written(mixed $value): array
-    {
-        return match (true) {
-            $value === null, is_scalar($value) => [$value],
-            $value instanceof BackedEnum => [$value->value],
-            $value instanceof DateTimeInterface => [$value->format(Normalizer::DATE_FORMAT)],
-            default => [],
-        };
     }
 
     /**

@@ -53,6 +53,7 @@ return [
         'attached' => 'vinculó',
         'detached' => 'desvinculó',
         'synced' => 'sincronizó',
+        'upserted' => 'insertó o actualizó',
         'transition' => 'movió',
         'restore' => 'restauró el estado de',
         'rekeyed' => 'recifró',

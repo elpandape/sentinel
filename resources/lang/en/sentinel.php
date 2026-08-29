@@ -53,6 +53,7 @@ return [
         'attached' => 'attached',
         'detached' => 'detached',
         'synced' => 'synced',
+        'upserted' => 'inserted or updated',
         'transition' => 'moved',
         'restore' => 'restored the state of',
         'rekeyed' => 're-keyed',

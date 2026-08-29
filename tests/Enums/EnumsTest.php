@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Enums\AuditEvent;
+use ElPandaPe\Sentinel\Enums\MassMode;
 use ElPandaPe\Sentinel\Enums\Mode;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
@@ -10,7 +11,8 @@ use ElPandaPe\Sentinel\Enums\Source;
 it('exposes the audit events the engine records', function (): void {
     expect(AuditEvent::from('force_deleted'))->toBe(AuditEvent::ForceDeleted)
         ->and(AuditEvent::from('rekeyed'))->toBe(AuditEvent::Rekeyed)
-        ->and(AuditEvent::cases())->toHaveCount(12);
+        ->and(AuditEvent::from('upserted'))->toBe(AuditEvent::Upserted)
+        ->and(AuditEvent::cases())->toHaveCount(13);
 });
 
 it('exposes every execution source', function (): void {
@@ -21,6 +23,11 @@ it('exposes every execution source', function (): void {
 it('exposes every write mode', function (): void {
     expect(Mode::from('buffered'))->toBe(Mode::Buffered)
         ->and(Mode::cases())->toHaveCount(3);
+});
+
+it('exposes every mode a mass operation can be recorded in', function (): void {
+    expect(MassMode::from('hybrid'))->toBe(MassMode::Hybrid)
+        ->and(MassMode::cases())->toHaveCount(3);
 });
 
 it('ranks severities', function (): void {
