@@ -12,10 +12,10 @@ use function ElPandaPe\Sentinel\Tests\httpRequest;
 use function ElPandaPe\Sentinel\Tests\runtime;
 use function ElPandaPe\Sentinel\Tests\sentinelConfig;
 
-it('resolves to queue when the runtime is writing an audit entry', function (): void {
-    runtime()->writingAuditEntry();
+it('resolves to queue while the runtime is writing an audit entry', function (): void {
+    $source = runtime()->whileWritingAudit(static fn (): Source => app(SourceResolver::class)->resolve()['source']);
 
-    expect(app(SourceResolver::class)->resolve()['source'])->toBe(Source::Queue);
+    expect($source)->toBe(Source::Queue);
 });
 
 it('resolves to job when the runtime holds a job', function (): void {

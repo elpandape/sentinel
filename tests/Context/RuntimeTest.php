@@ -54,17 +54,60 @@ it('remembers the job it entered until it leaves', function (): void {
     expect($runtime->job())->toBeNull();
 });
 
-it('latches the scheduler and the audit writing marker', function (): void {
+it('latches the scheduler', function (): void {
     $runtime = runtime();
 
-    expect($runtime->scheduled())->toBeFalse()
-        ->and($runtime->writingAudit())->toBeFalse();
+    expect($runtime->scheduled())->toBeFalse();
 
     $runtime->enteredSchedule();
-    $runtime->writingAuditEntry();
 
-    expect($runtime->scheduled())->toBeTrue()
-        ->and($runtime->writingAudit())->toBeTrue();
+    expect($runtime->scheduled())->toBeTrue();
+});
+
+it('marks an audit write only for as long as it lasts', function (): void {
+    $runtime = runtime();
+
+    expect($runtime->writingAudit())->toBeFalse()
+        ->and($runtime->whileWritingAudit(static fn (): bool => runtime()->writingAudit()))->toBeTrue()
+        ->and($runtime->writingAudit())->toBeFalse();
+});
+
+it('hands the marker back even when the write throws', function (): void {
+    $runtime = runtime();
+
+    rescue(static fn (): mixed => $runtime->whileWritingAudit(static fn (): never => throw new RuntimeException('down')), report: false);
+
+    expect($runtime->writingAudit())->toBeFalse();
+});
+
+it('gives an inner command back the one it started inside', function (): void {
+    $runtime = runtime();
+
+    $runtime->enteredCommand('invoices:close', ['month' => '2026-08']);
+    $runtime->enteredCommand('sentinel:flush', []);
+
+    expect($runtime->command())->toBe('sentinel:flush')
+        ->and($runtime->arguments())->toBeEmpty();
+
+    $runtime->leftCommand();
+
+    expect($runtime->command())->toBe('invoices:close')
+        ->and($runtime->arguments())->toBe(['month' => '2026-08']);
+});
+
+it('gives an inner job back the one it started inside', function (): void {
+    $runtime = runtime();
+    $outer = new FakeQueueJob('App\\Jobs\\CloseInvoices', [], 'invoices', 1);
+    $inner = new FakeQueueJob('App\\Jobs\\SettleAudit', [], 'audits', 1);
+
+    $runtime->enteredJob($outer);
+    $runtime->enteredJob($inner);
+
+    expect($runtime->job())->toBe($inner);
+
+    $runtime->leftJob();
+
+    expect($runtime->job())->toBe($outer);
 });
 
 it('holds the identifier the middleware assigned', function (): void {
