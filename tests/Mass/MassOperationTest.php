@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 
 use function ElPandaPe\Sentinel\Tests\massEntries;
+use function ElPandaPe\Sentinel\Tests\presenter;
 use function ElPandaPe\Sentinel\Tests\seedSubjects;
 use function ElPandaPe\Sentinel\Tests\statementsDuring;
 
@@ -304,4 +305,33 @@ it('leaves the statement untouched while the engine is paused', function (): voi
         ->update(['status' => 'archived']));
 
     expect($affected)->toBe(3)->and(Audit::query()->count())->toBe(0);
+});
+
+it('serialises what it was aimed at and how much it reached', function (): void {
+    seedSubjects(4);
+
+    AuditedSubject::query()->where('status', 'draft')->auditing()->update(['status' => 'archived']);
+
+    $serialised = massEntries()[0]->toArray();
+
+    expect($serialised['affected_rows'])->toBe(4)
+        ->and($serialised['criteria'])->toBe(['wheres' => [
+            ['type' => 'basic', 'boolean' => 'and', 'column' => 'status', 'operator' => '=', 'value' => 'draft'],
+        ]]);
+});
+
+it('reads a mass entry as the set it was about, not as one thing that happened to nothing', function (): void {
+    seedSubjects(500);
+
+    AuditedSubject::query()->auditing()->update(['status' => 'archived']);
+
+    expect(presenter()->entry(massEntries()[0]))->toBe('Someone changed 500 AuditedSubject records');
+});
+
+it('reads a row of a mass operation as the record it was about', function (): void {
+    seedSubjects(1);
+
+    AuditedSubject::query()->auditing('individual')->update(['status' => 'archived']);
+
+    expect(presenter()->entry(massEntries()[1]))->toBe('Someone changed AuditedSubject #1');
 });

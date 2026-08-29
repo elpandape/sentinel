@@ -36,6 +36,7 @@ return [
         'attached' => '  + :related',
         'detached' => '  - :related',
         'repivoted' => '  ~ :related',
+        'mass' => ':count :type records',
         'timeline' => ':time  :line',
         'transition' => ':line · :from → :to',
         'nothing' => 'nothing',

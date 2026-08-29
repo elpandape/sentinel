@@ -214,6 +214,8 @@ class Audit extends Model
             'trace_id' => $this->trace_id,
             'span_id' => $this->span_id,
             'source_audit_id' => $this->source_audit_id,
+            'criteria' => $this->criteria,
+            'affected_rows' => $this->affected_rows,
             'integrity' => [
                 'stream' => $this->stream,
                 'sequence' => $this->sequence,

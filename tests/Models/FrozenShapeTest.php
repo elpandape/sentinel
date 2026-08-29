@@ -38,6 +38,8 @@ const FROZEN_KEYS = [
     'trace_id',
     'span_id',
     'source_audit_id',
+    'criteria',
+    'affected_rows',
     'integrity',
     'occurred_at',
     'created_at',
@@ -85,10 +87,15 @@ it('keeps the ciphertext and the signature where they are', function (): void {
     expect($audit->toArray())->not->toHaveKey('encryption')
         ->not->toHaveKey('signature')
         ->not->toHaveKey('capture_id')
-        ->not->toHaveKey('criteria')
-        ->not->toHaveKey('affected_rows')
         ->not->toHaveKey('redacted_at')
         ->not->toHaveKey('relation');
+});
+
+it('publishes the two keys v0.17.0 owns, and null for an entry that is not a mass operation', function (): void {
+    $audit = app(DatabaseLedger::class)->write(auditData());
+
+    expect($audit->toArray()['criteria'])->toBeNull()
+        ->and($audit->toArray()['affected_rows'])->toBeNull();
 });
 
 it('says an entry was not checked rather than that it failed', function (): void {

@@ -7,6 +7,7 @@ namespace ElPandaPe\Sentinel\Presentation;
 use ElPandaPe\Sentinel\Capture\RelationCapture;
 use ElPandaPe\Sentinel\Diff\Pointer;
 use ElPandaPe\Sentinel\Enums\RelationOperation;
+use ElPandaPe\Sentinel\Mass\MassCapture;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Transitions\Transition;
@@ -31,7 +32,7 @@ final readonly class AuditPresenter
         $line = [
             'actor' => $this->party($audit->actor_type, $audit->actor_id, 'someone'),
             'event' => $this->event($audit->event),
-            'subject' => $this->party($audit->subject_type, $audit->subject_id, 'something'),
+            'subject' => $this->subject($audit),
         ];
 
         $sentence = $audit->impersonator_type === null
@@ -184,6 +185,23 @@ final readonly class AuditPresenter
             is_scalar($value) => (string) $value,
             default => $this->line('structure'),
         };
+    }
+
+    /**
+     * A mass entry is about a set rather than a record, so its subject is a count and a class
+     * instead of a class and an id. Without this it would read "someone changed something", which
+     * drops both halves of what the entry actually holds — how many rows, and of what.
+     */
+    private function subject(Audit $audit): string
+    {
+        if ($audit->audit_type !== MassCapture::AUDIT_TYPE || $audit->subject_id !== null || $audit->subject_type === null) {
+            return $this->party($audit->subject_type, $audit->subject_id, 'something');
+        }
+
+        return $this->line('mass', [
+            'count' => $audit->affected_rows ?? 0,
+            'type' => class_basename($audit->subject_type),
+        ]);
     }
 
     private function party(?string $type, ?string $id, string $fallback): string
