@@ -9,6 +9,7 @@ use ElPandaPe\Sentinel\Contracts\Masker;
 use ElPandaPe\Sentinel\Contracts\Resolver;
 use ElPandaPe\Sentinel\Contracts\Transformer;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
+use ElPandaPe\Sentinel\Enums\FailurePolicy;
 use ElPandaPe\Sentinel\Enums\FanoutPolicy;
 use ElPandaPe\Sentinel\Enums\Mode;
 use ElPandaPe\Sentinel\Enums\Severity;
@@ -148,6 +149,29 @@ final readonly class Config
     public function afterCommit(): bool
     {
         return $this->boolean('transactions.after_commit');
+    }
+
+    /**
+     * What a failed write does to the request that caused it. Compliance overrules the setting
+     * rather than validating it, because the two say different things: the setting is an operator
+     * deciding how much a lost entry is allowed to cost, and compliance is a statement that no
+     * entry may be lost at all.
+     */
+    public function writeFailurePolicy(): FailurePolicy
+    {
+        if ($this->complianceEnabled()) {
+            return FailurePolicy::Throw;
+        }
+
+        $value = $this->string('on_write_failure');
+
+        return FailurePolicy::tryFrom($value)
+            ?? throw ConfigurationException::unknown('on_write_failure', $value, $this->accepted(FailurePolicy::class));
+    }
+
+    public function logChannel(): ?string
+    {
+        return $this->nullableString('log_channel');
     }
 
     /**

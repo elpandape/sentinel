@@ -24,6 +24,23 @@ return [
         'flush_interval' => 60,
     ],
 
+    /*
+     * What a write that did not complete does to the request that caused it: throw propagates the
+     * failure, log records it through the channel below and lets the request through. One default
+     * and not one per environment, because a policy that differs between them is a policy nobody
+     * has tested. Compliance forces throw regardless: a ledger that can lose entries in silence
+     * proves nothing.
+     *
+     * It governs the write that happens in the request. One deferred to a commit cannot propagate
+     * whatever this says — by then the transaction has committed, and an exception out of it would
+     * report a failure of something that succeeded — so a deferred failure is always announced and
+     * recorded instead.
+     */
+    'on_write_failure' => env('SENTINEL_ON_WRITE_FAILURE', 'throw'),
+
+    // The channel a recorded failure is written through. Null uses the application default.
+    'log_channel' => env('SENTINEL_LOG_CHANNEL'),
+
     'ledger' => [
         'default' => env('SENTINEL_LEDGER', 'database'),
         'ledgers' => [

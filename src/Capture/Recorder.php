@@ -9,7 +9,6 @@ use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Events\AuditCreated;
 use ElPandaPe\Sentinel\Events\AuditCreating;
-use ElPandaPe\Sentinel\Events\AuditWriteFailed;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Support\Config;
@@ -39,6 +38,7 @@ final readonly class Recorder
         private Config $config,
         private DatabaseManager $database,
         private Dispatcher $events,
+        private WriteFailure $failures,
     ) {}
 
     /**
@@ -111,7 +111,7 @@ final readonly class Recorder
         $connection = $this->connection($subject);
 
         if (! $this->config->afterCommit() || $connection->transactionLevel() === 0) {
-            return $this->announce($this->written($this->write($audit)), $settled);
+            return $this->announce($this->attempted($audit), $settled);
         }
 
         $written = null;
@@ -153,19 +153,33 @@ final readonly class Recorder
     }
 
     /**
-     * The deferred write is its own failure boundary. The framework runs commit callbacks in a
-     * bare foreach, so an exception here would stop every later entry of the same transaction
-     * from being attempted at all — an append-only engine losing the rest of an operation
-     * because the first entry hit a constraint — and would surface out of a DB::transaction()
-     * that has already committed. So it is announced, the way a fanout destination that refuses
-     * an entry is announced, rather than swallowed or thrown.
+     * The write that happens in the request, where the configured policy is free to decide: the
+     * caller is still on the stack and an exception reaches whoever caused the entry.
+     */
+    private function attempted(AuditData $audit): ?Audit
+    {
+        try {
+            return $this->written($this->write($audit));
+        } catch (Throwable $failure) {
+            $this->failures->inRequest($audit, $failure);
+
+            return null;
+        }
+    }
+
+    /**
+     * The deferred write is its own failure boundary, and the policy does not reach it. The
+     * framework runs commit callbacks in a bare foreach, so an exception here would stop every
+     * later entry of the same transaction from being attempted at all — an append-only engine
+     * losing the rest of an operation because the first entry hit a constraint — and would
+     * surface out of a DB::transaction() that has already committed.
      */
     private function deferred(AuditData $audit): ?Audit
     {
         try {
             return $this->written($this->write($audit));
         } catch (Throwable $failure) {
-            $this->events->dispatch(AuditWriteFailed::of($audit, $failure));
+            $this->failures->afterCommit($audit, $failure);
 
             return null;
         }
