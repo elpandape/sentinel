@@ -19,10 +19,14 @@ use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Events\AuditCreated;
+use ElPandaPe\Sentinel\Events\AuditCreating;
+use ElPandaPe\Sentinel\Events\Auditing;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Sentinel;
 use ElPandaPe\Sentinel\SentinelServiceProvider;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Artisan;
@@ -567,6 +571,36 @@ $offset += WARMUP + RESTORE_ITERATIONS;
 [$first, $second] = $anchored($offset);
 $restoreOneField = $restoring($first, $second, RESTORE_ITERATIONS, false);
 
+/*
+ * The lifecycle events are dispatched inline, on the write path, so the question this answers is
+ * what listening costs the request that saved the model. The reference is the same audited update
+ * the restore section uses, on an application that registers nothing.
+ *
+ * The listeners do nothing on purpose. What is being measured is the cost of the hook, not the
+ * cost of whatever an application decides to hang off it — which is unbounded, and which is why
+ * the README says to queue it.
+ */
+const LISTENER_ITERATIONS = 1000;
+
+$offset += WARMUP + RESTORE_ITERATIONS;
+$listenerReference = $moving($mover(BenchAudited::class, $offset), LISTENER_ITERATIONS, false);
+
+$events = $app->make(Dispatcher::class);
+$events->listen(Auditing::class, static fn (): null => null);
+
+$offset += WARMUP + LISTENER_ITERATIONS;
+$listenerOnAuditing = $moving($mover(BenchAudited::class, $offset), LISTENER_ITERATIONS, false);
+
+$events->listen(AuditCreating::class, static fn (): null => null);
+$events->listen(AuditCreated::class, static fn (): null => null);
+
+$offset += WARMUP + LISTENER_ITERATIONS;
+$listenerOnAll = $moving($mover(BenchAudited::class, $offset), LISTENER_ITERATIONS, false);
+
+$events->forget(Auditing::class);
+$events->forget(AuditCreating::class);
+$events->forget(AuditCreated::class);
+
 $baseline = $results['plain (not audited)'];
 
 echo '| Variant | Writes | Total (ms) | Per write (µs) | Δ vs plain |', PHP_EOL;
@@ -682,6 +716,25 @@ foreach ([
         $total,
         $total * 1000 / RESTORE_ITERATIONS,
         $total === $restoreReference ? '—' : sprintf('%+.1f%%', ($total / $restoreReference - 1) * 100),
+        PHP_EOL,
+    );
+}
+
+echo PHP_EOL, '| Listener variant | Writes | Total (ms) | Per write (µs) | Δ vs no listener |', PHP_EOL;
+echo '|---|---|---|---|---|', PHP_EOL;
+
+foreach ([
+    'audited update, nothing listening' => $listenerReference,
+    'audited update, one listener on Auditing' => $listenerOnAuditing,
+    'audited update, a listener on all three' => $listenerOnAll,
+] as $label => $total) {
+    printf(
+        '| %s | %d | %.1f | %.1f | %s |%s',
+        $label,
+        LISTENER_ITERATIONS,
+        $total,
+        $total * 1000 / LISTENER_ITERATIONS,
+        $total === $listenerReference ? '—' : sprintf('%+.1f%%', ($total / $listenerReference - 1) * 100),
         PHP_EOL,
     );
 }
