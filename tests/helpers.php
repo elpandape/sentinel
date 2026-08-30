@@ -7,6 +7,7 @@ namespace ElPandaPe\Sentinel\Tests;
 use Carbon\CarbonImmutable;
 use Closure;
 use DateTimeImmutable;
+use ElPandaPe\Sentinel\Archive\Manifest;
 use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Context\Runtime;
 use ElPandaPe\Sentinel\Contracts\Ledger;
@@ -182,6 +183,30 @@ function auditRelationsTable(): string
     $config = app(Config::class);
 
     return $config->table('audit_relations');
+}
+
+function retireEntries(string $stream, int $from, int $to): int
+{
+    return DB::table(auditsTable())
+        ->where('stream', $stream)
+        ->whereBetween('sequence', [$from, $to])
+        ->delete();
+}
+
+function manifest(): Manifest
+{
+    /** @var Manifest $manifest */
+    $manifest = app(Manifest::class);
+
+    return $manifest;
+}
+
+function archivesTable(): string
+{
+    /** @var Config $config */
+    $config = app(Config::class);
+
+    return $config->table('archives');
 }
 
 function checkpointsTable(): string

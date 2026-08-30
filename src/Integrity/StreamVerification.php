@@ -33,6 +33,16 @@ final readonly class StreamVerification
         public int $covered = 0,
     ) {}
 
+    /**
+     * Entries the walk stepped over because they are not in the ledger any more. It is read off the
+     * chain result rather than passed twice: the walk is what met the absence, and two copies of
+     * one number is one of them going stale.
+     */
+    public function archived(): int
+    {
+        return $this->chain->archived;
+    }
+
     public function isIntact(): bool
     {
         return $this->chain->isIntact() && ! $this->signature instanceof VerificationResult;

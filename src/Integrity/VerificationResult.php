@@ -14,16 +14,23 @@ final readonly class VerificationResult
         public ?IntegrityBreak $reason = null,
         public ?int $sequence = null,
         public ?string $auditId = null,
+        public int $archived = 0,
     ) {}
 
-    public static function intact(string $stream, int $checked): self
+    /**
+     * `archived` counts entries the walk stepped over because they are no longer in the ledger and
+     * something accounts for where they went. It is published beside `checked` and never added into
+     * it, for the reason StreamVerification keeps `covered` separate: the two numbers mean
+     * different things and one total would hide which.
+     */
+    public static function intact(string $stream, int $checked, int $archived = 0): self
     {
-        return new self($stream, $checked);
+        return new self($stream, $checked, archived: $archived);
     }
 
-    public static function broken(string $stream, int $checked, IntegrityBreak $reason, int $sequence, string $auditId): self
+    public static function broken(string $stream, int $checked, IntegrityBreak $reason, int $sequence, string $auditId, int $archived = 0): self
     {
-        return new self($stream, $checked, $reason, $sequence, $auditId);
+        return new self($stream, $checked, $reason, $sequence, $auditId, $archived);
     }
 
     public function isIntact(): bool

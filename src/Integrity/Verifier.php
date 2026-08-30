@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Integrity;
 
+use ElPandaPe\Sentinel\Archive\Manifest;
 use ElPandaPe\Sentinel\Contracts\EnumeratesStreams;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Contracts\Signer;
@@ -22,6 +23,7 @@ final readonly class Verifier
         private Hasher $hasher,
         private Signers $signers,
         private Checkpoints $checkpoints,
+        private Manifest $archives,
         private Dispatcher $events,
     ) {}
 
@@ -69,26 +71,55 @@ final readonly class Verifier
      *
      * A broken link stops the walk: past it nothing can be said. A broken signature does not, since
      * the chain still holds and the rest of it is still worth reading.
+     *
+     * An absence stops it too, unless two things account for it at once: the manifest says the range
+     * was retired, and the anchors reach past it. Neither alone is enough. The manifest is unsigned
+     * and unhashed, so on its own it would make "delete the rows, then insert one row" a supported
+     * way of laundering a gap; the anchors are the evidence, and the manifest only says which
+     * absence they are being asked about.
      */
     public function verify(string $name, ?int $from = null, ?int $to = null): StreamVerification
     {
         $expected = $from ?? 1;
         $previous = $this->linkBefore($name, $expected);
         $checked = 0;
+        $archived = 0;
+        $reach = null;
         $signatures = [];
         $forged = null;
 
         foreach ($this->ledger->stream($name)->range($expected, $to) as $audit) {
+            if ($audit->sequence > $expected) {
+                $reach ??= $this->checkpoints->reach($name);
+                $retired = $this->accountedFor($name, $expected, $audit->sequence - 1, $reach);
+
+                if ($retired === null) {
+                    return new StreamVerification(
+                        $this->announce($name, $checked, IntegrityBreak::SequenceGap, $expected, $audit->id, $archived),
+                        $signatures,
+                        $forged,
+                    );
+                }
+
+                $archived += $retired;
+                $expected = $audit->sequence;
+
+                // The hash this entry links to left with the range, so the seam is not checked and
+                // not invented either. It is the same answer linkBefore() gives at the edge of a
+                // bounded range, and the reason these entries are counted apart from the read ones.
+                $previous = null;
+            }
+
             $broken = match (true) {
                 $audit->sequence !== $expected => IntegrityBreak::SequenceGap,
                 ! $this->verifyEntry($audit) => IntegrityBreak::HashMismatch,
-                $this->unlinked($audit, $previous, $checked) => IntegrityBreak::LinkMismatch,
+                $this->unlinked($audit, $previous) => IntegrityBreak::LinkMismatch,
                 default => null,
             };
 
             if ($broken !== null) {
                 return new StreamVerification(
-                    $this->announce($name, $checked, $broken, min($audit->sequence, $expected), $audit->id),
+                    $this->announce($name, $checked, $broken, min($audit->sequence, $expected), $audit->id, $archived),
                     $signatures,
                     $forged,
                 );
@@ -98,7 +129,7 @@ final readonly class Verifier
             $signatures[$state->value] = ($signatures[$state->value] ?? 0) + 1;
 
             if ($state === SignatureState::Invalid && ! $forged instanceof VerificationResult) {
-                $forged = $this->announce($name, $checked, IntegrityBreak::SignatureMismatch, $audit->sequence, $audit->id);
+                $forged = $this->announce($name, $checked, IntegrityBreak::SignatureMismatch, $audit->sequence, $audit->id, $archived);
             }
 
             $previous = $audit->hash;
@@ -106,7 +137,7 @@ final readonly class Verifier
             $checked++;
         }
 
-        return new StreamVerification(VerificationResult::intact($name, $checked), $signatures, $forged);
+        return new StreamVerification(VerificationResult::intact($name, $checked, $archived), $signatures, $forged);
     }
 
     /**
@@ -155,6 +186,18 @@ final readonly class Verifier
     }
 
     /**
+     * How many entries an absence covers when something accounts for it, and null when nothing
+     * does. The anchors are asked first because their reach was already read; the manifest costs a
+     * query and is only worth it once the anchors have said they answer for the range.
+     */
+    private function accountedFor(string $name, int $from, int $to, int $reach): ?int
+    {
+        return $reach >= $to && $this->archives->holds($name, $from, $to)
+            ? $to - $from + 1
+            : null;
+    }
+
+    /**
      * One pass over the anchors of a stream: contiguity from the first entry onwards, the signature
      * of every anchor, optionally the root folded again, and then the tail nobody has anchored yet.
      */
@@ -178,14 +221,15 @@ final readonly class Verifier
         $expected = 1;
         $previous = null;
         $anchored = 0;
+        $retired = 0;
 
         foreach ($anchors as $anchor) {
             if ($anchor->from !== $expected) {
                 return new StreamVerification(
-                    $this->announce($name, $anchored, IntegrityBreak::CheckpointMismatch, $anchor->from, $anchor->rootHash),
+                    $this->announce($name, $anchored + $retired, IntegrityBreak::CheckpointMismatch, $anchor->from, $anchor->rootHash),
                     $signatures,
                     $forged,
-                    [CheckpointState::Anchored->value => $anchored],
+                    $this->ranges($anchored, $retired),
                     $expected - 1,
                 );
             }
@@ -194,22 +238,30 @@ final readonly class Verifier
             $signatures[$state->value] = ($signatures[$state->value] ?? 0) + 1;
 
             if ($state === SignatureState::Invalid && ! $forged instanceof VerificationResult) {
-                $forged = $this->announce($name, $anchored, IntegrityBreak::SignatureMismatch, $anchor->from, $anchor->rootHash);
+                $forged = $this->announce($name, $anchored + $retired, IntegrityBreak::SignatureMismatch, $anchor->from, $anchor->rootHash);
             }
 
             if ($refold && $this->checkpoints->refold($anchor, $previous) !== $anchor->rootHash) {
-                return new StreamVerification(
-                    $this->located($name, $anchor, $anchored),
-                    $signatures,
-                    $forged,
-                    [CheckpointState::Anchored->value => $anchored],
-                    $expected - 1,
-                );
+                if (! $this->archives->holds($name, $anchor->from, $anchor->to)) {
+                    return new StreamVerification(
+                        $this->located($name, $anchor, $anchored + $retired),
+                        $signatures,
+                        $forged,
+                        $this->ranges($anchored, $retired),
+                        $expected - 1,
+                    );
+                }
+
+                // The root cannot be folded again because the entries are not there, and the
+                // manifest says that is on purpose. The anchor still stands: it was signed over a
+                // root, and the anchor after it folds that root in.
+                $retired++;
+            } else {
+                $anchored++;
             }
 
             $previous = $anchor->rootHash;
             $expected = $anchor->to + 1;
-            $anchored++;
         }
 
         $tail = $this->verify($name, $expected);
@@ -218,9 +270,27 @@ final readonly class Verifier
             $tail->chain,
             [...$signatures, ...$tail->signatures],
             $forged ?? $tail->signature,
-            [CheckpointState::Anchored->value => $anchored],
+            $this->ranges($anchored, $retired),
             $expected - 1,
         );
+    }
+
+    /**
+     * How many ranges landed in each state. Anchored is always published, including as a zero,
+     * because "no range held" and "this walk had nothing to say about ranges" are different facts
+     * and the empty array already means the second one.
+     *
+     * @return array<string, int>
+     */
+    private function ranges(int $anchored, int $retired): array
+    {
+        $states = [CheckpointState::Anchored->value => $anchored];
+
+        if ($retired > 0) {
+            $states[CheckpointState::Archived->value] = $retired;
+        }
+
+        return $states;
     }
 
     /**
@@ -255,14 +325,20 @@ final readonly class Verifier
     }
 
     /**
-     * The first entry of a walk has no predecessor to check against unless it is the first of the
-     * chain, or unless the entry before it was read to anchor the border. Without that read,
-     * verifying a range proved its entries link to each other and never that they hang off the
-     * range before them — which is the one property an anchor over that range is sold as giving.
+     * An entry with no readable predecessor is only held to one thing: the first of a chain links to
+     * nothing. That is the first entry of a walk that starts at the beginning, one whose predecessor
+     * is no longer in the table, and one that follows a range the walk stepped over.
+     *
+     * Everywhere else the link is checked, because verifying a range that only proved its entries
+     * link to each other — and never that they hang off what came before — is the one property an
+     * anchor over that range is sold as giving.
+     *
+     * The question is what can be read and not how far the walk has come. A hash column is never
+     * null, so a null predecessor means exactly this and nothing else.
      */
-    private function unlinked(Audit $audit, ?string $previous, int $checked): bool
+    private function unlinked(Audit $audit, ?string $previous): bool
     {
-        return $checked === 0 && $previous === null
+        return $previous === null
             ? $audit->sequence === 1 && $audit->previous_hash !== null
             : $audit->previous_hash !== $previous;
     }
@@ -285,10 +361,10 @@ final readonly class Verifier
         return null;
     }
 
-    private function announce(string $stream, int $checked, IntegrityBreak $reason, int $sequence, string $auditId): VerificationResult
+    private function announce(string $stream, int $checked, IntegrityBreak $reason, int $sequence, string $auditId, int $archived = 0): VerificationResult
     {
         $this->events->dispatch(new IntegrityVerificationFailed($stream, $reason, $sequence, $auditId));
 
-        return VerificationResult::broken($stream, $checked, $reason, $sequence, $auditId);
+        return VerificationResult::broken($stream, $checked, $reason, $sequence, $auditId, $archived);
     }
 }

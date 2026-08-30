@@ -58,6 +58,18 @@ final readonly class IntegrityReport
     }
 
     /**
+     * Entries no walk read because they are not in the ledger any more. Like covered(), it is
+     * published beside checked() and never added into it.
+     */
+    public function archived(): int
+    {
+        return array_sum(array_map(
+            static fn (StreamVerification $verification): int => $verification->archived(),
+            $this->streams,
+        ));
+    }
+
+    /**
      * @return array<string, int>
      */
     public function anchors(): array

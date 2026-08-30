@@ -16,6 +16,8 @@ use function ElPandaPe\Sentinel\Tests\auditRelationsTable;
 use function ElPandaPe\Sentinel\Tests\auditsOf;
 use function ElPandaPe\Sentinel\Tests\auditsTable;
 use function ElPandaPe\Sentinel\Tests\ledger;
+use function ElPandaPe\Sentinel\Tests\manifest;
+use function ElPandaPe\Sentinel\Tests\retireEntries;
 use function ElPandaPe\Sentinel\Tests\seedTheReferenceChain;
 use function ElPandaPe\Sentinel\Tests\signingWith;
 
@@ -172,4 +174,27 @@ it('refuses a range on a walk that does not take one', function (): void {
     $this->artisan('sentinel:verify', ['--stream' => ReferenceChain::STREAM, '--from' => '2', '--depth' => 'anchors'])
         ->expectsOutputToContain('is what the entries depth answers')
         ->assertExitCode(Command::INVALID);
+});
+
+it('says how many entries it stepped over because they are no longer here', function (): void {
+    seedTheReferenceChain();
+    anchor(ReferenceChain::STREAM, 4);
+    retireEntries(ReferenceChain::STREAM, 1, 4);
+    manifest()->record(ReferenceChain::STREAM, 1, 4, 4);
+
+    $this->artisan('sentinel:verify', ['--stream' => ReferenceChain::STREAM])
+        ->expectsOutputToContain('(+4 retired)')
+        ->expectsOutputToContain('stepped over 4 that are no longer here')
+        ->assertExitCode(Command::SUCCESS);
+});
+
+it('names a retired range in the column the anchors report through', function (): void {
+    seedTheReferenceChain();
+    anchor(ReferenceChain::STREAM, 4);
+    retireEntries(ReferenceChain::STREAM, 1, 4);
+    manifest()->record(ReferenceChain::STREAM, 1, 4, 4);
+
+    $this->artisan('sentinel:verify', ['--stream' => ReferenceChain::STREAM, '--depth' => 'roots'])
+        ->expectsOutputToContain('1 retired')
+        ->assertExitCode(Command::SUCCESS);
 });

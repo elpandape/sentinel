@@ -99,13 +99,20 @@ final class VerifyCommand extends Command
             return self::FAILURE;
         }
 
-        $this->info($report->covered() === 0
-            ? $this->translated('intact', ['streams' => count($report->streams), 'entries' => $report->checked()])
-            : $this->translated('anchored', [
+        $this->info(match (true) {
+            $report->archived() > 0 => $this->translated('retired', [
                 'streams' => count($report->streams),
                 'entries' => $report->checked(),
                 'covered' => $report->covered(),
-            ]));
+                'archived' => $report->archived(),
+            ]),
+            $report->covered() > 0 => $this->translated('anchored', [
+                'streams' => count($report->streams),
+                'entries' => $report->checked(),
+                'covered' => $report->covered(),
+            ]),
+            default => $this->translated('intact', ['streams' => count($report->streams), 'entries' => $report->checked()]),
+        });
 
         return self::SUCCESS;
     }
@@ -172,12 +179,24 @@ final class VerifyCommand extends Command
             ],
             array_map(fn (StreamVerification $verification): array => [
                 $verification->stream(),
-                $verification->chain->checked,
+                $this->entries($verification),
                 $this->translated($verification->isIntact() ? 'sound' : 'broken'),
                 $this->anchors($verification),
                 $this->tally($verification->signatures),
             ], $report->streams),
         );
+    }
+
+    /**
+     * How many entries were read, and how many the walk stepped over because they are no longer
+     * here. The second number only appears where there is one: a zero beside every stream would
+     * make an installation that has never pruned read as though it had.
+     */
+    private function entries(StreamVerification $verification): string
+    {
+        return $verification->archived() === 0
+            ? (string) $verification->chain->checked
+            : $verification->chain->checked.' '.$this->translated('retired_entries', ['archived' => $verification->archived()]);
     }
 
     /**

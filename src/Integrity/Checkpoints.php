@@ -87,6 +87,21 @@ final readonly class Checkpoints
             : null;
     }
 
+    /**
+     * The last sequence the anchors of a stream reach, and zero for a stream nobody anchored. One
+     * seek on the index the anchors already keep.
+     *
+     * It says how far they reach and never that they are contiguous up to there — contiguity is
+     * what verifyAnchors() proves by walking them, and re-proving it here would be paying for it
+     * twice to answer a smaller question.
+     */
+    public function reach(string $stream): int
+    {
+        $anchored = $this->anchors->newQuery()->where('stream', $stream)->max('sequence_to');
+
+        return is_numeric($anchored) ? (int) $anchored : 0;
+    }
+
     public function last(string $stream): ?Checkpoint
     {
         $row = $this->anchors->newQuery()
@@ -148,8 +163,7 @@ final readonly class Checkpoints
      */
     private function pending(string $stream): bool
     {
-        $anchored = $this->anchors->newQuery()->where('stream', $stream)->max('sequence_to');
-        $from = (is_numeric($anchored) ? (int) $anchored : 0) + 1;
+        $from = $this->reach($stream) + 1;
 
         return $this->audits->newQuery()
             ->where('stream', $stream)
