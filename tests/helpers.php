@@ -40,6 +40,7 @@ use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Presentation\AuditPresenter;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Restore\Planner;
+use ElPandaPe\Sentinel\Retention\RetainedPredicate;
 use ElPandaPe\Sentinel\Retention\Schedule;
 use ElPandaPe\Sentinel\Security\Digester;
 use ElPandaPe\Sentinel\Security\Keyring;
@@ -183,6 +184,49 @@ function auditRelationsTable(): string
     $config = app(Config::class);
 
     return $config->table('audit_relations');
+}
+
+/**
+ * One entry, written straight to the table with only the columns the schema requires. It is what a
+ * retention expectation is built from: nothing here goes through the ledger, so the clock and the
+ * kind of entry are exactly what the test says they are.
+ *
+ * @param  array<string, mixed>  $overrides
+ */
+function seedAudit(int $sequence, array $overrides = []): void
+{
+    DB::table(auditsTable())->insert(new Audit()->forceFill([
+        'id' => str_pad('01JSEED'.$sequence, 26, '0'),
+        'stream' => 'global',
+        'sequence' => $sequence,
+        'audit_type' => 'model',
+        'event' => 'created',
+        'severity' => 'info',
+        'source' => 'system',
+        'context' => [],
+        'payload_version' => 1,
+        'algorithm' => 'sha256',
+        'hash' => str_pad((string) $sequence, 64, 'a'),
+        'occurred_at' => '2026-08-30 12:00:00.000000',
+        'created_at' => '2026-08-30 12:00:00.000000',
+        ...$overrides,
+    ])->getAttributes());
+}
+
+/**
+ * @param  array<string, string>  $retention
+ * @return list<int>
+ */
+function keptBy(array $retention, string $now = '2026-08-30 12:00:00'): array
+{
+    $entries = DB::table(auditsTable());
+
+    new RetainedPredicate(retentionSchedule($retention))->applyTo($entries, new CarbonImmutable($now));
+
+    /** @var list<int> $kept */
+    $kept = $entries->orderBy('sequence')->pluck('sequence')->all();
+
+    return array_map(intval(...), $kept);
 }
 
 function retireEntries(string $stream, int $from, int $to): int
