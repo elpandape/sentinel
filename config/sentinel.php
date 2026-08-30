@@ -261,12 +261,20 @@ return [
     'retention' => [],
 
     /*
-     * How many anchored ranges one run of sentinel:prune will look at. A range is only offered when
-     * every entry in it has been released, so ranges a long policy holds are re-examined on every
-     * run — and this is what keeps that from growing without bound.
+     * What one run of sentinel:prune is allowed to do. windows is how many anchored ranges it will
+     * look at — a range a long policy holds is re-examined on every run, and this is what keeps that
+     * from growing without bound. batch is how many entries one statement removes, and pause is how
+     * many microseconds it waits between two of them, so a purge does not compete with the writes it
+     * is making room for.
+     *
+     * The batch is bounded on purpose: an unbounded delete over a table this size is how the prior
+     * art ends up hanging for an hour. It is named by sequence rather than by a LIMIT, so the three
+     * engines compile one plan instead of three and an interrupted run resumes by arithmetic.
      */
     'prune' => [
         'windows' => 100,
+        'batch' => 1000,
+        'pause' => 0,
     ],
 
     /*

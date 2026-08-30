@@ -452,6 +452,21 @@ final readonly class Config
     }
 
     /**
+     * How many entries one statement removes, and how long the purge waits between two of them. The
+     * batch is a floor of one; the pause is a floor of zero, because not waiting is a legitimate
+     * answer and the only one an idle installation needs.
+     */
+    public function pruneBatch(): int
+    {
+        return max(1, $this->integer('prune.batch', 1000));
+    }
+
+    public function prunePause(): int
+    {
+        return max(0, $this->integer('prune.pause', 0));
+    }
+
+    /**
      * The defaults live here and not only in the publishable file because the config merge is
      * shallow: an installation that published sentinel.php while `resolvers` was still an empty
      * array would otherwise override the whole subtree and end up with no resolvers at all.

@@ -40,6 +40,7 @@ use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Presentation\AuditPresenter;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Restore\Planner;
+use ElPandaPe\Sentinel\Retention\Cascade;
 use ElPandaPe\Sentinel\Retention\Frontiers;
 use ElPandaPe\Sentinel\Retention\RetainedPredicate;
 use ElPandaPe\Sentinel\Retention\Schedule;
@@ -153,6 +154,14 @@ function phpFiles(?string $directory = null): array
     }
 
     return $files;
+}
+
+function cascade(): Cascade
+{
+    /** @var Cascade $cascade */
+    $cascade = app(Cascade::class);
+
+    return $cascade;
 }
 
 /**
