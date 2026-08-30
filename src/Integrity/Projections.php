@@ -86,10 +86,7 @@ final readonly class Projections
     }
 
     /**
-     * The rows the table actually holds, put through the same reduction as the lines. The pivot maps
-     * are re-encoded rather than compared as the text the engine handed back: MySQL and PostgreSQL
-     * both reorder the keys of a JSON object on the way in, and comparing that text would report a
-     * divergence belonging to the driver rather than to the data.
+     * The rows the table actually holds, put through the same reduction as the lines.
      *
      * @param  list<string>  $ids
      * @return array<string, array<string, int>>
@@ -104,8 +101,8 @@ final readonly class Projections
                 'operation' => $row->operation,
                 'related_type' => $row->related_type,
                 'related_id' => $row->related_id,
-                'pivot_before' => $this->encoded($row->pivot_before),
-                'pivot_after' => $this->encoded($row->pivot_after),
+                'pivot_before' => $row->pivot_before,
+                'pivot_after' => $row->pivot_after,
             ];
         }
 
@@ -126,10 +123,14 @@ final readonly class Projections
         $tally = [];
 
         foreach ($rows as $row) {
-            $key = implode("\x1f", array_map(
-                static fn (string $column): string => is_string($row[$column] ?? null) ? $row[$column] : "\x00",
-                ['relation', 'operation', 'related_type', 'related_id', 'pivot_before', 'pivot_after'],
-            ));
+            $key = implode("\x1f", [
+                $this->text($row['relation'] ?? null),
+                $this->text($row['operation'] ?? null),
+                $this->text($row['related_type'] ?? null),
+                $this->text($row['related_id'] ?? null),
+                $this->pivot($row['pivot_before'] ?? null),
+                $this->pivot($row['pivot_after'] ?? null),
+            ]);
 
             $tally[$key] = ($tally[$key] ?? 0) + 1;
         }
@@ -139,12 +140,43 @@ final readonly class Projections
         return $tally;
     }
 
-    /**
-     * @param  array<string, mixed>|null  $pivot
-     */
-    private function encoded(?array $pivot): ?string
+    private function text(mixed $value): string
     {
-        return $pivot === null ? null : json_encode($pivot, JSON_THROW_ON_ERROR);
+        return is_string($value) ? $value : "\x00";
+    }
+
+    /**
+     * A pivot map compared by what it says and not by how an engine wrote it down. `changes` is
+     * `jsonb`, which sorts the keys of an object on the way in, and the two pivot columns are
+     * `json`, which keeps the text exactly as it arrived — so the same map comes back from the two
+     * of them in two different orders, and comparing either as text reports a divergence belonging
+     * to PostgreSQL rather than to the data.
+     */
+    private function pivot(mixed $value): string
+    {
+        $decoded = is_string($value) ? json_decode($value, true, 512, JSON_THROW_ON_ERROR) : $value;
+
+        if (! is_array($decoded)) {
+            return "\x00";
+        }
+
+        $this->deepSort($decoded);
+
+        return json_encode($decoded, JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $value
+     */
+    private function deepSort(array &$value): void
+    {
+        ksort($value);
+
+        foreach ($value as &$nested) {
+            if (is_array($nested)) {
+                $this->deepSort($nested);
+            }
+        }
     }
 
     private function announce(string $stream, int $checked, Audit $audit): VerificationResult

@@ -15,8 +15,10 @@ use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 
+use function ElPandaPe\Sentinel\Tests\auditData;
 use function ElPandaPe\Sentinel\Tests\auditRelationsTable;
 use function ElPandaPe\Sentinel\Tests\auditsOf;
+use function ElPandaPe\Sentinel\Tests\ledger;
 use function ElPandaPe\Sentinel\Tests\projections;
 use function ElPandaPe\Sentinel\Tests\verifier;
 
@@ -61,6 +63,42 @@ it('reports a row that belongs to no line at all', function (): void {
     ]);
 
     expect(projections()->verify('global')?->reason)->toBe(IntegrityBreak::ProjectionMismatch);
+});
+
+it('reads a pivot by what it says, not by the order an engine wrote it in', function (): void {
+    $audit = auditsOf($this->team)->first();
+
+    $stored = DB::table(auditRelationsTable())->where('audit_id', $audit->id)->value('pivot_after');
+
+    $reordered = is_string($stored) ? json_decode($stored, true, 512, JSON_THROW_ON_ERROR) : [];
+
+    krsort($reordered);
+
+    DB::table(auditRelationsTable())
+        ->where('audit_id', $audit->id)
+        ->update(['pivot_after' => json_encode($reordered, JSON_THROW_ON_ERROR)]);
+
+    expect(projections()->verify('global'))->toBeNull();
+});
+
+it('reads a nested pivot the same way, however deep the disagreement is', function (): void {
+    $audit = ledger()->write(auditData(['changes' => [[
+        'relation' => 'members',
+        'operation' => 'attach',
+        'related_type' => Member::class,
+        'related_id' => '1',
+        'pivot_before' => null,
+        'pivot_after' => ['grant' => ['scope' => 'all', 'by' => 'ada'], 'role' => 'lead'],
+    ]]]));
+
+    DB::table(auditRelationsTable())
+        ->where('audit_id', $audit->id)
+        ->update(['pivot_after' => json_encode(
+            ['role' => 'lead', 'grant' => ['by' => 'ada', 'scope' => 'all']],
+            JSON_THROW_ON_ERROR,
+        )]);
+
+    expect(projections()->verify('global'))->toBeNull();
 });
 
 it('reports a pivot somebody edited in the index and not in the entry', function (): void {
