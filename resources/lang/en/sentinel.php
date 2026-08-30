@@ -112,6 +112,7 @@ return [
         'sequence_gap' => 'Stream :stream is missing sequence :sequence, so its chain cannot be followed past it.',
         'signature_mismatch' => 'Audit :id carries a signature that its own key does not verify, at sequence :sequence of stream :stream.',
         'projection_mismatch' => 'The indexed relations of audit :id no longer match the lines it sealed, at sequence :sequence of stream :stream. The chain is intact: the projection is not part of it.',
+        'checkpoint_mismatch' => 'Anchor :id no longer folds to the root it recorded, over the range of stream :stream that begins at sequence :sequence.',
     ],
 
 ];

@@ -46,14 +46,49 @@ final readonly class IntegrityReport
     }
 
     /**
+     * Entries no walk read, because an anchor answered for them. Published beside checked() and
+     * never added into it: the two numbers mean different things and one total would hide which.
+     */
+    public function covered(): int
+    {
+        return array_sum(array_map(
+            static fn (StreamVerification $verification): int => $verification->covered,
+            $this->streams,
+        ));
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    public function anchors(): array
+    {
+        return $this->tally(array_map(
+            static fn (StreamVerification $verification): array => $verification->anchors,
+            $this->streams,
+        ));
+    }
+
+    /**
      * @return array<string, int>
      */
     public function signatures(): array
     {
+        return $this->tally(array_map(
+            static fn (StreamVerification $verification): array => $verification->signatures,
+            $this->streams,
+        ));
+    }
+
+    /**
+     * @param  list<array<string, int>>  $counts
+     * @return array<string, int>
+     */
+    private function tally(array $counts): array
+    {
         $tally = [];
 
-        foreach ($this->streams as $verification) {
-            foreach ($verification->signatures as $state => $count) {
+        foreach ($counts as $states) {
+            foreach ($states as $state => $count) {
                 $tally[$state] = ($tally[$state] ?? 0) + $count;
             }
         }

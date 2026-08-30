@@ -11,6 +11,7 @@ use ElPandaPe\Sentinel\Context\ExecutionContext;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Integrity\IntegrityReport;
+use ElPandaPe\Sentinel\Integrity\StreamVerification;
 use ElPandaPe\Sentinel\Integrity\VerificationResult;
 use ElPandaPe\Sentinel\Integrity\Verifier;
 use ElPandaPe\Sentinel\Query\AuditQuery;
@@ -117,9 +118,37 @@ final class Sentinel
         $this->policies->add($policy);
     }
 
+    /**
+     * Reads every entry of the range and rehashes it. It is the only one of the three that proves
+     * anything about what an entry says, and it is deliberately the one whose behaviour anchoring
+     * does not change: an installation that switches anchors on does not quietly start verifying
+     * less than it did the day before.
+     */
     public function verifyIntegrity(string $stream, ?int $from = null, ?int $to = null): VerificationResult
     {
         return $this->verifier->verifyStream($stream, $from, $to);
+    }
+
+    /**
+     * Walks the anchors instead of the history, and the tail no anchor covers yet. It costs rows in
+     * proportion to history over window, and it proves what an anchor can prove: that the anchors
+     * are a contiguous, signed chain and that the tail links. It reads no anchored entry, so it
+     * reports those as anchored and never as intact.
+     */
+    public function verifyAnchors(string $stream): StreamVerification
+    {
+        return $this->verifier->verifyAnchors($stream);
+    }
+
+    /**
+     * The same walk, folding every root again from the hashes the entries carry. It finds a hash
+     * rewritten or reordered and names the entry, not just the range. It rehashes nothing, so an
+     * entry edited without its hash column being touched still folds back — which is why this one
+     * also reports a range it agrees with as anchored.
+     */
+    public function verifyRoots(string $stream): StreamVerification
+    {
+        return $this->verifier->verifyRoots($stream);
     }
 
     /**

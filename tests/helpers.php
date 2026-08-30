@@ -625,6 +625,24 @@ function referenceChainOf(string $stream): array
 }
 
 /**
+ * A real chain of the given length, sealed by the ledger itself so every link is the hash of the
+ * entry before it. Long enough that walking it pages more than once, which is what makes the cost
+ * of walking it and the cost of walking its anchors tell apart.
+ */
+function seedTheLongChain(int $entries): void
+{
+    $audits = [];
+
+    for ($entry = 1; $entry <= $entries; $entry++) {
+        $audits[] = auditData();
+    }
+
+    if ($audits !== []) {
+        ledger()->writeMany($audits);
+    }
+}
+
+/**
  * The reference chain over a ledger with no table under it, so a range of it can be folded without
  * seeding anything.
  */

@@ -19,6 +19,7 @@ enum IntegrityBreak: string
     case SequenceGap = 'sequence_gap';
     case SignatureMismatch = 'signature_mismatch';
     case ProjectionMismatch = 'projection_mismatch';
+    case CheckpointMismatch = 'checkpoint_mismatch';
 
     public function message(string $stream, int $sequence, string $auditId): string
     {

@@ -38,6 +38,18 @@ final readonly class Fold
     }
 
     /**
+     * The digest inside a construction name, and null for a construction this one is not. It is the
+     * door the algorithm column exists to leave open: an anchor written by something else is
+     * reported as one this build cannot recompute, never as one that failed to.
+     */
+    public static function digestOf(string $name): ?string
+    {
+        return str_starts_with($name, self::CONSTRUCTION.'-')
+            ? substr($name, strlen(self::CONSTRUCTION) + 1)
+            : null;
+    }
+
+    /**
      * @param  iterable<string>  $hashes  the hash of every entry in the range, in ascending sequence
      */
     public function root(string $stream, int $from, int $to, ?string $previous, string $algorithm, iterable $hashes): string

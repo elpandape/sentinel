@@ -58,13 +58,34 @@ it('verifies whole, as the chain it is', function (string $stream, int $length):
         ->and($result->checked)->toBe($length);
 })->with([[ReferenceChain::STREAM, 8], [ReferenceChain::FORK, 2]]);
 
-it('verifies a range without reading the entries around it', function (): void {
+it('verifies a range and counts only the entries of it', function (): void {
     seedTheReferenceChain();
 
     $result = verifier()->verifyStream(ReferenceChain::STREAM, from: 5, to: 7);
 
     expect($result->isIntact())->toBeTrue()
         ->and($result->checked)->toBe(3);
+});
+
+it('hangs a range off the entry before it rather than taking its first link on faith', function (): void {
+    seedTheReferenceChain();
+
+    DB::table(auditsTable())
+        ->where('id', '01JCHAIN0000000000000000S4')
+        ->update(['hash' => str_repeat('0', 64)]);
+
+    $result = verifier()->verifyStream(ReferenceChain::STREAM, from: 5, to: 7);
+
+    expect($result->reason)->toBe(IntegrityBreak::LinkMismatch)
+        ->and($result->sequence)->toBe(5);
+});
+
+it('checks nothing before a range whose predecessor is not there to read', function (): void {
+    seedTheReferenceChain();
+
+    DB::table(auditsTable())->where('id', '01JCHAIN0000000000000000S4')->delete();
+
+    expect(verifier()->verifyStream(ReferenceChain::STREAM, from: 5, to: 7)->isIntact())->toBeTrue();
 });
 
 it('stops at the entry someone changed, and names it', function (): void {

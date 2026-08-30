@@ -66,6 +66,27 @@ final readonly class Checkpoints
         return $anchors;
     }
 
+    /**
+     * The root the range folds to now, out of the hashes its entries carry now. Null is not a
+     * failure and is never reported as one: it means this build cannot recompute the root at all —
+     * the entries are no longer all there, or the anchor names a construction it does not know —
+     * and saying so is the difference between "not checked" and "checked and wrong".
+     */
+    public function refold(Checkpoint $anchor, ?string $previous): ?string
+    {
+        $digest = Fold::digestOf($anchor->algorithm);
+
+        if ($digest === null) {
+            return null;
+        }
+
+        $hashes = $this->hashes($anchor->stream, $anchor->from, $anchor->to);
+
+        return count($hashes) === $anchor->length()
+            ? $this->fold->root($anchor->stream, $anchor->from, $anchor->to, $previous, $digest, $hashes)
+            : null;
+    }
+
     public function last(string $stream): ?Checkpoint
     {
         $row = $this->anchors->newQuery()
