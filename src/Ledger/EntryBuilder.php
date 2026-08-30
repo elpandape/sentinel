@@ -7,6 +7,7 @@ namespace ElPandaPe\Sentinel\Ledger;
 use Carbon\CarbonImmutable;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Integrity\Hasher;
+use ElPandaPe\Sentinel\Integrity\Signers;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Models\AuditTag;
 use ElPandaPe\Sentinel\Support\Config;
@@ -20,6 +21,7 @@ final readonly class EntryBuilder
     public function __construct(
         private Audit $model,
         private Hasher $hasher,
+        private Signers $signers,
         private Config $config,
     ) {}
 
@@ -65,11 +67,36 @@ final readonly class EntryBuilder
         ]);
 
         $audit->hash = $this->hasher->hash($audit);
+
+        $this->seal($audit);
+
         $audit->syncOriginal();
 
         $audit->setRelation('tags', $this->labels($audit, $data));
 
         return $audit;
+    }
+
+    /**
+     * The signature goes over the hash and never over the payload, which is what keeps it cheap
+     * enough to pay on every write and what lets someone verify it without recomposing the entry
+     * or holding the key that encrypted half of it. Neither column is in the frozen list the hash
+     * covers, so writing them costs no payload_version.
+     *
+     * An empty signature is left as a null column rather than stored: a signer that attests to
+     * nothing must not leave behind something that reads as a claim.
+     */
+    private function seal(Audit $audit): void
+    {
+        $signer = $this->signers->current();
+        $signature = $signer->sign($audit->hash);
+
+        if ($signature === '') {
+            return;
+        }
+
+        $audit->signature = $signature;
+        $audit->signature_key_id = $signer->keyId();
     }
 
     /**

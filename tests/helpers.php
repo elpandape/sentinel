@@ -712,6 +712,13 @@ function signers(): array
     ];
 }
 
+function signingWith(string $keyId, string $secret): void
+{
+    config()->set('sentinel.integrity.signature.enabled', true);
+    config()->set('sentinel.integrity.signature.keys', [$keyId => $secret]);
+    config()->set('sentinel.integrity.signature.key_id', $keyId);
+}
+
 function signerRing(): Signers
 {
     /** @var Signers $ring */

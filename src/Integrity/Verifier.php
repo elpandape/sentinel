@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Integrity;
 
 use ElPandaPe\Sentinel\Contracts\Ledger;
+use ElPandaPe\Sentinel\Contracts\Signer;
 use ElPandaPe\Sentinel\Enums\IntegrityBreak;
+use ElPandaPe\Sentinel\Enums\SignatureState;
 use ElPandaPe\Sentinel\Events\IntegrityVerificationFailed;
 use ElPandaPe\Sentinel\Models\Audit;
 use Illuminate\Contracts\Events\Dispatcher;
@@ -15,12 +17,39 @@ final readonly class Verifier
     public function __construct(
         private Ledger $ledger,
         private Hasher $hasher,
+        private Signers $signers,
         private Dispatcher $events,
     ) {}
 
     public function verifyEntry(Audit $audit): bool
     {
         return hash_equals($audit->hash, $this->hasher->hash($audit));
+    }
+
+    /**
+     * What the signature says, which is a different question from whether the entry reproduces its
+     * own hash. An entry written before signing was switched on carries none and is reported as
+     * carrying none; one whose key left the ring is reported as unresolvable, never as forged. The
+     * verifier is only entitled to call a signature invalid when it held the key that could have
+     * made it valid.
+     */
+    public function verifySignature(Audit $audit): SignatureState
+    {
+        $signature = $audit->signature;
+
+        if ($signature === null) {
+            return SignatureState::Unsigned;
+        }
+
+        $signer = $this->signers->for($audit->signature_key_id ?? '');
+
+        if (! $signer instanceof Signer) {
+            return SignatureState::UnknownKey;
+        }
+
+        return $signer->verify($audit->hash, $signature)
+            ? SignatureState::Signed
+            : SignatureState::Invalid;
     }
 
     public function verifyStream(string $name, ?int $from = null, ?int $to = null): VerificationResult

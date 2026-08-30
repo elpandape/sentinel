@@ -11,6 +11,7 @@ use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Diff\DiffException;
 use ElPandaPe\Sentinel\Diff\Pointer;
 use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Enums\SignatureState;
 use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Exceptions\ImmutableAuditException;
 use ElPandaPe\Sentinel\Integrity\Verifier;
@@ -273,12 +274,25 @@ class Audit extends Model
         return $restorer->restoreRelationship($this, $relation);
     }
 
+    /**
+     * Whether this row still reproduces its own hash, and only that. The signature is a second
+     * question with four answers, so it is asked separately rather than folded into a boolean that
+     * would have to call an unsigned entry a failure.
+     */
     public function verifyIntegrity(): bool
     {
         /** @var Verifier $verifier */
         $verifier = app(Verifier::class);
 
         return $verifier->verifyEntry($this);
+    }
+
+    public function verifySignature(): SignatureState
+    {
+        /** @var Verifier $verifier */
+        $verifier = app(Verifier::class);
+
+        return $verifier->verifySignature($this);
     }
 
     public function getTable(): string
