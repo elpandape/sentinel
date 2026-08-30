@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Console;
 
+use ElPandaPe\Sentinel\Contracts\EnumeratesStreams;
+use ElPandaPe\Sentinel\Contracts\Ledger;
+use ElPandaPe\Sentinel\Enums\CheckpointState;
 use ElPandaPe\Sentinel\Enums\SignatureState;
+use ElPandaPe\Sentinel\Exceptions\QueryException;
 use ElPandaPe\Sentinel\Integrity\IntegrityReport;
 use ElPandaPe\Sentinel\Integrity\Projections;
 use ElPandaPe\Sentinel\Integrity\StreamVerification;
@@ -26,6 +30,12 @@ use Throwable;
  */
 final class VerifyCommand extends Command
 {
+    private const string ENTRIES = 'entries';
+
+    private const string ANCHORS = 'anchors';
+
+    private const array DEPTHS = [self::ENTRIES, self::ANCHORS, 'roots'];
+
     /**
      * The option help stays in English, unlike everything the command prints. Options are built in
      * the constructor, before the package has loaded its translations, so a translated one would
@@ -33,8 +43,9 @@ final class VerifyCommand extends Command
      */
     protected $signature = 'sentinel:verify
         {--stream= : Verify this stream instead of every one}
-        {--from= : First sequence to verify; needs a stream}
-        {--to= : Last sequence to verify; needs a stream}
+        {--from= : First sequence to verify; needs a stream and the entries depth}
+        {--to= : Last sequence to verify; needs a stream and the entries depth}
+        {--depth=entries : entries reads and rehashes every one; roots folds each range again; anchors reads only the anchors}
         {--projections : Also check that the relation index still matches the entries}';
 
     #[Override]
@@ -43,11 +54,12 @@ final class VerifyCommand extends Command
         return $this->translated('description');
     }
 
-    public function handle(Verifier $verifier, Projections $projections): int
+    public function handle(Verifier $verifier, Projections $projections, Ledger $ledger): int
     {
         $stream = $this->text('stream');
         $from = $this->number('from');
         $to = $this->number('to');
+        $depth = $this->text('depth') ?? self::ENTRIES;
 
         if ($stream === null && ($from !== null || $to !== null)) {
             $this->warn($this->translated('unscoped_range'));
@@ -55,10 +67,20 @@ final class VerifyCommand extends Command
             return self::INVALID;
         }
 
+        if (! in_array($depth, self::DEPTHS, true)) {
+            $this->warn($this->translated('unknown_depth', ['depth' => $depth, 'accepted' => implode(', ', self::DEPTHS)]));
+
+            return self::INVALID;
+        }
+
+        if ($depth !== self::ENTRIES && ($from !== null || $to !== null)) {
+            $this->warn($this->translated('unscoped_depth'));
+
+            return self::INVALID;
+        }
+
         try {
-            $report = $stream === null
-                ? $verifier->verifyEverything()
-                : new IntegrityReport([$verifier->verify($stream, $from, $to)]);
+            $report = $this->walk($verifier, $ledger, $stream, $from, $to, $depth);
 
             $divergent = $this->option('projections') ? $this->reproject($projections, $report, $from, $to) : null;
         } catch (Throwable $failure) {
@@ -77,9 +99,48 @@ final class VerifyCommand extends Command
             return self::FAILURE;
         }
 
-        $this->info($this->translated('intact', ['streams' => count($report->streams), 'entries' => $report->checked()]));
+        $this->info($report->covered() === 0
+            ? $this->translated('intact', ['streams' => count($report->streams), 'entries' => $report->checked()])
+            : $this->translated('anchored', [
+                'streams' => count($report->streams),
+                'entries' => $report->checked(),
+                'covered' => $report->covered(),
+            ]));
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Which walk the operator asked for. The shallow two are asked of every stream the ledger can
+     * name, the same way the deep one already is, because a range is a question the entry walk
+     * answers and neither of them takes one.
+     */
+    private function walk(Verifier $verifier, Ledger $ledger, ?string $stream, ?int $from, ?int $to, string $depth): IntegrityReport
+    {
+        if ($depth === self::ENTRIES) {
+            return $stream === null
+                ? $verifier->verifyEverything()
+                : new IntegrityReport([$verifier->verify($stream, $from, $to)]);
+        }
+
+        $streams = $stream !== null ? [$stream] : $this->named($ledger);
+
+        return new IntegrityReport(array_map(
+            fn (string $name): StreamVerification => $depth === self::ANCHORS
+                ? $verifier->verifyAnchors($name)
+                : $verifier->verifyRoots($name),
+            $streams,
+        ));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function named(Ledger $ledger): array
+    {
+        return $ledger instanceof EnumeratesStreams
+            ? $ledger->streams()
+            : throw QueryException::cannotEnumerateStreams($ledger::class);
     }
 
     /**
@@ -102,14 +163,41 @@ final class VerifyCommand extends Command
     private function render(IntegrityReport $report): void
     {
         $this->table(
-            [$this->translated('columns.stream'), $this->translated('columns.entries'), $this->translated('columns.chain'), $this->translated('columns.signatures')],
+            [
+                $this->translated('columns.stream'),
+                $this->translated('columns.entries'),
+                $this->translated('columns.chain'),
+                $this->translated('columns.anchors'),
+                $this->translated('columns.signatures'),
+            ],
             array_map(fn (StreamVerification $verification): array => [
                 $verification->stream(),
                 $verification->chain->checked,
                 $this->translated($verification->isIntact() ? 'sound' : 'broken'),
+                $this->anchors($verification),
                 $this->tally($verification->signatures),
             ], $report->streams),
         );
+    }
+
+    /**
+     * What the anchors said about this stream, and how much of it they answered for. A walk that
+     * read every entry has nothing to say here, and says nothing rather than a zero that would read
+     * as an absence of anchors.
+     */
+    private function anchors(StreamVerification $verification): string
+    {
+        $counted = [];
+
+        foreach (CheckpointState::cases() as $state) {
+            if (($verification->anchors[$state->value] ?? 0) > 0) {
+                $counted[] = $verification->anchors[$state->value].' '.$this->translated('anchor_states.'.$state->value);
+            }
+        }
+
+        return $counted === []
+            ? '—'
+            : implode(', ', $counted).' ('.$this->translated('covering', ['covered' => $verification->covered]).')';
     }
 
     /**

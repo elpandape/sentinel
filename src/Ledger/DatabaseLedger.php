@@ -15,6 +15,7 @@ use ElPandaPe\Sentinel\Enums\Filter;
 use ElPandaPe\Sentinel\Enums\RelationOperation;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
+use ElPandaPe\Sentinel\Integrity\Checkpoints;
 use ElPandaPe\Sentinel\Integrity\Stream;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Models\AuditRelation;
@@ -24,6 +25,7 @@ use ElPandaPe\Sentinel\Query\Period;
 use ElPandaPe\Sentinel\Query\RelationCriteria;
 use ElPandaPe\Sentinel\Query\TagCriteria;
 use ElPandaPe\Sentinel\Support\AuditCollection;
+use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Support\Reference;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -53,6 +55,8 @@ final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, En
         private EntryBuilder $builder,
         private ChangedFieldPredicate $fields,
         private RelationProjection $projection,
+        private Checkpoints $checkpoints,
+        private Config $config,
     ) {}
 
     public function write(AuditData $audit): Audit
@@ -62,7 +66,15 @@ final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, En
 
     public function writeMany(array $audits): AuditCollection
     {
-        return new AuditCollection($audits === [] ? [] : $this->chain($audits));
+        if ($audits === []) {
+            return new AuditCollection([]);
+        }
+
+        $written = $this->chain($audits);
+
+        $this->anchor($written);
+
+        return new AuditCollection($written);
     }
 
     /**
@@ -184,6 +196,33 @@ final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, En
     public function stream(string $stream): LedgerStream
     {
         return new DatabaseStream($this->model, $stream);
+    }
+
+    /**
+     * Anchoring runs after the sealing transaction has committed and never inside it: folding a
+     * window means reading it, and holding the writer's lock of the stream across that read would
+     * serialize every other writer of it behind the one that happened to cross the threshold. The
+     * emission gate and the unique index settle the race that leaves behind.
+     *
+     * An emission that fails is not swallowed. The entries are already sealed and are not at risk,
+     * but an installation that believes it is anchoring and is not would have no way to find out —
+     * and this route is opt-in, off by default, and the one the README steers away from precisely
+     * because it puts this work on the write path.
+     *
+     * Inside an application's own transaction there is nothing this can do: the commit belongs to
+     * whoever opened it.
+     *
+     * @param  list<Audit>  $written
+     */
+    private function anchor(array $written): void
+    {
+        if (! $this->config->checkpointsEnabled()) {
+            return;
+        }
+
+        foreach (array_unique(array_map(static fn (Audit $audit): string => $audit->stream, $written)) as $stream) {
+            $this->checkpoints->issue($stream);
+        }
     }
 
     /**
