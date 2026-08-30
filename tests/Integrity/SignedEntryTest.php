@@ -104,3 +104,21 @@ it('signs every entry of a batch', function (): void {
         expect($audit->verifySignature())->toBe(SignatureState::Signed);
     }
 });
+
+it('verifies a signed entry with encrypted fields while holding no encryption key', function (): void {
+    config()->set('sentinel.security.encryption.fields', ['secret']);
+
+    signingWith('v1', SigningKeys::SECRET);
+
+    $audit = ledger()->write(auditData(['after' => ['secret' => 'the plaintext']]));
+
+    // The auditor who verifies is not the operator who decrypts: no key is reachable from here on.
+    config()->set('sentinel.security.encryption.keys', []);
+
+    app()->forgetScopedInstances();
+
+    $reread = Audit::query()->findOrFail($audit->id);
+
+    expect($reread->verifyIntegrity())->toBeTrue()
+        ->and($reread->verifySignature())->toBe(SignatureState::Signed);
+});

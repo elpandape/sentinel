@@ -88,3 +88,16 @@ it('leaves the other stream intact when one of them breaks', function (): void {
 
     expect(verifier()->verifyStream(ReferenceChain::FORK)->isIntact())->toBeTrue();
 });
+
+it('catches a rewritten link on the row that carries it, because the hash covers it', function (): void {
+    seedTheReferenceChain();
+
+    DB::table(auditsTable())
+        ->where('id', '01JCHAIN0000000000000000S4')
+        ->update(['previous_hash' => str_repeat('0', 64)]);
+
+    $result = verifier()->verifyStream(ReferenceChain::STREAM);
+
+    expect($result->reason)->toBe(IntegrityBreak::HashMismatch)
+        ->and($result->sequence)->toBe(4);
+});
