@@ -39,6 +39,7 @@ use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Presentation\AuditPresenter;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Restore\Planner;
+use ElPandaPe\Sentinel\Retention\Schedule;
 use ElPandaPe\Sentinel\Security\Digester;
 use ElPandaPe\Sentinel\Security\Keyring;
 use ElPandaPe\Sentinel\Security\Maskers;
@@ -149,6 +150,14 @@ function phpFiles(?string $directory = null): array
     }
 
     return $files;
+}
+
+/**
+ * @param  array<string, string>  $retention
+ */
+function retentionSchedule(array $retention): Schedule
+{
+    return new Schedule(sentinelConfig(['retention' => $retention]));
 }
 
 function auditsTable(): string

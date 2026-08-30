@@ -108,6 +108,30 @@ final class ConfigurationException extends InvalidArgumentException
         );
     }
 
+    public static function unreadableRetention(string $key, string $declared): self
+    {
+        return new self(
+            "Sentinel cannot read [{$declared}] as the retention period of [sentinel.retention.{$key}]. "
+            .'Write a span, like `7 years` or `90 days`: a relative date would mean a different period on a different day.',
+        );
+    }
+
+    public static function instantRetention(string $key, string $declared): self
+    {
+        return new self(
+            "The retention period [{$declared}] of [sentinel.retention.{$key}] does not reach into the past, "
+            .'so it would release every entry it governs the moment one is written.',
+        );
+    }
+
+    public static function ambiguousRetention(string $first, string $second, string $target): self
+    {
+        return new self(
+            "Sentinel configuration keys [sentinel.retention.{$first}] and [sentinel.retention.{$second}] both govern [{$target}]. "
+            .'Two periods for the same entries is a choice nobody made; declare one.',
+        );
+    }
+
     public static function streamEmpty(): self
     {
         return new self('Sentinel resolved an empty stream name; every entry belongs to a named chain.');

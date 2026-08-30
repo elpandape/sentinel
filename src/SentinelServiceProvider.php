@@ -33,6 +33,7 @@ use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Models\AuditTransaction;
 use ElPandaPe\Sentinel\Pipeline\Discard;
 use ElPandaPe\Sentinel\Restore\Columns;
+use ElPandaPe\Sentinel\Retention\Schedule;
 use ElPandaPe\Sentinel\Security\Keyring;
 use ElPandaPe\Sentinel\Security\Maskers;
 use ElPandaPe\Sentinel\Support\Config;
@@ -102,6 +103,7 @@ final class SentinelServiceProvider extends ServiceProvider
         $this->app->scoped(Keyring::class);
         $this->app->scoped(Maskers::class);
         $this->app->scoped(PolicyRegistry::class);
+        $this->app->scoped(Schedule::class);
         $this->app->scoped(Signers::class);
         $this->app->scoped(ExecutionContext::class);
         $this->app->scoped(Runtime::class);
