@@ -17,6 +17,7 @@ use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Enums\FanoutPolicy;
 use ElPandaPe\Sentinel\Enums\RelationOperation;
 use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Integrity\Fold;
 use ElPandaPe\Sentinel\Integrity\Hasher;
 use ElPandaPe\Sentinel\Integrity\HmacSigner;
 use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
@@ -382,6 +383,28 @@ function hasher(): Hasher
     return new Hasher(new JsonCanonicalizer);
 }
 
+function fold(): Fold
+{
+    return new Fold(hasher());
+}
+
+/**
+ * The hashes of one range of a stream, read through the Ledger contract so the same call works over
+ * a table and over an array.
+ *
+ * @return list<string>
+ */
+function hashesOf(Ledger $ledger, string $stream, int $from, ?int $to = null): array
+{
+    $hashes = [];
+
+    foreach ($ledger->stream($stream)->range($from, $to) as $audit) {
+        $hashes[] = $audit->hash;
+    }
+
+    return $hashes;
+}
+
 function snapshotBuilder(): SnapshotBuilder
 {
     return new SnapshotBuilder(sentinelConfig());
@@ -569,6 +592,30 @@ function referenceChainOf(string $stream): array
         ReferenceChain::entries(),
         static fn (array $entry): bool => $entry['stream'] === $stream,
     ));
+}
+
+/**
+ * The reference chain over a ledger with no table under it, so a range of it can be folded without
+ * seeding anything.
+ */
+function referenceChainInMemory(): MemoryLedger
+{
+    /** @var MemoryLedger $ledger */
+    $ledger = app(MemoryLedger::class);
+
+    foreach (ReferenceChain::entries() as $entry) {
+        $ledger->append(new Audit()->forceFill($entry));
+    }
+
+    return $ledger;
+}
+
+/**
+ * @return list<string>
+ */
+function referenceHashes(string $stream, int $from, ?int $to = null): array
+{
+    return hashesOf(referenceChainInMemory(), $stream, $from, $to);
 }
 
 /**

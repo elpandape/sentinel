@@ -37,7 +37,8 @@ it('lets only the primary number the chain', function (): void {
     $written = fanout($primary, [$secondary])->write(auditData());
 
     expect($written->sequence)->toBe(1)
-        ->and(collect($secondary->stream('global'))->pluck('sequence')->all())->toBe([1, 2, 1]);
+        ->and($secondary->find($written->id)?->sequence)->toBe(1)
+        ->and(collect($secondary->stream('global'))->pluck('sequence')->all())->toBe([1, 1, 2]);
 });
 
 it('fans a whole batch out entry by entry', function (): void {

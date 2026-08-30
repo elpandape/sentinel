@@ -9,6 +9,7 @@ use ElPandaPe\Sentinel\Ledger\EntryBuilder;
 use ElPandaPe\Sentinel\Ledger\MemoryLedger;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Query\AuditQuery;
+use ElPandaPe\Sentinel\Tests\Fixtures\ReferenceChain;
 
 use function ElPandaPe\Sentinel\Tests\auditData;
 use function ElPandaPe\Sentinel\Tests\auditQuery;
@@ -235,4 +236,18 @@ it('names every stream it kept, in an order two runs can be diffed on', function
     $ledger->write(auditData(['stream' => 'first']));
 
     expect($ledger->streams())->toBe(['first', 'second']);
+});
+
+it('walks a stream in sequence, whatever order it was filled in', function (): void {
+    foreach (array_reverse(ReferenceChain::entries()) as $entry) {
+        $this->ledger->append(new Audit()->forceFill($entry));
+    }
+
+    $walked = [];
+
+    foreach ($this->ledger->stream(ReferenceChain::STREAM)->range(3, 6) as $audit) {
+        $walked[] = $audit->sequence;
+    }
+
+    expect($walked)->toBe([3, 4, 5, 6]);
 });

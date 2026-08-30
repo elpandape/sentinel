@@ -11,14 +11,25 @@ use Traversable;
 final readonly class ArrayStream implements LedgerStream
 {
     /**
+     * @var list<Audit>
+     */
+    private array $audits;
+
+    /**
      * @param  list<Audit>  $audits
      */
     public function __construct(
         private string $name,
-        private array $audits,
+        array $audits,
         private int $from = 1,
         private ?int $to = null,
-    ) {}
+    ) {
+        // Insertion order is not sequence order: append() takes an entry another ledger sealed, and
+        // a walk that yields them out of order reads as a chain nobody wrote.
+        usort($audits, static fn (Audit $left, Audit $right): int => $left->sequence <=> $right->sequence);
+
+        $this->audits = $audits;
+    }
 
     public function name(): string
     {

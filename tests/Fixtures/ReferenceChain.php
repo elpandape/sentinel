@@ -20,6 +20,17 @@ final class ReferenceChain
     public const string FORK = 'reference:other';
 
     /**
+     * The roots of the ranges, frozen the way the hashes are. The main stream anchors in windows of
+     * four and the fork in one window of two; ROOT_5_8 folds ROOT_1_4 into itself, so the pair is
+     * also what a chain of anchors looks like.
+     */
+    public const string ROOT_1_4 = '95eb29a2e90e4dd86ea7f663b9bc113e9a4a65d636f204effad17f5055d38097';
+
+    public const string ROOT_5_8 = '52bd23e1c7e687a8930d86302cada8e857551e291116eaebae0c07861fda64df';
+
+    public const string FORK_ROOT_1_2 = '11471dd6dacaf9fd7b43e898505587508b6dd7f2fe087445004e4621994fb56f';
+
+    /**
      * @return list<array<string, mixed>>
      */
     public static function entries(): array
