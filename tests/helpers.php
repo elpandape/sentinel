@@ -173,6 +173,34 @@ function auditRelationsTable(): string
     return $config->table('audit_relations');
 }
 
+function checkpointsTable(): string
+{
+    /** @var Config $config */
+    $config = app(Config::class);
+
+    return $config->table('checkpoints');
+}
+
+/**
+ * @param  array<string, mixed>  $overrides
+ * @return array<string, mixed>
+ */
+function checkpointRow(array $overrides = []): array
+{
+    return [
+        'id' => frozenUlid('ANCH'),
+        'stream' => 'global',
+        'sequence_from' => 1,
+        'sequence_to' => 4,
+        'root_hash' => str_repeat('a', 64),
+        'algorithm' => 'fold-sha256',
+        'signature' => null,
+        'key_id' => null,
+        'created_at' => '2026-08-30 09:00:00.000000',
+        ...$overrides,
+    ];
+}
+
 function transactionsTable(): string
 {
     /** @var Config $config */

@@ -311,6 +311,24 @@ final readonly class Config
             : throw ConfigurationException::unknown('integrity.algorithm', $algorithm, implode(', ', hash_algos()));
     }
 
+    /**
+     * Whether anchors are emitted at all, and how many entries one covers. Read the way the
+     * signature block is read rather than through boolean(): the section is nested, and a published
+     * config that predates the key would otherwise win with a section that does not have it.
+     *
+     * The window is a floor of one. A window of zero would anchor nothing, forever, while reporting
+     * that anchoring was switched on.
+     */
+    public function checkpointsEnabled(): bool
+    {
+        return $this->repository->get('sentinel.integrity.checkpoints.enabled') === true;
+    }
+
+    public function checkpointsEvery(): int
+    {
+        return max(1, $this->integer('integrity.checkpoints.every', 1000));
+    }
+
     public function signatureEnabled(): bool
     {
         return $this->repository->get('sentinel.integrity.signature.enabled') === true;

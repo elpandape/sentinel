@@ -25,8 +25,26 @@ it('reads the defaults shipped with the package', function (): void {
         ->and($config->snapshotsEnabled())->toBeTrue()
         ->and($config->snapshotsIncludeHidden())->toBeTrue()
         ->and($config->integrityEnabled())->toBeFalse()
+        ->and($config->checkpointsEnabled())->toBeFalse()
+        ->and($config->checkpointsEvery())->toBe(1000)
         ->and($config->complianceEnabled())->toBeFalse()
         ->and($config->retention())->toBeEmpty();
+});
+
+it('reads no anchoring at all out of a configuration published before anchors existed', function (): void {
+    $config = sentinelConfig(['integrity' => ['enabled' => true]]);
+
+    expect($config->checkpointsEnabled())->toBeFalse()
+        ->and($config->checkpointsEvery())->toBe(1000);
+});
+
+it('takes the window the configuration names, and never one that would anchor nothing', function (mixed $every, int $window): void {
+    expect(sentinelConfig(['integrity.checkpoints.every' => $every])->checkpointsEvery())->toBe($window);
+})->with([[100, 100], [1, 1], [0, 1], [-5, 1]]);
+
+it('refuses a window that is not a number of entries', function (): void {
+    expect(fn (): int => sentinelConfig(['integrity.checkpoints.every' => 'many'])->checkpointsEvery())
+        ->toThrow(ConfigurationException::class, 'integrity.checkpoints.every');
 });
 
 it('falls back in code when a published configuration never heard of the fanout', function (): void {

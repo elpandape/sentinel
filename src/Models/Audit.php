@@ -90,7 +90,11 @@ class Audit extends Model
 
     public const UPDATED_AT = null;
 
-    private const string SERIALIZED_AT = 'Y-m-d\\TH:i:s.uP';
+    /**
+     * How the package renders an instant, wherever it renders one. Public because an anchor is
+     * serialized outside this model and two definitions of it would agree until they did not.
+     */
+    public const string SERIALIZED_AT = 'Y-m-d\\TH:i:s.uP';
 
     /**
      * @return HasMany<AuditTag, $this>
