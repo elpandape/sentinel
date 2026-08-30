@@ -88,8 +88,16 @@ final readonly class Settlement
     }
 
     /**
-     * The entries of this batch that have no entry yet. A ledger that cannot look a capture up
-     * answers for none of them, and the unique index stays the arbiter it always was.
+     * The entries of this batch that have no entry yet, dropping what already settled and what the
+     * batch names twice. A ledger that cannot look a capture up answers for the first of those and
+     * not the second, so the second is answered here: the same identifier appearing twice in one
+     * call is one fact stated twice, and sealing both would hand the chain two rows that the unique
+     * index is about to refuse together — taking the whole batch down with them, the entries that
+     * were fine included.
+     *
+     * Deduplicating is not the same as guaranteeing. The unique index stays the arbiter it always
+     * was; this is what keeps a caller's mistake from costing three sealed chains before the
+     * database gets a word in.
      *
      * @param  list<AuditData>  $audits
      * @return list<AuditData>
@@ -101,15 +109,25 @@ final readonly class Settlement
             $audits,
         )));
 
-        if ($identifiers === [] || ! $this->ledger instanceof Deduplicates) {
+        if ($identifiers === []) {
             return $audits;
         }
 
-        $settled = $this->ledger->settled($identifiers);
+        $settled = $this->ledger instanceof Deduplicates ? $this->ledger->settled($identifiers) : [];
+        $seen = [];
 
-        return array_values(array_filter(
-            $audits,
-            static fn (AuditData $audit): bool => $audit->capture_id === null || ! in_array($audit->capture_id, $settled, true),
-        ));
+        return array_values(array_filter($audits, static function (AuditData $audit) use ($settled, &$seen): bool {
+            if ($audit->capture_id === null) {
+                return true;
+            }
+
+            if (in_array($audit->capture_id, $settled, true) || isset($seen[$audit->capture_id])) {
+                return false;
+            }
+
+            $seen[$audit->capture_id] = true;
+
+            return true;
+        }));
     }
 }

@@ -20,7 +20,10 @@ use ElPandaPe\Sentinel\Support\AuditCollection;
  *  - Nothing here promises that a read sees a write that just returned. `find()` and
  *    `stream()` may not show an entry `write()` handed back a moment ago.
  *  - Idempotency by `capture_id` belongs to the caller. A ledger cannot deduplicate what it
- *    cannot reliably look up, and the lookup is exactly the read with no promise attached.
+ *    cannot reliably look up, and the lookup is exactly the read with no promise attached. A batch
+ *    that names the same capture twice is therefore a caller error, not something `writeMany()`
+ *    resolves: the driver seals both and the unique index refuses them together. What the package
+ *    hands a ledger never contains one, because `Dispatch\Settlement` drops the repeat first.
  *
  * What is guaranteed, and what a driver is judged on, is the chain: within one stream the
  * sequence is dense and monotonic, and every entry links to the one before it.

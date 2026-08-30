@@ -68,6 +68,61 @@ it('leaves out an entry that already has one, and settles the rest', function ()
         ->and(Audit::query()->count())->toBe(2);
 });
 
+it('settles a capture the same batch names twice exactly once', function (): void {
+    $twice = frozenUlid('TWICE001');
+
+    $written = app(Settlement::class)->settleBatch([
+        auditData(['capture_id' => $twice]),
+        auditData(['capture_id' => frozenUlid('OTHER001')]),
+        auditData(['capture_id' => $twice]),
+    ]);
+
+    expect($written)->toHaveCount(2)
+        ->and(Audit::query()->count())->toBe(2)
+        ->and(verifier()->verifyStream('global')->isIntact())->toBeTrue();
+});
+
+it('announces the repeat neither as about to be written nor as written', function (): void {
+    $twice = frozenUlid('TWICE002');
+    $announced = 0;
+
+    app(Dispatcher::class)->listen(AuditCreating::class, static function () use (&$announced): void {
+        $announced++;
+    });
+
+    app(Settlement::class)->settleBatch([
+        auditData(['capture_id' => $twice]),
+        auditData(['capture_id' => $twice]),
+    ]);
+
+    expect($announced)->toBe(1);
+});
+
+it('keeps a repeated capture from taking down the entries around it', function (): void {
+    $twice = frozenUlid('TWICE003');
+
+    app(Settlement::class)->settleBatch([
+        auditData(['capture_id' => frozenUlid('BEFORE01')]),
+        auditData(['capture_id' => $twice]),
+        auditData(['capture_id' => $twice]),
+        auditData(['capture_id' => frozenUlid('AFTER001')]),
+    ]);
+
+    expect(Audit::query()->orderBy('sequence')->pluck('capture_id')->all())
+        ->toBe([frozenUlid('BEFORE01'), $twice, frozenUlid('AFTER001')]);
+});
+
+it('settles an entry that named no capture alongside ones that did', function (): void {
+    $written = app(Settlement::class)->settleBatch([
+        auditData(['capture_id' => frozenUlid('NAMED001')]),
+        auditData(),
+        auditData(['capture_id' => frozenUlid('NAMED001')]),
+    ]);
+
+    expect($written)->toHaveCount(2)
+        ->and($written->pluck('capture_id')->all())->toBe([frozenUlid('NAMED001'), null]);
+});
+
 it('says nothing at all for a batch that had already landed whole', function (): void {
     $landed = frozenUlid('LANDED02');
 

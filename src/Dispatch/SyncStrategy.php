@@ -106,6 +106,11 @@ final readonly class SyncStrategy implements DispatchStrategy
      * stamps every capture — but the dispatcher is reachable without it, and a batch that landed
      * and reported itself refused would be a write nobody announced.
      *
+     * Each entry is claimed once. A caller that named the same capture twice gets one hand-over for
+     * the row that settled and a refusal for the repeat, which is the same answer a retry of
+     * something already settled gets — because it is the same fact. Handing back the row twice
+     * would announce two writes where one happened.
+     *
      * @param  AuditCollection<int, Audit>  $written
      * @param  non-empty-list<AuditData>  $audits
      * @return list<Handover>
@@ -128,6 +133,8 @@ final readonly class SyncStrategy implements DispatchStrategy
                 $entry = $audit->capture_id === null
                     ? array_shift($unnamed)
                     : ($settled[$audit->capture_id] ?? null);
+
+                unset($settled[$audit->capture_id]);
 
                 return $entry instanceof Audit ? Handover::settled($entry) : Handover::refused();
             },
