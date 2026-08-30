@@ -96,6 +96,14 @@ it('answers with nothing for an openssl key the ring does not name', function ()
     expect(signerRing()->for('v2'))->toBeNull();
 });
 
+it('signs nothing under the null driver, whatever key the configuration names', function (): void {
+    config()->set('sentinel.integrity.signature.signer', 'null');
+    config()->set('sentinel.integrity.signature.key_id', 'v1');
+
+    expect(signerRing()->current())->toBeInstanceOf(NullSigner::class)
+        ->and(signerRing()->current()->sign(hashToSign()))->toBeEmpty();
+});
+
 it('resolves the null signer only under its own identifier', function (): void {
     config()->set('sentinel.integrity.signature.signer', 'null');
 

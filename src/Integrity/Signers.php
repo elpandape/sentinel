@@ -41,7 +41,12 @@ final class Signers
             return new NullSigner;
         }
 
-        $keyId = $this->config->signatureKeyId();
+        // Under the null driver the current key is the null one, whatever the configuration names:
+        // asking which key signs nothing is a question with one answer, and refusing to answer it
+        // would make `signer: null` a setting that throws on every write.
+        $keyId = $this->config->signatureDriver() === NullSigner::KEY_ID
+            ? NullSigner::KEY_ID
+            : $this->config->signatureKeyId();
 
         return $this->for($keyId) ?? throw SignatureException::unknownKey($keyId);
     }

@@ -1006,6 +1006,80 @@ foreach ([
     );
 }
 
+/*
+ * What a signature costs the write that carries it. Signing is the one thing this version adds to
+ * the hot path, and the three implementations are not in the same order of magnitude: an HMAC is a
+ * hash over sixty-four characters, and an RSA signature is a private-key operation per entry.
+ *
+ * The reference row is this same pass with signing off, which is what every release before this one
+ * did — so the delta is measured against the same machine, the same session and the same table
+ * rather than against a figure from another day.
+ */
+const SIGNATURE_ITERATIONS = 1000;
+
+$signing = static function (?string $signer) use ($app, $run, &$offset): float {
+    $app->make('config')->set('sentinel.mode', 'sync');
+    $app->make('config')->set('sentinel.integrity.signature.enabled', $signer !== null);
+    $app->make('config')->set('sentinel.integrity.signature.signer', $signer ?? 'hmac');
+    $app->forgetScopedInstances();
+
+    $run(BenchAudited::class, WARMUP, $offset);
+    $offset += WARMUP;
+    $total = $run(BenchAudited::class, SIGNATURE_ITERATIONS, $offset);
+    $offset += SIGNATURE_ITERATIONS;
+
+    return $total;
+};
+
+// Generated per run rather than shipped: a key pair in a repository is a key pair someone reuses.
+$pair = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+
+if ($pair === false) {
+    throw new RuntimeException('The benchmark could not generate a key pair to sign with.');
+}
+
+$private = '';
+openssl_pkey_export($pair, $private);
+$public = openssl_pkey_get_details($pair)['key'] ?? '';
+
+$app->make('config')->set('sentinel.integrity.signature.keys', [
+    'default' => 'bench-signing-secret',
+    'rsa' => $public,
+]);
+
+$unsigned = $signing(null);
+$hmac = $signing('hmac');
+$none = $signing('null');
+
+$app->make('config')->set('sentinel.integrity.signature.key_id', 'rsa');
+$app->make('config')->set('sentinel.integrity.signature.private_key', $private);
+
+$openssl = $signing('openssl');
+
+$app->make('config')->set('sentinel.integrity.signature.enabled', false);
+$app->make('config')->set('sentinel.integrity.signature.key_id', 'default');
+$app->forgetScopedInstances();
+
+echo PHP_EOL, '| Signature variant | Writes | Total (ms) | Per write (µs) | Δ vs unsigned |', PHP_EOL;
+echo '|---|---|---|---|---|', PHP_EOL;
+
+foreach ([
+    'unsigned' => $unsigned,
+    'HmacSigner (sha256)' => $hmac,
+    'OpenSslSigner (RSA-2048, sha256)' => $openssl,
+    'NullSigner' => $none,
+] as $label => $total) {
+    printf(
+        '| %s | %d | %.1f | %.1f | %s |%s',
+        $label,
+        SIGNATURE_ITERATIONS,
+        $total,
+        $total * 1000 / SIGNATURE_ITERATIONS,
+        $total === $unsigned ? '—' : sprintf('%+.1f%%', ($total / $unsigned - 1) * 100),
+        PHP_EOL,
+    );
+}
+
 printf(
     '%sPHP %s · %s (synchronous off, journal in memory) · %d columns per subject · %d iterations after %d warm-up writes%s',
     PHP_EOL,
