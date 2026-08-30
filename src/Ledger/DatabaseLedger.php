@@ -52,6 +52,7 @@ final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, En
         private Stream $stream,
         private EntryBuilder $builder,
         private ChangedFieldPredicate $fields,
+        private RelationProjection $projection,
     ) {}
 
     public function write(AuditData $audit): Audit
@@ -356,9 +357,10 @@ final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, En
      *
      * The indexable copy of what the entry already carries. Unlike the labels, these are read
      * back out of the entry rather than off a loaded relation: the lines are inside the canonical
-     * payload, so an entry that has them cannot arrive without them, and deriving the rows here is
+     * payload, so an entry that has them cannot arrive without them, and deriving the rows is
      * projection rather than guesswork. It is also what keeps the two from ever disagreeing — an
-     * entry appended by a secondary destination projects exactly what the primary sealed.
+     * entry appended by a secondary destination projects exactly what the primary sealed, and the
+     * verification re-derives through the same object rather than through a second copy of it.
      *
      * @param  array<int, Audit>  $written
      */
@@ -367,57 +369,13 @@ final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, En
         $rows = [];
 
         foreach ($written as $audit) {
-            /** @var array<array-key, mixed> $lines */
-            $lines = $audit->getAttribute('changes') ?? [];
-
-            foreach ($lines as $line) {
-                if (is_array($line) && array_key_exists('relation', $line) && array_key_exists('operation', $line)) {
-                    $rows[] = $this->row($audit->id, $line);
-                }
-            }
+            $rows = [...$rows, ...$this->projection->rowsFor($audit)];
         }
 
         $this->insertInStatements(
             $rows,
             fn (array $slice): bool => $this->model->getConnection()->table($this->relations->getTable())->insert($slice),
         );
-    }
-
-    /**
-     * @param  array<array-key, mixed>  $line
-     * @return array<string, mixed>
-     */
-    private function row(string $audit, array $line): array
-    {
-        return [
-            'audit_id' => $audit,
-            'relation' => $this->text($line, 'relation'),
-            'operation' => $this->text($line, 'operation'),
-            'related_type' => $this->text($line, 'related_type'),
-            'related_id' => $this->text($line, 'related_id'),
-            'pivot_before' => $this->json($line, 'pivot_before'),
-            'pivot_after' => $this->json($line, 'pivot_after'),
-        ];
-    }
-
-    /**
-     * @param  array<array-key, mixed>  $line
-     */
-    private function text(array $line, string $key): ?string
-    {
-        $value = $line[$key] ?? null;
-
-        return is_string($value) ? $value : null;
-    }
-
-    /**
-     * @param  array<array-key, mixed>  $line
-     */
-    private function json(array $line, string $key): ?string
-    {
-        $value = $line[$key] ?? null;
-
-        return is_array($value) ? json_encode($value, JSON_THROW_ON_ERROR) : null;
     }
 
     /**

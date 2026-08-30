@@ -22,6 +22,7 @@ use ElPandaPe\Sentinel\Integrity\HmacSigner;
 use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
 use ElPandaPe\Sentinel\Integrity\NullSigner;
 use ElPandaPe\Sentinel\Integrity\OpenSslSigner;
+use ElPandaPe\Sentinel\Integrity\Projections;
 use ElPandaPe\Sentinel\Integrity\Signers;
 use ElPandaPe\Sentinel\Integrity\Stream;
 use ElPandaPe\Sentinel\Integrity\Verifier;
@@ -717,6 +718,14 @@ function signingWith(string $keyId, string $secret): void
     config()->set('sentinel.integrity.signature.enabled', true);
     config()->set('sentinel.integrity.signature.keys', [$keyId => $secret]);
     config()->set('sentinel.integrity.signature.key_id', $keyId);
+}
+
+function projections(): Projections
+{
+    /** @var Projections $projections */
+    $projections = app(Projections::class);
+
+    return $projections;
 }
 
 function signerRing(): Signers

@@ -10,4 +10,5 @@ enum IntegrityBreak: string
     case LinkMismatch = 'link_mismatch';
     case SequenceGap = 'sequence_gap';
     case SignatureMismatch = 'signature_mismatch';
+    case ProjectionMismatch = 'projection_mismatch';
 }

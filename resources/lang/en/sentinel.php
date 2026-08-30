@@ -91,6 +91,7 @@ return [
         'link_mismatch' => 'Audit :id does not link to the entry before it at sequence :sequence of stream :stream.',
         'sequence_gap' => 'Stream :stream is missing sequence :sequence, so its chain cannot be followed past it.',
         'signature_mismatch' => 'Audit :id carries a signature that its own key does not verify, at sequence :sequence of stream :stream.',
+        'projection_mismatch' => 'The indexed relations of audit :id no longer match the lines it sealed, at sequence :sequence of stream :stream. The chain is intact: the projection is not part of it.',
     ],
 
 ];
