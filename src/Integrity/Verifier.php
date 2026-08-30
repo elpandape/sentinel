@@ -241,8 +241,10 @@ final readonly class Verifier
                 $forged = $this->announce($name, $anchored + $retired, IntegrityBreak::SignatureMismatch, $anchor->from, $anchor->rootHash);
             }
 
-            if ($refold && $this->checkpoints->refold($anchor, $previous) !== $anchor->rootHash) {
-                if (! $this->archives->holds($name, $anchor->from, $anchor->to)) {
+            $root = $refold ? $this->checkpoints->refold($anchor, $previous) : $anchor->rootHash;
+
+            if ($root !== $anchor->rootHash) {
+                if (! $this->retired($name, $anchor, $root)) {
                     return new StreamVerification(
                         $this->located($name, $anchor, $anchored + $retired),
                         $signatures,
@@ -252,9 +254,6 @@ final readonly class Verifier
                     );
                 }
 
-                // The root cannot be folded again because the entries are not there, and the
-                // manifest says that is on purpose. The anchor still stands: it was signed over a
-                // root, and the anchor after it folds that root in.
                 $retired++;
             } else {
                 $anchored++;
@@ -291,6 +290,19 @@ final readonly class Verifier
         }
 
         return $states;
+    }
+
+    /**
+     * Whether a root that did not come back is a range that left rather than a range that changed.
+     *
+     * Only a root that could not be recomputed at all qualifies. A range that folds to a DIFFERENT
+     * root has its entries right there and they have moved, and the manifest must not be able to
+     * excuse that: the row is unsigned and unhashed, so treating any failed fold as retired would
+     * make one insert the cost of hiding a rewritten range from the deepest walk there is.
+     */
+    private function retired(string $name, Checkpoint $anchor, ?string $root): bool
+    {
+        return $root === null && $this->archives->holds($name, $anchor->from, $anchor->to);
     }
 
     /**

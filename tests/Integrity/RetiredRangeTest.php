@@ -108,3 +108,17 @@ it('leaves the anchor walk alone, which never read those entries anyway', functi
     expect($verification->isIntact())->toBeTrue()
         ->and($verification->covered)->toBe(8);
 });
+
+it('does not let a manifest row excuse a range whose entries are still there and no longer fold', function (): void {
+    DB::table(auditsTable())
+        ->where('stream', ReferenceChain::STREAM)
+        ->where('sequence', 2)
+        ->update(['hash' => str_repeat('0', 64)]);
+
+    manifest()->record(ReferenceChain::STREAM, 1, 4, 4);
+
+    $verification = verifier()->verifyRoots(ReferenceChain::STREAM);
+
+    expect($verification->isIntact())->toBeFalse()
+        ->and($verification->chain->reason)->toBeIn([IntegrityBreak::CheckpointMismatch, IntegrityBreak::HashMismatch]);
+});

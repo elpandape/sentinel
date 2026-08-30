@@ -2,6 +2,24 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.19.0.1 — A manifest row could excuse a tampering (2026-08-30)
+
+### Fixed
+
+- **`verifyRoots()` reported a rewritten range as retired instead of as broken.** A failed refold has
+  two causes and `v0.19.0` treated them as one: the root cannot be recomputed because the entries
+  are gone, or the range folds to a *different* root because the entries are right there and have
+  moved. Only the first is something a manifest row may account for. As shipped, one `INSERT` into
+  `sentinel_archives` — a table that is deliberately unsigned and unhashed — was enough for a
+  rewritten anchored range to come back `archived` and exit `0` from the deepest walk there is.
+
+  The excuse now requires that the root could not be recomputed *at all*, which is the condition the
+  code claimed in a comment and never checked. Nothing that verified before stops verifying: the
+  change can only turn a false intact into a true break.
+
+An installation that has never run `sentinel:prune` was never exposed, because nothing else writes
+to `sentinel_archives`. Upgrading needs no migration and no configuration change.
+
 ## v0.19.0 — Retention and pruning (2026-08-30)
 
 `sentinel_audits` only ever grew. This version is how it stops growing, and the interesting part is
