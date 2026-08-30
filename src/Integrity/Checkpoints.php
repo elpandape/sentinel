@@ -1,0 +1,162 @@
+<?php
+
+declare(strict_types=1);
+
+namespace ElPandaPe\Sentinel\Integrity;
+
+use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Models\AuditCheckpoint;
+use ElPandaPe\Sentinel\Support\Config;
+use Illuminate\Database\UniqueConstraintViolationException;
+
+/**
+ * Emits and reads the anchors of a stream.
+ *
+ * A window is a fixed number of entries, not whatever happened to be pending: with the second rule
+ * the two ends of a range would depend on when the emission ran, and the root of one history would
+ * stop being reproducible. The trailing incomplete window is not anchored, and a verification walks
+ * it entry by entry, which is what it would have done for the whole stream anyway.
+ *
+ * The range is read before anything is written and the count has to fill the window exactly. That
+ * covers the ordinary case — the entries are not there yet — and the one that matters, a hole
+ * inside the range: folding over a short range would produce a root that the same range would not
+ * reproduce once the missing entry was back.
+ */
+final readonly class Checkpoints
+{
+    private const int MAX_ATTEMPTS = 3;
+
+    public function __construct(
+        private Audit $audits,
+        private AuditCheckpoint $anchors,
+        private Fold $fold,
+        private Signers $signers,
+        private Config $config,
+    ) {}
+
+    /**
+     * Every complete window the stream still owes, anchored in order. Each one is its own
+     * transaction: an emission interrupted halfway leaves anchors that are contiguous as far as
+     * they go, which is the only state the next run can carry on from.
+     *
+     * @return list<Checkpoint>
+     */
+    public function issue(string $stream): array
+    {
+        $issued = [];
+
+        while (($anchor = $this->next($stream)) instanceof Checkpoint) {
+            $issued[] = $anchor;
+        }
+
+        return $issued;
+    }
+
+    /**
+     * @return list<Checkpoint>
+     */
+    public function of(string $stream): array
+    {
+        $anchors = [];
+
+        foreach ($this->anchors->newQuery()->where('stream', $stream)->orderBy('sequence_from')->cursor() as $row) {
+            $anchors[] = Checkpoint::of($row);
+        }
+
+        return $anchors;
+    }
+
+    public function last(string $stream): ?Checkpoint
+    {
+        $row = $this->anchors->newQuery()
+            ->where('stream', $stream)
+            ->orderByDesc('sequence_to')
+            ->first();
+
+        return $row instanceof AuditCheckpoint ? Checkpoint::of($row) : null;
+    }
+
+    /**
+     * The unique index is the final arbiter, so a loser of the race reads where the anchors end
+     * again and takes the window after the one it lost.
+     */
+    private function next(string $stream): ?Checkpoint
+    {
+        $attempt = 0;
+
+        while (true) {
+            try {
+                return $this->attempt($stream);
+            } catch (UniqueConstraintViolationException $violation) {
+                if (++$attempt >= self::MAX_ATTEMPTS) {
+                    throw $violation;
+                }
+            }
+        }
+    }
+
+    private function attempt(string $stream): ?Checkpoint
+    {
+        $connection = $this->audits->getConnection();
+
+        return $connection->transaction(function () use ($connection, $stream): ?Checkpoint {
+            $tail = new CheckpointGate($connection, $this->anchors->getTable())->tail($stream);
+
+            $from = $tail->sequence + 1;
+            $to = $tail->sequence + $this->config->checkpointsEvery();
+            $hashes = $this->hashes($stream, $from, $to);
+
+            return count($hashes) === $to - $from + 1
+                ? Checkpoint::of($this->write($stream, $from, $to, $tail->root, $hashes))
+                : null;
+        });
+    }
+
+    /**
+     * @param  list<string>  $hashes
+     */
+    private function write(string $stream, int $from, int $to, ?string $previous, array $hashes): AuditCheckpoint
+    {
+        $algorithm = $this->config->integrityAlgorithm();
+        $root = $this->fold->root($stream, $from, $to, $previous, $algorithm, $hashes);
+
+        // The signature goes over the root the same way an entry's goes over its hash, and an empty
+        // one leaves both columns null: an anchor nobody signed says so rather than claiming a
+        // signature that attests to nothing.
+        $signer = $this->signers->current();
+        $signature = $signer->sign($root);
+
+        $anchor = $this->anchors->newInstance();
+
+        $anchor->forceFill([
+            'stream' => $stream,
+            'sequence_from' => $from,
+            'sequence_to' => $to,
+            'root_hash' => $root,
+            'algorithm' => Fold::name($algorithm),
+            'signature' => $signature === '' ? null : $signature,
+            'key_id' => $signature === '' ? null : $signer->keyId(),
+        ])->save();
+
+        return $anchor;
+    }
+
+    /**
+     * The hash of every entry of the range and nothing else. Folding neither canonicalizes nor
+     * decrypts, so the read is two columns wide however heavy the entries are.
+     *
+     * @return list<string>
+     */
+    private function hashes(string $stream, int $from, int $to): array
+    {
+        /** @var list<string> $hashes */
+        $hashes = $this->audits->newQuery()
+            ->where('stream', $stream)
+            ->whereBetween('sequence', [$from, $to])
+            ->orderBy('sequence')
+            ->pluck('hash')
+            ->all();
+
+        return $hashes;
+    }
+}

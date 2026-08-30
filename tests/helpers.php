@@ -17,6 +17,8 @@ use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Enums\FanoutPolicy;
 use ElPandaPe\Sentinel\Enums\RelationOperation;
 use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Integrity\Checkpoint;
+use ElPandaPe\Sentinel\Integrity\Checkpoints;
 use ElPandaPe\Sentinel\Integrity\Fold;
 use ElPandaPe\Sentinel\Integrity\Hasher;
 use ElPandaPe\Sentinel\Integrity\HmacSigner;
@@ -803,6 +805,26 @@ function projections(): Projections
     return $projections;
 }
 
+function checkpoints(): Checkpoints
+{
+    /** @var Checkpoints $checkpoints */
+    $checkpoints = app(Checkpoints::class);
+
+    return $checkpoints;
+}
+
+/**
+ * Anchors of the given size, over a stream already in the table.
+ *
+ * @return list<Checkpoint>
+ */
+function anchor(string $stream, int $every): array
+{
+    config()->set('sentinel.integrity.checkpoints.every', $every);
+
+    return checkpoints()->issue($stream);
+}
+
 function signerRing(): Signers
 {
     /** @var Signers $ring */
@@ -884,6 +906,53 @@ function raceTheGate(string $rival): void
         rescue(function () use ($rival): void {
             DB::connection($rival)->statement(lockTimeout());
             DB::connection($rival)->table(auditsTable())->insert(auditRow(['sequence' => 1]));
+        }, report: false);
+    });
+}
+
+/**
+ * Writes the anchor an emitter is about to write, in the moment between its read of where the
+ * anchors end and its own insert — which is the one moment the unique index has to arbitrate.
+ * Interfering once is a rival that got there first; interfering every time is the same rival
+ * winning every race there is.
+ */
+function anchorAheadOf(string $stream, int $times): void
+{
+    $done = 0;
+
+    DB::listen(function (QueryExecuted $query) use (&$done, $times, $stream): void {
+        if ($done >= $times || ! str_contains($query->sql, checkpointsTable()) || ! str_contains($query->sql, 'order by')) {
+            return;
+        }
+
+        $done++;
+
+        DB::table(checkpointsTable())->insert(checkpointRow([
+            'id' => frozenUlid('RIVAL'.$done),
+            'stream' => $stream,
+        ]));
+    });
+}
+
+/**
+ * Slips a rival emitter in between the read of where the anchors end and the insert of the next
+ * one. Whether it gets through is the engine's business; that the anchors stay contiguous either
+ * way is not.
+ */
+function raceTheAnchor(string $rival): void
+{
+    $raced = false;
+
+    DB::listen(function (QueryExecuted $query) use (&$raced, $rival): void {
+        if ($raced || ! str_contains($query->sql, checkpointsTable())) {
+            return;
+        }
+
+        $raced = true;
+
+        rescue(function () use ($rival): void {
+            DB::connection($rival)->statement(lockTimeout());
+            DB::connection($rival)->table(checkpointsTable())->insert(checkpointRow());
         }, report: false);
     });
 }
