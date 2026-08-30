@@ -25,9 +25,10 @@ identical, and now they do not — but only when two independent things say so.
   in the direction that keeps evidence forever, which is why nobody would notice. What no policy
   names is kept forever.
 - **`php artisan sentinel:prune`**, with `--dry-run` walking the same windows through the same code
-  and counting instead of removing. `--action` has no default and `delete` is the only one this
-  release has: the action that writes a range out first arrives next and will be the default, so
-  naming it now is what keeps a scheduled command from changing meaning underneath an installation.
+  and counting instead of removing, `--stream` and `--batch`. `--action` has no default and `delete`
+  is the only one this release has: the action that writes a range out first arrives next and will
+  be the default, so naming it now is what keeps a scheduled command from changing meaning
+  underneath an installation.
 - **`sentinel_archives`**, born whole, recording every range that left the hot table. Unlike the
   anchors it cannot be derived again — the entries it accounts for are the ones that are no longer
   there — so losing it loses the map rather than a shortcut.

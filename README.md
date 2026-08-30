@@ -2527,7 +2527,12 @@ can set.
 php artisan sentinel:prune --action=delete --dry-run
 php artisan sentinel:prune --action=delete
 php artisan sentinel:prune --action=delete --stream=tenant:acme
+php artisan sentinel:prune --action=delete --batch=200
 ```
+
+`--batch` names the size for one run. The configured size is what a schedule uses; a run made by
+hand is where somebody is watching the load and wants a smaller slice this once, and editing the
+config to get it would leave the smaller slice behind for the schedule too.
 
 ```
 +-------------+--------+---------+---------+------------------------------------------+
