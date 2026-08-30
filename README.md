@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.18.0-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.18.1-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -52,9 +52,9 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.16.1` | The `buffered` mode: a Redis buffer with its own contract, batched settlement, four flush triggers and `sentinel:flush` |
 | `v0.17.0` | Mass operations: `auditing()` on the query builder, three modes, the criteria recorded without its values, and `upserted` |
 | `v0.18.0` | Signatures over the hash, a key ring that rotates and retires, verification of the whole trail, and `sentinel:verify` with its exit codes |
+| `v0.18.1` | Checkpoints: a signed root over a fixed window, a chain of anchors, two shallower verification depths and `sentinel:checkpoint` |
 
-Everything else is on the roadmap: checkpoints anchoring ranges, retention and compliance,
-partitioning and distributed tracing.
+Everything else is on the roadmap: retention and compliance, partitioning and distributed tracing.
 
 `v0.4.0` is the version that starts auditing: a model with the trait writes its own chained entries.
 `v0.5.0` is the one that answers what changed, instead of leaving you two states to compare.
@@ -81,7 +81,10 @@ here and settled somewhere else is still settled exactly once. `v0.16.1` finishe
 the mode that batches, and writes down exactly what it can lose and what it cannot. `v0.17.0` closes
 the blind spot every auditing package in this ecosystem documents as a limitation: a mass update, a
 mass delete and an upsert can be audited by asking for it on the query, and a query that does not
-ask goes on costing nothing.
+ask goes on costing nothing. `v0.18.0` is the one that makes the trail provable to someone who does
+not trust the database it lives in. `v0.18.1` is the one that stops proving it from costing a read
+of everything — and is careful to say which of its three walks proves what, because an anchor
+covering a range is not the same claim as having read it.
 
 ## Quick start
 
@@ -2169,8 +2172,9 @@ Replace the model with your own subclass:
 ## Integrity chain
 
 Chaining is unconditional: every entry a `Ledger` writes links to the one before it in its stream,
-regardless of configuration. `integrity.enabled` does not govern this — it will govern only the
-advanced verification that ships later (checkpoints and signatures), which does not exist yet.
+regardless of configuration. `integrity.enabled` does not govern this — it is
+[signatures](#signing-the-chain) and [anchors](#anchoring-ranges) that are optional, and both ship
+off.
 
 Each entry's `hash` covers a prefix and the canonical payload:
 
@@ -2219,7 +2223,7 @@ $audit->verifyIntegrity(); // bool
 ```
 
 A verification failure never throws. It dispatches `Events\IntegrityVerificationFailed` and reports
-through `Integrity\VerificationResult`, for one of five reasons (`Enums\IntegrityBreak`):
+through `Integrity\VerificationResult`, for one of six reasons (`Enums\IntegrityBreak`):
 
 | Reason | Means |
 |---|---|
@@ -2228,6 +2232,7 @@ through `Integrity\VerificationResult`, for one of five reasons (`Enums\Integrit
 | `sequence_gap` | A `sequence` is missing from the stream — an entry is gone. |
 | `signature_mismatch` | The signature does not verify under the key the row names. |
 | `projection_mismatch` | `sentinel_audit_relations` no longer matches the lines the entry sealed. The chain is intact; the index is not. |
+| `checkpoint_mismatch` | An anchor no longer folds to the root it recorded, over a range whose entries are otherwise sound. |
 
 An entry is immutable through every path the model exposes: `save()`, `update()`, `delete()` and
 `destroy()` all throw `Exceptions\ImmutableAuditException` once the row exists. That guard runs on
@@ -2358,8 +2363,126 @@ Median of three passes, SQLite with `synchronous` and journal off, the four rows
 The `NullSigner` row is the noise gauge: it adds one method call and still moves between −10 % and
 +12 % across passes, so the HMAC figure is indistinguishable from zero and the RSA one is not. RSA
 costs roughly **850 µs of private-key work per entry**, on the write path, every write. If that
-matters, sign with `hmac` and put the trust boundary somewhere else — the anchor, once `v0.18.1`
-ships checkpoints, is the thing worth exporting to where an administrator cannot reach it.
+matters, sign with `hmac` and put the trust boundary somewhere else — an
+[anchor](#anchoring-ranges) is the thing worth exporting to where an administrator cannot reach it.
+
+## Anchoring ranges
+
+Verifying a chain means walking it. On a trail that only grows, that eventually means reading
+everything to answer a question about anything. A **checkpoint** is an anchor over a range: the root
+that range folds to, signed, so the history can be verified without being reread — and so a range
+that does not add up can be found without walking the ranges that do.
+
+Anchors are off by default:
+
+```php
+'integrity' => [
+    'enabled' => true,
+    'checkpoints' => [
+        'enabled' => true,
+        'every' => 1000,
+    ],
+],
+```
+
+`every` is a **fixed window**, not "whatever is pending". A window of a thousand anchors `[1, 1000]`,
+then `[1001, 2000]`, and the trailing incomplete window is left alone until it fills. If the window
+were whatever happened to be pending, the two ends of a range would depend on when the emission ran
+and the root of one history would stop being reproducible.
+
+### What an anchor is
+
+```
+name    = "fold-" + algorithm                      // fold-sha256
+root₀   = H( name ⑴ stream ⑴ from ⑴ to ⑴ (previous root ?? "") )
+rootᵢ   = H( rootᵢ₋₁ ⑴ hashᵢ )                      // every entry of the range, in sequence
+```
+
+`⑴` is the same `\x1f` separator the entry hash uses. Three things are worth knowing about that
+formula:
+
+- **It folds; it is not a Merkle tree.** A tree buys inclusion proofs, and nothing in Sentinel
+  consumes one. Git and RFC 5848 fold for the same reason; the tree turns up where a remote client
+  that does not trust the log asks for a single record — and CT, Trillian, immudb and QLDB all keep
+  a chain underneath the tree anyway. The `algorithm` column records `fold-sha256`, which is the
+  door a `merkle-sha256` comes through later without touching a row already written.
+- **The previous anchor goes into the fold.** Contiguous integers are not linkage. Without it,
+  whoever rewrites a range and reissues its anchor produces a history that agrees with itself; with
+  it, reissuing one anchor forces reissuing every anchor after it. There is no column for it — the
+  previous anchor is the row whose `sequence_to` is this one's `sequence_from` minus one.
+- **The prefix separates domains.** The construction, the stream and both ends of the range go in,
+  so a range of one cannot collide with the entry it contains and the same range over another stream
+  cannot land on the same root. It is why RFC 6962 §2.1 prefixes leaves and nodes: the ambiguity is
+  unfixable after the first anchor is written.
+
+Anchors are signed with the same `Signer` as entries and record their `key_id`. **An unsigned anchor
+is a row anyone with write access can reissue** — anchoring without signing buys speed and no trust.
+
+### Three depths, and what each one actually proves
+
+This is the part worth reading before trusting a number:
+
+| Call | What it reads | What it proves | What it does not |
+|---|---|---|---|
+| `Sentinel::verifyAnchors($stream)` | the anchors, and the tail no anchor covers | the anchors are a contiguous signed chain, and the tail links | nothing about the current content of the anchored entries |
+| `Sentinel::verifyRoots($stream)` | `(sequence, hash)` of each range; walks whole only a range that does not fold back | no hash was rewritten or reordered, and **where** | that an entry's content did not change while its `hash` column stayed put |
+| `Sentinel::verifyIntegrity($stream)` | every entry, rehashed | everything | — |
+
+The fold is over the stored `hash` of each entry, not over its content. So someone who edits a
+canonical column *and* leaves `hash` alone passes both shallow walks and is caught only by the deep
+one. `verifyIntegrity()` is unchanged by any of this and stays the walk it always was: switching
+anchoring on never makes an installation verify less than it did the day before.
+
+Because of that, **a range under a valid anchor is reported as `anchored`, never as `intact`**. The
+report keeps the two numbers apart:
+
+```php
+$verification = Sentinel::verifyAnchors('global');
+
+$verification->chain->checked;  // entries read
+$verification->covered;         // entries taken on an anchor's word
+$verification->anchors;         // ['anchored' => 41]
+$verification->isIntact();      // nothing came back wrong — not "everything was read"
+```
+
+A stream nobody has anchored reports `['absent' => 1]` and is walked whole, which gives the same
+answer the deep walk gives, only having paid for it. A missing anchor is a state, not a failure;
+`checkpoint_mismatch` is the failure.
+
+### Emitting them
+
+The recommended route is the command, on the application's own schedule:
+
+```php
+// routes/console.php
+Schedule::command('sentinel:checkpoint')->hourly();
+```
+
+**The schedule belongs to the application.** Sentinel registers commands and nothing else; a package
+that puts itself on a scheduler is a surprise in somebody else's application.
+
+The other route is a threshold, evaluated after each write and outside the sealing transaction:
+
+```php
+'checkpoints' => ['enabled' => true, 'every' => 1000],
+```
+
+That puts the fold on whichever write completes a window. Median of three passes, SQLite with
+`synchronous` and journal off, all rows inside one run:
+
+| Variant | µs per write | Δ vs unanchored |
+|---|---|---|
+| not anchored | 2204.6 | — |
+| every 1000 entries | 2428.8 | +10.2 % |
+| every 100 entries | 2448.3 | +11.1 % |
+| every 100 entries, HMAC signed | 2468.1 | +12.0 % |
+
+The unanchored row spans 7.5 % across its own three passes, so what is left is small and — this is
+the part that matters — no longer grows with the window. Anchoring on a schedule keeps it off the
+write path entirely, which is why that is the route the table recommends.
+
+Only the ledger that assigns sequences anchors. `MemoryLedger` and `NullLedger` keep nothing to fold,
+and a `FanoutLedger` anchors through the primary that sealed the entries.
 
 ## Artisan commands
 
@@ -2367,21 +2490,39 @@ ships checkpoints, is the thing worth exporting to where an administrator cannot
 |---|---|---|
 | `sentinel:flush` | Settles everything the buffer is holding | `0` settled · `1` the flush failed · `2` not in `buffered` mode |
 | `sentinel:verify` | Walks the chain and reports what it found | `0` intact · `1` broken · `2` could not run |
+| `sentinel:checkpoint` | Anchors every complete window the streams still owe | `0` anchored, or nothing left to anchor · `2` could not run |
 
 ```bash
 php artisan sentinel:verify
 php artisan sentinel:verify --stream=global --from=1 --to=500
 php artisan sentinel:verify --projections
+php artisan sentinel:verify --depth=anchors
+php artisan sentinel:checkpoint
+php artisan sentinel:checkpoint --stream=tenant:acme
 ```
 
 ```
-+-----------------+---------+--------+------------+
-| Stream          | Entries | Chain  | Signatures |
-+-----------------+---------+--------+------------+
-| global          | 41208   | intact | 41208 signed |
-| tenant:acme     | 3106    | BROKEN | 2980 signed, 1 INVALID |
-+-----------------+---------+--------+------------+
++-----------------+---------+--------+---------+------------+
+| Stream          | Entries | Chain  | Anchors | Signatures |
++-----------------+---------+--------+---------+------------+
+| global          | 41208   | intact | —       | 41208 signed |
+| tenant:acme     | 3106    | BROKEN | —       | 2980 signed, 1 INVALID |
++-----------------+---------+--------+---------+------------+
 Audit 01J… carries a signature that its own key does not verify, at sequence 2981 of stream tenant:acme.
+```
+
+`--depth` picks which walk to run: `entries` (the default, reads and rehashes every one), `roots`
+(folds each range again) or `anchors` (reads only the anchors). The shallow two take no `--from` and
+no `--to` — a range is what the deep one answers — and they report what they did **not** read:
+
+```
++-----------------+---------+--------+--------------------------------------------------+
+| Stream          | Entries | Chain  | Anchors                                          |
++-----------------+---------+--------+--------------------------------------------------+
+| global          | 208     | intact | 41 anchored (covering 41000 entries nobody read)  |
++-----------------+---------+--------+--------------------------------------------------+
+Read 208 entries and took 41000 on the word of their anchors, across 1 streams. Nothing came back
+wrong, which is not the same as every entry having been read.
 ```
 
 **Three exit codes and not two.** A broken chain and a command that could not run are different
@@ -2389,7 +2530,9 @@ facts, and a watchdog that cannot tell them apart will eventually treat one as t
 without a `--stream`, or a ledger that cannot list its chains, exits `2` — not `1`.
 
 **A trail nobody has signed exits `0`.** It is sound. The table says how many entries are unsigned so
-an operator sees it without a cron waking anyone at 3am over it.
+an operator sees it without a cron waking anyone at 3am over it. `sentinel:checkpoint` exits `0` when
+there was nothing left to anchor, for the same reason: that is the ordinary outcome of running it on
+a schedule.
 
 `--projections` is opt-in because it reads a second table over the same rows. Nobody should pay for
 that question while asking whether the chain holds.

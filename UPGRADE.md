@@ -9,6 +9,66 @@ before `1.0.0`.
 
 ---
 
+## v0.18.0 → v0.18.1
+
+One new table, `sentinel_checkpoints`. `payload_version` stays at `1`, `sentinel_audits` is not
+touched, and no hash is recomputed — the anchors fold over hashes that already exist.
+
+```bash
+php artisan migrate
+```
+
+An installation that changes nothing behaves exactly as it did. Anchoring is off by default.
+
+### Turning it on over an existing trail
+
+Anchors calculate over the rows without touching them, so emitting one today over `[1, 40000]`
+proves that range has not changed **since today**, which is exactly what it says and nothing more.
+
+```php
+'integrity' => [
+    'enabled' => true,
+    'checkpoints' => ['enabled' => true, 'every' => 1000],
+],
+```
+
+Then anchor what the history already owes, and put the command on your own schedule:
+
+```bash
+php artisan sentinel:checkpoint
+```
+
+```php
+// routes/console.php
+Schedule::command('sentinel:checkpoint')->hourly();
+```
+
+The first run on an installation with history anchors every complete window at once. That is a read
+of the whole trail, two columns wide — run it once by hand before scheduling it rather than
+discovering it inside a cron window.
+
+**Sign them, or do not bother.** An unsigned anchor is a row anyone with write access can reissue.
+Anchoring without [signing](README.md#signing-the-chain) buys speed and no trust.
+
+### `verifyStream()` can now report a break it used to miss
+
+Verifying a bounded range reads the entry before it to check the link the range hangs from. Until
+now that link was skipped, so a range whose first entry did not hang off its predecessor came back
+intact. Nothing that was correct becomes incorrect — the change can only turn a false intact into a
+true break — but a range that was reported intact on `v0.18.0` may report `link_mismatch` here, and
+if it does, it was already broken.
+
+Where the predecessor is not in the table, the walk behaves exactly as it did before.
+
+### `Integrity\StreamVerification` gains two properties
+
+`anchors` and `covered` are appended to the constructor with defaults, so existing construction and
+every existing read is unaffected. `covered` counts entries an anchor answered for — entries nobody
+read — and is deliberately **not** added into `checked()`: one total would hide which number came
+from where.
+
+---
+
 ## v0.17.0 → v0.18.0
 
 Nothing to migrate: no new tables, no new columns, and `payload_version` stays at `1`. `signature`

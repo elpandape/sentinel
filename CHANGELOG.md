@@ -2,6 +2,62 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.18.1 — Checkpoints and anchoring (2026-08-30)
+
+Verifying a chain meant walking it, so on a trail that only grows it eventually meant reading
+everything to answer a question about anything. A checkpoint is an anchor over a range: the root
+that range folds to, signed, so the history can be verified without being reread and a range that
+does not add up can be found without walking the ranges that do.
+
+The second half of the old "advanced integrity chain". `v0.18.0` delivered the signer, the state
+vocabulary and the report; this one signs a root with the same signer and adds one state more.
+
+The thing worth reading before trusting a number is which walk proves what. The fold is over the
+stored `hash` of each entry, not over its content, so the two shallow walks prove the anchors and
+the hashes and say nothing about what an entry says. `verifyIntegrity()` is untouched and stays the
+walk it always was — switching anchoring on never makes an installation verify less than it did the
+day before — and a range under a valid anchor is reported as `anchored`, never as `intact`.
+
+### Added
+
+- **`sentinel_checkpoints`**, one anchor per row: the stream, both ends of the range, the root, the
+  construction that produced it, and the signature with the identifier of the key that made it.
+  Nothing in it is a copy of an entry, so losing the table costs speed and never evidence.
+- **A chained fold rather than a Merkle tree.** A tree buys inclusion proofs and nothing here
+  consumes one; git and RFC 5848 fold for the same reason. The `algorithm` column records
+  `fold-sha256`, which is the door a `merkle-sha256` comes through later without touching a row
+  already written.
+- **The previous anchor goes into the fold.** Contiguous integers are not linkage: without it,
+  rewriting a range and reissuing its anchor produces a history that agrees with itself. No column
+  is needed — the previous anchor is the row whose `sequence_to` is this one's `sequence_from` minus
+  one.
+- **A fixed window.** `every` anchors `[1, N]`, then `[N+1, 2N]`, leaving the trailing incomplete
+  window alone. A window of "whatever is pending" would make the ends of a range depend on when the
+  emission ran, and the root of one history would stop being reproducible.
+- **`Sentinel::verifyAnchors()` and `Sentinel::verifyRoots()`**, with `verifyIntegrity()` unchanged.
+  The report keeps the entries it read and the entries it took on an anchor's word as two numbers,
+  and `Enums\CheckpointState` says whether a range was anchored or had no anchor at all — a missing
+  anchor is a state, not a failure. `Enums\IntegrityBreak` gains `checkpoint_mismatch`, which is.
+- **`php artisan sentinel:checkpoint`**, and `--depth` on `sentinel:verify`. The schedule belongs to
+  the application: the package registers commands and nothing else.
+- **Emission on a threshold**, off by default, evaluated after the write and outside the sealing
+  transaction so folding a window never holds the writers of the stream.
+
+### Fixed
+
+- **Verifying a range now hangs it off the entry before it.** A walk that did not start at the first
+  entry skipped that one link, so it proved the range linked to itself and never that it hung off
+  what came before — which is the one property an anchor over that range is sold as giving. It can
+  only turn a false intact into a true break.
+- **A stream backed by an array walks in sequence, not in insertion order.** A secondary destination
+  takes entries another ledger sealed, so folding that stream gave a different root per driver.
+
+### Upgrade notes
+
+One new table and nothing else. `payload_version` stays at `1`, no column changes on
+`sentinel_audits`, and no hash is recomputed. An installation that changes nothing behaves exactly
+as it did: anchoring ships disabled. See [UPGRADE.md](UPGRADE.md#v0180--v0181).
+
 ## v0.18.0 — Signatures and verification (2026-08-30)
 
 The chain has proved since `v0.3.0` that an entry has not changed relative to the ones around it.
