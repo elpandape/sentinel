@@ -42,7 +42,7 @@ final readonly class Pruner
      * A dry run walks the same windows through the same code and counts instead of removing, so the
      * two can never describe different things.
      */
-    public function prune(Frontier $frontier, PruneAction $action, bool $dryRun): Pruning
+    public function prune(Frontier $frontier, PruneAction $action, bool $dryRun, ?int $batch = null): Pruning
     {
         $started = hrtime(true);
         $removed = Removed::none();
@@ -55,14 +55,14 @@ final readonly class Pruner
                 return new Pruning($frontier, $removed, $windows, $this->since($started), $break);
             }
 
-            $removed = $removed->plus($this->retire($frontier->stream, $window, $action, $dryRun));
+            $removed = $removed->plus($this->retire($frontier->stream, $window, $action, $dryRun, $batch));
             $windows++;
         }
 
         return new Pruning($frontier, $removed, $windows, $this->since($started));
     }
 
-    private function retire(string $stream, Checkpoint $window, PruneAction $action, bool $dryRun): Removed
+    private function retire(string $stream, Checkpoint $window, PruneAction $action, bool $dryRun, ?int $batch): Removed
     {
         $counted = $this->cascade->count($stream, $window->from, $window->to);
 
@@ -77,7 +77,7 @@ final readonly class Pruner
         // A match and not a comparison: when the action that writes the range out first arrives,
         // this is where the analyser says so rather than where a boolean quietly picks a side.
         return match ($action) {
-            PruneAction::Delete => $this->cascade->purge($stream, $window->from, $window->to),
+            PruneAction::Delete => $this->cascade->purge($stream, $window->from, $window->to, $batch),
         };
     }
 

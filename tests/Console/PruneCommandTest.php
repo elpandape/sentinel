@@ -86,3 +86,11 @@ it('reads its description out of the translations', function (): void {
     expect(app(PruneCommand::class)->getDescription())
         ->toBe('Aplica las políticas de retención y reporta lo que se fue');
 });
+
+it('removes the same range in the number of statements it is told to', function (): void {
+    $this->artisan('sentinel:prune', ['--action' => 'delete', '--batch' => '2'])
+        ->expectsOutputToContain('Removed 4 entries')
+        ->assertExitCode(Command::SUCCESS);
+
+    expect(DB::table(auditsTable())->count())->toBe(8);
+});

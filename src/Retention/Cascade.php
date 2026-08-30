@@ -41,10 +41,10 @@ final readonly class Cascade
         private Config $config,
     ) {}
 
-    public function purge(string $stream, int $from, int $to): Removed
+    public function purge(string $stream, int $from, int $to, ?int $batch = null): Removed
     {
         $removed = Removed::none();
-        $batch = $this->config->pruneBatch();
+        $batch = max(1, $batch ?? $this->config->pruneBatch());
         $pause = $this->config->prunePause();
 
         for ($cursor = $from; $cursor <= $to; $cursor += $batch) {

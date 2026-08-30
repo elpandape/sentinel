@@ -38,6 +38,7 @@ final class PruneCommand extends Command
     protected $signature = 'sentinel:prune
         {--action= : What to do with a range retention has released. Required, and delete is the only one this release has}
         {--stream= : Prune this stream instead of every one}
+        {--batch= : How many entries one statement removes; defaults to the configured size}
         {--dry-run : Report what a run would remove, and remove nothing}';
 
     #[Override]
@@ -88,11 +89,13 @@ final class PruneCommand extends Command
     private function walk(Pruner $pruner, Ledger $ledger, PruneAction $action, bool $dryRun): PruneReport
     {
         $stream = $this->option('stream');
+        $batch = $this->option('batch');
+        $slice = is_string($batch) && $batch !== '' ? (int) $batch : null;
         $streams = is_string($stream) && $stream !== '' ? [$stream] : $this->named($ledger);
         $now = CarbonImmutable::now();
 
         return new PruneReport(array_map(
-            static fn (string $name): Pruning => $pruner->prune($pruner->plan($name, $now), $action, $dryRun),
+            static fn (string $name): Pruning => $pruner->prune($pruner->plan($name, $now), $action, $dryRun, $slice),
             $streams,
         ));
     }
