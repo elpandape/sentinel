@@ -53,8 +53,10 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.17.0` | Mass operations: `auditing()` on the query builder, three modes, the criteria recorded without its values, and `upserted` |
 | `v0.18.0` | Signatures over the hash, a key ring that rotates and retires, verification of the whole trail, and `sentinel:verify` with its exit codes |
 | `v0.18.1` | Checkpoints: a signed root over a fixed window, a chain of anchors, two shallower verification depths and `sentinel:checkpoint` |
+| `v0.19.0` | Retention by logical type, `sentinel:prune` with a dry run, and a verification that tells a range you retired from an entry that went missing |
 
-Everything else is on the roadmap: retention and compliance, partitioning and distributed tracing.
+Everything else is on the roadmap: cold archiving, tombstones and compliance, partitioning and
+distributed tracing.
 
 `v0.4.0` is the version that starts auditing: a model with the trait writes its own chained entries.
 `v0.5.0` is the one that answers what changed, instead of leaving you two states to compare.
@@ -833,7 +835,7 @@ and keeps verifying. A **new entry** carries the same values under the new key a
 one it stands in for, so the rotation is part of the history rather than something that happened to
 it. Keep the old key on the keyring for as long as the entries it wrote matter.
 
-`php artisan sentinel:rekey` arrives in `v0.19.0`; for now the rotation is a service you call.
+`php artisan sentinel:rekey` arrives in `v0.19.3`; for now the rotation is a service you call.
 
 ### Protecting what no model owns
 
@@ -2047,7 +2049,7 @@ consumer which fields are protected and which key is current. `signature` is pub
 `integrity` block beside the hash it covers: without it an exported entry is not something a third
 party can verify, which is the whole point of signing over the hash.
 
-`capture_id` is absent because no capture writes one yet, and the redaction block because `v0.19.0`
+`capture_id` is absent because no capture writes one yet, and the redaction block because `v0.19.2`
 defines it. `criteria` and `affected_rows` arrived in `v0.17.0`, which is the version that produces
 them; they are `null` on every entry that is not a mass operation.
 There is **no top-level `relation` key**: a relation entry's lines live inside `changes`, which is
@@ -2074,11 +2076,12 @@ outside `toArray()`: they answer a call, they are not part of an entry.
 `config/sentinel.php` ships every section the package will use through 1.0, with future features
 turned off. Read it once and you know what is coming.
 
-Five sections are live today beyond the basics: `resolvers` decides who and where an entry came
+Six sections are live today beyond the basics: `resolvers` decides who and where an entry came
 from, `pipeline` is the ordered list of stages every entry travels through, `security` holds the
 redaction mask and field lists, the encryption keyring and the hashing salt, `on_write_failure` with
-`log_channel` decides what a write that did not complete does to the request, and `mode` with
-`queue` and `buffer` decides [where an entry settles](#performance-modes).
+`log_channel` decides what a write that did not complete does to the request, `mode` with `queue`
+and `buffer` decides [where an entry settles](#performance-modes), and `retention` with `prune`
+decides [what stops being kept](#retention--pruning).
 
 Every one of those keys also has its default **in code**. Laravel merges a published config file one
 level deep, so an installation that published `sentinel.php` before a subtree existed would
@@ -2104,6 +2107,14 @@ window.
 
 The JSON and date types come from the engine grammar: `jsonb` on PostgreSQL 16, `json` on MySQL 9,
 text on SQLite; `datetime(6)` on MySQL and `timestamp(6)` on PostgreSQL.
+
+Five tables travel beside it, each created by the version that first writes to it:
+`sentinel_audit_tags`, `sentinel_audit_relations`, `sentinel_transactions`, `sentinel_checkpoints`
+and `sentinel_archives`. The last two are worth telling apart. **The anchors can be thrown away** —
+every root is derivable from the entries again, so losing them costs speed. **The archives cannot**:
+that table accounts for entries that are no longer in `sentinel_audits`, so losing it loses the map
+rather than a shortcut. And once a range has been [retired](#retention--pruning), the anchor covering
+it stops being a shortcut too: it is the only thing left standing behind those entries.
 
 ### Engines
 
@@ -2229,7 +2240,7 @@ through `Integrity\VerificationResult`, for one of six reasons (`Enums\Integrity
 |---|---|
 | `hash_mismatch` | The row no longer reproduces its own hash — its content changed. |
 | `link_mismatch` | Its `previous_hash` no longer matches the entry before it — the order changed. |
-| `sequence_gap` | A `sequence` is missing from the stream — an entry is gone. |
+| `sequence_gap` | A `sequence` is missing from the stream and nothing accounts for it. A range [you retired](#verifying-a-trail-you-have-pruned) is stepped over instead, and only when an anchor reaches past it. |
 | `signature_mismatch` | The signature does not verify under the key the row names. |
 | `projection_mismatch` | `sentinel_audit_relations` no longer matches the lines the entry sealed. The chain is intact; the index is not. |
 | `checkpoint_mismatch` | An anchor no longer folds to the root it recorded, over a range whose entries are otherwise sound. |
@@ -2484,6 +2495,129 @@ write path entirely, which is why that is the route the table recommends.
 Only the ledger that assigns sequences anchors. `MemoryLedger` and `NullLedger` keep nothing to fold,
 and a `FanoutLedger` anchors through the primary that sealed the entries.
 
+## Retention & pruning
+
+`sentinel_audits` only ever grows. Retention is how it stops: a policy per logical audit type, a
+command that says what it would remove before it removes anything, and a verification that can tell
+a range you retired from an entry that went missing.
+
+```php
+// config/sentinel.php
+'retention' => [
+    'model:App\Models\User' => '7 years',
+    'auth'                   => '90 days',
+],
+```
+
+A key is a **logical type**, never a table. `model:<FQCN>` names what an entry is about and beats a
+bare `audit_type`, which names what kind of entry it is. The colon is the whole discriminator —
+`model` on its own is a legal `audit_type` and means something else. The class is resolved through
+your morph map before it is compared to anything, so a `model:` key is not quietly inert on an
+application that declares one.
+
+**What no policy names is kept forever.** Retention is something you opt into one logical type at a
+time, not something that starts deleting the day it is switched on. A malformed period, or two keys
+that would govern the same entries, is a configuration error and says so rather than being resolved
+by hash order.
+
+The clock is `created_at` — how long the *record* is kept — and not `occurred_at`, which the caller
+can set.
+
+```bash
+php artisan sentinel:prune --action=delete --dry-run
+php artisan sentinel:prune --action=delete
+php artisan sentinel:prune --action=delete --stream=tenant:acme
+```
+
+```
++-------------+--------+---------+---------+------------------------------------------+
+| Stream      | Ranges | Entries | Rate    | Note                                     |
++-------------+--------+---------+---------+------------------------------------------+
+| global      | 3      | 3000    | 4,182/s | —                                        |
+| tenant:acme | 0      | 0       | —       | Retention still keeps model:invoice at    |
+|             |        |         |         | sequence 2044 of tenant:acme…            |
++-------------+--------+---------+---------+------------------------------------------+
+Removed 3000 entries in 3 ranges across 2 streams.
+```
+
+`--action` has no default and `delete` is the only one this release has. The action that writes a
+range out somewhere before removing it arrives next, and it will be the default — so naming it now
+is what keeps a scheduled command from changing meaning underneath you.
+
+### The unit is the anchored window, not the entry
+
+This is the part to read before declaring a policy, because it decides what a policy actually does.
+
+A range leaves only when **an [anchor](#anchoring-ranges) covers it and every entry in it has been
+released**. That is not a shortcut, it is the only unit the chain admits: a window is folded whole,
+so a partly emptied one could never reproduce its root again, and scattered deletions would leave a
+hole per row with nothing able to answer for any of them.
+
+The consequence, stated plainly: **the effective retention of a range is that of its longest-lived
+entry.** Under the shipped `integrity.stream => 'tenant'` a stream mixes logical types, so one
+seven-year entry keeps its whole window — and `'auth' => '90 days'` frees nothing in that window.
+Entry-level removal needs the tombstone, and that is a later version.
+
+Two more rules fall out of the chain rather than out of preference:
+
+- **The window holding the highest sequence of a stream is never offered.** The writer derives the
+  next sequence from that row, so a stream emptied to nothing would hand the next write sequence 1
+  and start a second chain under the first one's name.
+- **A held window does not hold the ones behind it.** The offer is not a prefix, which is what makes
+  retiring a range in the middle possible at all.
+
+Because of all this an operator can watch a ninety-day policy do nothing for a reason that is
+perfectly correct, so a stream that released nothing says which of four things is holding it:
+nothing declared, nothing anchored, everything in the live tail, or something still kept — and in
+the last case, which entry and which policy.
+
+### What a purge does not touch
+
+- **Anchors.** A `sentinel_checkpoints` row covering a retired range is never removed: it is now the
+  only thing standing behind entries that are gone.
+- **Headers.** A `sentinel_transactions` row goes when its last entry does, asked across every
+  stream, and its `audits_count` is left alone — it is what the operation captured, and a purge does
+  not change what happened.
+- **The evidence of a tampering.** Every window is refolded against the root its anchor recorded
+  *before* a row is touched. A range that no longer folds stops the run on that stream and leaves
+  every row where it is.
+
+Labels and relation lines do go, with the entries they hang off. They are found through the entries
+and removed in the same transaction, because rows carrying only an `audit_id` are rows nothing
+surviving could name again.
+
+### It does not reclaim disk space, and it says so
+
+InnoDB does not return freed pages, and `OPTIMIZE TABLE` locks the table for reads and writes;
+PostgreSQL leaves dead tuples for autovacuum, and `VACUUM FULL` takes an exclusive lock. Both are
+DBA operations with a maintenance window attached, so this command runs neither. On a partitioned
+table the question changes shape entirely — a purge becomes a partition drop — and that is a later
+version.
+
+### Verifying a trail you have pruned
+
+A retired range is not a gap, and the reverse also holds: a gap nobody accounts for is still a gap.
+
+`sentinel:verify` steps over an absence only when **two** things account for it at once — the
+manifest says the range was retired, and the anchors reach past it. Neither alone will do. Nothing
+in `sentinel_archives` is hashed or signed, so on its own it would make *delete the rows, then
+insert one row* a supported way of laundering a gap.
+
+What was stepped over is counted apart from what was read, everywhere it is reported:
+
+```
++--------+---------------+--------+-------------------------------------------------+
+| Stream | Entries       | Chain  | Anchors                                         |
++--------+---------------+--------+-------------------------------------------------+
+| global | 208 (+41000 retired) | intact | 41 anchored, 10 retired (covering 51000…) |
++--------+---------------+--------+-------------------------------------------------+
+```
+
+**The seam is not faked.** The hash the first surviving entry links to left with the range, so the
+walk treats it exactly as it treats the edge of a bounded range: not checked, and not invented
+either. That is why those entries are counted apart — an entry nobody read is not an entry that
+verified.
+
 ## Artisan commands
 
 | Command | What it does | Exit codes |
@@ -2491,6 +2625,7 @@ and a `FanoutLedger` anchors through the primary that sealed the entries.
 | `sentinel:flush` | Settles everything the buffer is holding | `0` settled · `1` the flush failed · `2` not in `buffered` mode |
 | `sentinel:verify` | Walks the chain and reports what it found | `0` intact · `1` broken · `2` could not run |
 | `sentinel:checkpoint` | Anchors every complete window the streams still owe | `0` anchored, or nothing left to anchor · `2` could not run |
+| `sentinel:prune` | Applies the retention policies and reports what went | `0` removed, or nothing to remove · `1` a range no longer folds to its root · `2` could not run |
 
 ```bash
 php artisan sentinel:verify

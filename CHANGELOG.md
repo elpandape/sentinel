@@ -2,6 +2,73 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.19.0 — Retention and pruning (2026-08-30)
+
+`sentinel_audits` only ever grew. This version is how it stops growing, and the interesting part is
+what it costs to stop it without breaking anything: retention is declared per logical audit type,
+but it can only be *executed* per anchored range, because scattered deletions would leave a hole per
+row with nothing able to answer for any of them.
+
+So the unit of purging is the anchored window, and the consequence is stated in the README rather
+than discovered in production: **the effective retention of a range is that of its longest-lived
+entry**. Entry-level removal needs the tombstone, which is a later version.
+
+The other half is verification. A range you retired and an entry that went missing had looked
+identical, and now they do not — but only when two independent things say so.
+
+### Added
+
+- **Retention policies by logical type.** `model:<FQCN>` names what an entry is about and beats a
+  bare `audit_type`, which names what kind it is; the colon is the whole discriminator, because
+  `model` on its own is a legal `audit_type`. The class is resolved through the application's morph
+  map before it is compared to anything — without that step every `model:` key is inert, and inert
+  in the direction that keeps evidence forever, which is why nobody would notice. What no policy
+  names is kept forever.
+- **`php artisan sentinel:prune`**, with `--dry-run` walking the same windows through the same code
+  and counting instead of removing. `--action` has no default and `delete` is the only one this
+  release has: the action that writes a range out first arrives next and will be the default, so
+  naming it now is what keeps a scheduled command from changing meaning underneath an installation.
+- **`sentinel_archives`**, born whole, recording every range that left the hot table. Unlike the
+  anchors it cannot be derived again — the entries it accounts for are the ones that are no longer
+  there — so losing it loses the map rather than a shortcut.
+- **A verification that tells a retired range from a gap.** The walk steps over an absence only when
+  the manifest accounts for it *and* the anchors reach past it. Nothing in the manifest is hashed or
+  signed, so on its own it would make "delete the rows, then insert one row" a supported way of
+  laundering a gap. `Enums\CheckpointState` gains `archived`; `IntegrityBreak` gains nothing,
+  because none of this is a defect.
+- **Entries nobody read are counted apart from entries that verified**, all the way out to
+  `sentinel:verify`. The hash the first survivor links to left with the range, so the seam is not
+  checked and not invented either.
+- **A reason when nothing is released.** Because the unit is the window, an operator can watch a
+  ninety-day policy do nothing for a reason that is correct, so a stream that released nothing says
+  which of four things is holding it — and names the entry and the policy when it is a policy.
+
+### Guarded against
+
+- **A purge that destroys the evidence of a tampering.** Every window is refolded against the root
+  its anchor recorded before a row is touched. A range that no longer folds stops the run and leaves
+  every row where it is.
+- **A stream emptied to nothing.** The window holding the highest sequence is never offered: the
+  writer derives the next sequence from that row, and an emptied stream would start a second chain
+  under the first one's name.
+- **An interrupted run.** The manifest row is written before the rows go, so an interruption leaves
+  a range recorded whose entries are still there — which the next run finishes, without refolding
+  what it already decided and without writing the range down twice.
+- **Orphans.** Labels and relation lines are found through the entries and removed in the same
+  transaction. They carry an identifier and no clock, so rows left behind could never be named again.
+- **The placeholder ceiling and the unbounded delete**, both of which the prior art hits in
+  production. Satellite rows are named by a subquery, and a batch is named by a range of sequence
+  rather than by a `LIMIT` — one plan on all three engines, and a restart that resumes by arithmetic.
+
+### Upgrade notes
+
+One new table and nothing else. `payload_version` stays at `1`, no column changes on
+`sentinel_audits`, and no hash is recomputed. An installation that changes nothing behaves exactly
+as it did: retention ships with no policies, and no policies means nothing is ever removed.
+
+Pruning depends on anchoring, so a trail has to be anchored before it can be pruned. See
+[UPGRADE.md](UPGRADE.md#v0181--v0190).
+
 ## v0.18.1 — Checkpoints and anchoring (2026-08-30)
 
 Verifying a chain meant walking it, so on a trail that only grows it eventually meant reading

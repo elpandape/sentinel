@@ -9,6 +9,74 @@ before `1.0.0`.
 
 ---
 
+## v0.18.1 → v0.19.0
+
+One new table, `sentinel_archives`. `payload_version` stays at `1`, `sentinel_audits` is not touched,
+and no hash is recomputed.
+
+```bash
+php artisan migrate
+```
+
+An installation that changes nothing behaves exactly as it did. `retention` ships empty, and an
+empty map means nothing is ever removed.
+
+### Anchoring is a precondition, not a suggestion
+
+A range is only retired while an anchor still answers for it, so a trail has to be
+[anchored](README.md#anchoring-ranges) before it can be pruned. On an installation with history that
+is one read of the whole trail, two columns wide — run it by hand once before scheduling anything:
+
+```bash
+php artisan sentinel:checkpoint
+```
+
+A stream with no anchors reports `unanchored` and releases nothing. That is the honest outcome, not
+a failure, and the command exits `0`.
+
+### `--action` is required
+
+```bash
+php artisan sentinel:prune --action=delete --dry-run
+```
+
+There is no default, and `delete` is the only action this release has. The next version adds the one
+that writes a range out to cold storage before removing it, and **that** will become the default —
+so a command written today with `--action=delete` keeps doing exactly what it does today, and one
+written without it fails now rather than changing meaning later.
+
+### Retention is per logical type, but purging is per anchored range
+
+This is the part worth reading before declaring a policy. A range leaves only when an anchor covers
+it **and every entry in it has been released**, because a window is folded whole and a partly
+emptied one could never reproduce its root again.
+
+So the effective retention of a range is that of its longest-lived entry. Under the shipped
+`integrity.stream => 'tenant'` a stream mixes logical types, and `'auth' => '90 days'` beside
+`'model:App\Models\User' => '7 years'` frees only the ranges with no user entry in them. Nothing is
+lost and nothing is wrong — but an operator who expects the auth entries to disappear on day 91 will
+be surprised, so `sentinel:prune` names the entry holding each range it could not offer.
+
+### `version` counts what the hot table still holds
+
+`version` is the position of an entry in the history of its subject, and it is derived from the
+highest one still in the table. Retiring a subject's **earlier** entries changes nothing: the
+highest survivor is still the highest. Retiring a subject's history **entirely** means the next
+entry about it starts again at `1` — the entry that held that number is gone, so nothing in the
+table repeats, and `whereVersion()` keeps answering about what is there.
+
+### `sequence_gap` no longer means every missing sequence
+
+`sentinel:verify` steps over an absence when the manifest accounts for it and the anchors reach past
+it, counting those entries apart from the ones it read. An absence nothing accounts for is still
+reported exactly as before. Nothing that verified before stops verifying: the change can only turn a
+break into a range that is explained, never the other way round.
+
+If you read `VerificationResult` or `StreamVerification` directly, both gained a count of entries the
+walk stepped over. It is published beside `checked` and deliberately not added into it.
+
+---
+
 ## v0.18.0 → v0.18.1
 
 One new table, `sentinel_checkpoints`. `payload_version` stays at `1`, `sentinel_audits` is not
