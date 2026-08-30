@@ -195,6 +195,16 @@ it('adds up what every stream read and what every stream took on an anchors word
         ->and($report->isIntact())->toBeTrue();
 });
 
+it('says in a sentence which anchor stopped folding to its own root', function (): void {
+    anchor(ReferenceChain::STREAM, 4);
+
+    DB::table(checkpointsTable())->where('sequence_from', 1)->update(['root_hash' => str_repeat('0', 64)]);
+
+    expect(verifier()->verifyRoots(ReferenceChain::STREAM)->break()?->message())
+        ->toContain('no longer folds to the root it recorded')
+        ->toContain(ReferenceChain::STREAM);
+});
+
 it('reports an anchor nobody signed as unsigned, which is not a defect', function (): void {
     anchor(ReferenceChain::STREAM, 4);
 

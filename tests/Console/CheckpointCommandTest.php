@@ -19,6 +19,7 @@ beforeEach(function (): void {
 it('anchors every complete window the streams still owe', function (): void {
     $this->artisan('sentinel:checkpoint')
         ->expectsOutputToContain(ReferenceChain::STREAM)
+        ->expectsOutputToContain('Anchored 2 ranges.')
         ->assertExitCode(0);
 
     expect(checkpoints()->of(ReferenceChain::STREAM))->toHaveCount(2);
@@ -42,10 +43,12 @@ it('says there was nothing to anchor rather than failing', function (): void {
         ->assertExitCode(0);
 });
 
-it('refuses a ledger that cannot name the chains it holds', function (): void {
+it('refuses a ledger that cannot name the chains it holds, and says why', function (): void {
     app()->bind(Ledger::class, NullLedger::class);
 
-    $this->artisan('sentinel:checkpoint')->assertExitCode(2);
+    $this->artisan('sentinel:checkpoint')
+        ->expectsOutputToContain('Nothing was anchored:')
+        ->assertExitCode(2);
 });
 
 it('describes itself in the language the application is set to', function (): void {
