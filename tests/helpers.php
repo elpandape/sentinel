@@ -42,6 +42,7 @@ use ElPandaPe\Sentinel\Tests\Fixtures\EncryptedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\EventLog;
 use ElPandaPe\Sentinel\Tests\Fixtures\GoldenLedger;
 use ElPandaPe\Sentinel\Tests\Fixtures\ProtectedSubject;
+use ElPandaPe\Sentinel\Tests\Fixtures\ReferenceChain;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
@@ -550,6 +551,35 @@ function seedTheFrozenTrail(): array
     }
 
     return $ids;
+}
+
+/**
+ * @return list<array<string, mixed>>
+ */
+function referenceChainOf(string $stream): array
+{
+    return array_values(array_filter(
+        ReferenceChain::entries(),
+        static fn (array $entry): bool => $entry['stream'] === $stream,
+    ));
+}
+
+/**
+ * The reference chain, put in the table exactly as it was frozen. Unlike the golden trail this one
+ * links: it is seeded whole, both streams, so a test can break one row and watch the walk stop
+ * there.
+ */
+function seedTheReferenceChain(): void
+{
+    $at = new CarbonImmutable('2026-08-29 09:00:00');
+
+    foreach (ReferenceChain::entries() as $attributes) {
+        DB::table(auditsTable())->insert(
+            new Audit()->forceFill([...$attributes, 'created_at' => $at])->getAttributes(),
+        );
+
+        $at = $at->addSecond();
+    }
 }
 
 function ledger(): DatabaseLedger
