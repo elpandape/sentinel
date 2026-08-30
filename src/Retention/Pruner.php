@@ -70,7 +70,9 @@ final readonly class Pruner
             return $counted;
         }
 
-        $this->archives->record($stream, $window->from, $window->to, $counted->audits);
+        if (! $this->archives->holds($stream, $window->from, $window->to)) {
+            $this->archives->record($stream, $window->from, $window->to, $counted->audits);
+        }
 
         // A match and not a comparison: when the action that writes the range out first arrives,
         // this is where the analyser says so rather than where a boolean quietly picks a side.
@@ -86,6 +88,13 @@ final readonly class Pruner
      */
     private function tampered(string $stream, Checkpoint $window): ?VerificationResult
     {
+        // A range the manifest already claims was settled by a run that did not finish removing it.
+        // Refolding it now would fail for the entries that did go, and report a tampering that is
+        // this command's own half-finished work.
+        if ($this->archives->holds($stream, $window->from, $window->to)) {
+            return null;
+        }
+
         $root = $this->checkpoints->refold($window, $this->checkpoints->rootBefore($stream, $window->from));
 
         return $root === $window->rootHash
