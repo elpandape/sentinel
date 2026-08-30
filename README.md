@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.16.1-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.18.0-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -20,7 +20,7 @@ the state was before, what it is now — and whether the record itself can be pr
 
 ```json
 "repositories": [{ "type": "vcs", "url": "https://github.com/elpandape/sentinel" }],
-"require": { "elpandape/sentinel": "v0.15.0" }
+"require": { "elpandape/sentinel": "v0.18.0" }
 ```
 
 ```bash
@@ -51,9 +51,10 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.16.0` | Performance modes: the dispatcher, the `queue` mode with a job of its own, `capture_id` and idempotent settlement, and `Audited` |
 | `v0.16.1` | The `buffered` mode: a Redis buffer with its own contract, batched settlement, four flush triggers and `sentinel:flush` |
 | `v0.17.0` | Mass operations: `auditing()` on the query builder, three modes, the criteria recorded without its values, and `upserted` |
+| `v0.18.0` | Signatures over the hash, a key ring that rotates and retires, verification of the whole trail, and `sentinel:verify` with its exit codes |
 
-Everything else is on the roadmap: advanced verification (checkpoints and signatures), retention and
-compliance, partitioning and distributed tracing.
+Everything else is on the roadmap: checkpoints anchoring ranges, retention and compliance,
+partitioning and distributed tracing.
 
 `v0.4.0` is the version that starts auditing: a model with the trait writes its own chained entries.
 `v0.5.0` is the one that answers what changed, instead of leaving you two states to compare.
@@ -1268,8 +1269,9 @@ or what the pivot was worth without breaking `verifyIntegrity()`.
 `sentinel_audit_relations` is a **projection** of those lines: an index over the evidence, not the
 evidence. It is written in the same transaction that seals the entry and is rebuildable from it, so
 removing a row there leaves `verifyIntegrity()` untouched. That is the point — rebuilding an index
-must not be indistinguishable from tampering. Verification of the projection against the entry, and
-the command to rebuild it, land in `v0.18.0`.
+must not be indistinguishable from tampering. `sentinel:verify --projections` checks the index
+against the entries and reports a divergence as its own kind of defect; rebuilding it lands in
+`v0.22.0`.
 
 One thing this version does not do: `whereFieldChanged('members')` finds **nothing**. A field is an
 attribute, a relation is not one, and the field predicate reads a `path` that relation lines do not
@@ -2026,7 +2028,7 @@ and Sentinel has no standing to answer it for your application.
 match ($entry['integrity']['verified']) {
     true => 'verified',
     false => 'TAMPERED',
-    null => 'not checked',       // ← the only value until v0.18.0
+    null => 'not checked',       // ← still the only value: toArray() does not walk the chain
 };
 ```
 
@@ -2038,8 +2040,9 @@ in JavaScript alike. To actually verify, ask: `$audit->verifyIntegrity()`.
 
 `encryption` and `signature` are absent for different reasons. `toArray()` never decrypts, so the
 ciphertext and its `key_id` stay where they are — and publishing that block would tell every API
-consumer which fields are protected and which key is current. `signature` waits for `v0.18.0`, which
-is what fills it.
+consumer which fields are protected and which key is current. `signature` is published, inside the
+`integrity` block beside the hash it covers: without it an exported entry is not something a third
+party can verify, which is the whole point of signing over the hash.
 
 `capture_id` is absent because no capture writes one yet, and the redaction block because `v0.19.0`
 defines it. `criteria` and `affected_rows` arrived in `v0.17.0`, which is the version that produces
@@ -2216,19 +2219,195 @@ $audit->verifyIntegrity(); // bool
 ```
 
 A verification failure never throws. It dispatches `Events\IntegrityVerificationFailed` and reports
-through `Integrity\VerificationResult`, for one of three reasons (`Enums\IntegrityBreak`):
+through `Integrity\VerificationResult`, for one of five reasons (`Enums\IntegrityBreak`):
 
 | Reason | Means |
 |---|---|
 | `hash_mismatch` | The row no longer reproduces its own hash — its content changed. |
 | `link_mismatch` | Its `previous_hash` no longer matches the entry before it — the order changed. |
 | `sequence_gap` | A `sequence` is missing from the stream — an entry is gone. |
+| `signature_mismatch` | The signature does not verify under the key the row names. |
+| `projection_mismatch` | `sentinel_audit_relations` no longer matches the lines the entry sealed. The chain is intact; the index is not. |
 
 An entry is immutable through every path the model exposes: `save()`, `update()`, `delete()` and
 `destroy()` all throw `Exceptions\ImmutableAuditException` once the row exists. That guard runs on
 Eloquent's model events, so it only sees a change that goes through the model — an `update()` issued
 through the query builder (`Audit::query()->where(...)->update([...])`) never fires those events and
 does not pass through it.
+
+### Verifying the whole trail
+
+`verifyIntegrity()` answers about one chain. `verifyEverything()` walks all of them:
+
+```php
+$report = Sentinel::verifyEverything();
+
+$report->isIntact();       // bool
+$report->checked();        // how many entries were walked
+$report->signatures();     // ['unsigned' => 4000, 'signed' => 120]
+$report->firstBreak();     // the VerificationResult that failed, or null
+```
+
+Listing the chains is a capability, not a requirement: `Contracts\EnumeratesStreams` is declared by
+`DatabaseLedger`, `MemoryLedger` and `FanoutLedger`, and not by `NullLedger`, which keeps nothing to
+list. A driver that does not declare it is refused rather than answered with an empty report —
+"nothing is broken" about a list nobody could build reads as reassurance and means nothing.
+
+## Signing the chain
+
+Chaining proves an entry has not changed *relative to the ones around it*. It does not stop someone
+who can rewrite the table from rewriting the whole chain and rehashing it. A signature is what makes
+that require a key as well as write access.
+
+```php
+// config/sentinel.php
+'integrity' => [
+    'signature' => [
+        'enabled' => true,
+        'signer' => 'hmac',            // hmac | openssl | null
+        'algorithm' => 'sha256',
+        'key_id' => 'default',
+        'keys' => ['default' => env('SENTINEL_SIGNING_KEY')],
+        'private_key' => env('SENTINEL_SIGNING_PRIVATE_KEY'),
+    ],
+],
+```
+
+**The signature is over the `hash`, never over the payload.** Signing is then one operation on
+sixty-four characters instead of one over two snapshots and a diff, and verifying it needs neither
+the entry recomposed nor anything decrypted. Neither `signature` nor `signature_key_id` is inside
+`CanonicalPayload::COLUMNS`, so filling them does not touch the hash and does not move
+`payload_version`.
+
+### `keys` verifies, `private_key` signs
+
+The split is the point. `keys` maps an identifier to what **verifies** with it — the shared secret
+under `hmac`, the public key under `openssl` — and `private_key` names only what the current
+identifier signs with. Hand an auditor the ring and they can prove every entry untouched and write
+none.
+
+Under `hmac` one secret does both, and `keys.default` left null is derived from `APP_KEY` under a
+label of its own, so the signing secret is not the same bytes as the digest salt of
+[hashed fields](#what-each-one-does-and-does-not-promise).
+
+### Rotating is moving on, retiring is staying put
+
+```php
+'key_id' => 'v2',
+'keys' => [
+    'v1' => env('SENTINEL_SIGNING_KEY_V1'),   // retired: verifies, never signs again
+    'v2' => env('SENTINEL_SIGNING_KEY_V2'),   // current
+],
+```
+
+Every row records the key that signed it, so yesterday's entries keep verifying with yesterday's key
+while today's are written with today's. Retiring a key is leaving it on the ring; **removing** it is
+what makes its history unverifiable, and that is reported as such rather than as forgery.
+
+### Four states, and why they are not three
+
+```php
+use ElPandaPe\Sentinel\Enums\SignatureState;
+
+$audit->verifySignature();   // Signed | Unsigned | Invalid | UnknownKey
+```
+
+| State | Means |
+|---|---|
+| `Signed` | The signature verifies under the key the row names. |
+| `Unsigned` | The row carries none. Written before signing was switched on, and not a defect. |
+| `Invalid` | The key was resolved and the signature does not verify. **This is a defect.** |
+| `UnknownKey` | The row names a key the ring does not hold. Nothing can be decided. |
+
+Collapsing `Unsigned` into `Invalid` would turn every installation that has not switched signing on
+into a wall of failures. Collapsing `UnknownKey` into either one would have the verifier deliver a
+verdict it is not entitled to. The distinction is [RFC 4033 §5](https://www.rfc-editor.org/rfc/rfc4033.html)'s,
+which drew it for DNSSEC for the same reason.
+
+`$audit->verifyIntegrity()` keeps meaning exactly what it meant — whether the row reproduces its own
+hash — and returns a `bool`. Four states do not fit in one, and making an unsigned entry return
+`false` would call the whole history before signing a failure.
+
+### Three tiers of threat model, stated plainly
+
+| Signer | Stops | Does not stop |
+|---|---|---|
+| `HmacSigner` | Someone with database access and no application access: a stolen backup, a replica, a console, a SQL-injection sink | Anyone who can read `APP_KEY` or the configured secret — which usually means anyone who compromised the app |
+| `OpenSslSigner` | All of the above, **and the machine's own administrator**, when the private key lives off the machine the entries do | Whoever holds the private key. [RFC 5848 §8.3](https://www.rfc-editor.org/rfc/rfc5848.html) acknowledges this rather than mitigating it, and so does this |
+| `NullSigner` | Nothing. It signs nothing and attests to nothing | Everything |
+
+A fourth tier exists and is deliberately out of scope: a **forward-secure** MAC that evolves its key
+and erases the old one, so entries written before a compromise stay provable. `systemd-journald`
+ships one. Sentinel does not, and says so rather than implying the HMAC is more than it is.
+
+What no signature proves is that the content is **true**. It proves nobody touched the row after it
+was written. Someone with application access at capture time produces a perfectly intact, perfectly
+signed chain of false statements. That is append-time integrity, and it is the honest limit of it.
+
+### Signing costs what it costs
+
+Median of three passes, SQLite with `synchronous` and journal off, the four rows inside one run:
+
+| Variant | µs per write | Δ vs unsigned |
+|---|---|---|
+| unsigned | 2400.3 | — |
+| `HmacSigner` (sha256) | 2436.9 | +1.5 % |
+| `OpenSslSigner` (RSA-2048, sha256) | 3252.3 | **+35.5 %** |
+| `NullSigner` | 2226.1 | −7.3 % |
+
+The `NullSigner` row is the noise gauge: it adds one method call and still moves between −10 % and
++12 % across passes, so the HMAC figure is indistinguishable from zero and the RSA one is not. RSA
+costs roughly **850 µs of private-key work per entry**, on the write path, every write. If that
+matters, sign with `hmac` and put the trust boundary somewhere else — the anchor, once `v0.18.1`
+ships checkpoints, is the thing worth exporting to where an administrator cannot reach it.
+
+## Artisan commands
+
+| Command | What it does | Exit codes |
+|---|---|---|
+| `sentinel:flush` | Settles everything the buffer is holding | `0` settled · `1` the flush failed · `2` not in `buffered` mode |
+| `sentinel:verify` | Walks the chain and reports what it found | `0` intact · `1` broken · `2` could not run |
+
+```bash
+php artisan sentinel:verify
+php artisan sentinel:verify --stream=global --from=1 --to=500
+php artisan sentinel:verify --projections
+```
+
+```
++-----------------+---------+--------+------------+
+| Stream          | Entries | Chain  | Signatures |
++-----------------+---------+--------+------------+
+| global          | 41208   | intact | 41208 signed |
+| tenant:acme     | 3106    | BROKEN | 2980 signed, 1 INVALID |
++-----------------+---------+--------+------------+
+Audit 01J… carries a signature that its own key does not verify, at sequence 2981 of stream tenant:acme.
+```
+
+**Three exit codes and not two.** A broken chain and a command that could not run are different
+facts, and a watchdog that cannot tell them apart will eventually treat one as the other. A range
+without a `--stream`, or a ledger that cannot list its chains, exits `2` — not `1`.
+
+**A trail nobody has signed exits `0`.** It is sound. The table says how many entries are unsigned so
+an operator sees it without a cron waking anyone at 3am over it.
+
+`--projections` is opt-in because it reads a second table over the same rows. Nobody should pay for
+that question while asking whether the chain holds.
+
+### Verifying without the keys
+
+This is what the design is for, and it is worth stating as a procedure. A third party can be handed
+the rows — or their `toArray()` export — plus `integrity.signature.keys`, and prove every entry
+untouched while holding:
+
+- **no encryption key.** The hash is taken over the ciphertext ([above](#the-hash-covers-the-ciphertext)),
+  and `CanonicalPayload::from()` decrypts nothing, so canonicalisation reproduces byte for byte
+  without it. The protected values stay unreadable throughout.
+- **no private key**, under `openssl`. `keys` holds only public halves.
+
+Rotating an encryption key does not break this: `Rekeyer` writes a **new entry** rather than
+re-encrypting in place, so the original keeps its bytes and keeps verifying. Re-encrypting a sealed
+row would change what the hash covers, which is exactly why it does not.
 
 ## Ledger drivers
 

@@ -2,6 +2,91 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.18.0 — Signatures and verification (2026-08-30)
+
+The chain has proved since `v0.3.0` that an entry has not changed relative to the ones around it.
+What it could not do was stop someone who can rewrite the table from rewriting the whole chain and
+rehashing it. A signature is what makes that need a key as well as write access — and because it is
+taken over the hash rather than the payload, verifying it needs neither the entry recomposed nor
+anything decrypted.
+
+That is the property the whole design was pointing at: a third party can be handed the rows and the
+verification keys, and prove every entry untouched while holding no encryption key and no private
+key. In this ecosystem nobody else offers it. The nearest prior art signs each row with an unkeyed
+SHA-512 that anyone with `UPDATE` can recompute.
+
+This version is the first half of the old "advanced integrity chain". Checkpoints — anchoring ranges
+so verification stops costing a walk of the whole history — are `v0.18.1`, and they are signed with
+the signer this one delivers.
+
+### Added
+
+- **`Contracts\Signer` with three implementations.** `HmacSigner` derives from `APP_KEY` under a
+  label of its own or takes a secret you name; `OpenSslSigner` signs with RSA or ECDSA and keeps the
+  private key off the machine the entries live on; `NullSigner` signs nothing and says so.
+- **A key ring where verifying and signing are different halves.** `integrity.signature.keys` maps
+  an identifier to what **verifies** with it — the shared secret under `hmac`, the public key under
+  `openssl` — and `private_key` names only what the current identifier signs with. Rotation is
+  moving `key_id`; retirement is leaving the old key on the ring, so its history keeps verifying.
+- **Four signature states, because three would lie.** An entry written before signing was switched
+  on is `unsigned` and not a failure; a key the ring no longer holds is `unknown_key` and not
+  forgery. Merging either into `invalid` is the mistake DNSSEC made once and RFC 4033 §5 exists to
+  prevent. `$audit->verifyIntegrity()` keeps its meaning and its `bool`; `verifySignature()` answers
+  the other question.
+- **`Sentinel::verifyEverything()`** and `Contracts\EnumeratesStreams`, a capability interface in
+  the shape `Deduplicates` and `DeclaresFilters` already had. A driver that cannot list its chains is
+  refused rather than answered with an empty report.
+- **`php artisan sentinel:verify`**, with a table per stream, a tally of what the signatures turned
+  out to be, and three exit codes: intact, broken, and could-not-run. A trail nobody has signed exits
+  zero, because it is sound.
+- **Coherence of the relation index.** `sentinel_audit_relations` is a projection of lines the hash
+  does cover, but is not itself covered, so editing it leaves the chain intact and every relation
+  query answering a different question. `sentinel:verify --projections` compares the two and reports
+  a divergence as its own kind of defect, never as a broken chain — saying otherwise would claim the
+  hash covers something it does not. The mapping now has one definition that the writer and the
+  verification share.
+- **`signature` in `toArray()`**, inside the `integrity` block beside the hash it covers. Without it
+  an exported entry is not something a third party can verify.
+- README: *Signing the chain*, with the key ring, the four states, the three tiers of threat model
+  written out plainly, and what a signature does **not** prove; *Artisan commands*, with the exit
+  codes; and *Verifying without the keys* as a procedure.
+
+### Fixed
+
+- **A batch naming the same capture twice took down the entries around it.** `Settlement` dropped
+  what had already settled and never compared the batch against itself, so two entries sharing a
+  capture id were both sealed and then refused together by the unique index. Carried from `v0.17.0`,
+  unreachable through the package's own paths and reachable through the contract. The repeat is now
+  dropped before anything is sealed, and the `Ledger` contract says what it always meant.
+- **`signer: null` threw on every write** when the key id was left at its default, because the null
+  signer only resolved under its own identifier. Asking which key signs nothing has one answer.
+
+### Performance
+
+Median of three passes, all four rows inside one run, SQLite with `synchronous` and journal off:
+
+| Signature variant | µs per write | Δ vs unsigned |
+|---|---|---|
+| unsigned | 2400.3 | — |
+| `HmacSigner` (sha256) | 2436.9 | +1.5 % |
+| `OpenSslSigner` (RSA-2048, sha256) | 3252.3 | +35.5 % |
+| `NullSigner` | 2226.1 | −7.3 % |
+
+The `NullSigner` row is the noise gauge — it adds one method call and still moves between −10 % and
++12 % across passes — so the HMAC figure is indistinguishable from zero and the RSA one is not. RSA
+is roughly 850 µs of private-key work per entry, on the write path, every write.
+
+The default path is unchanged. Against `main` on the same machine and in the same session, with
+signing off: 2210.6 µs against 2380.4 µs at the median, where `main`'s own three passes span 34 %.
+
+### Upgrade notes
+
+No migration, no new columns, and `payload_version` stays at `1`. `signature` and
+`signature_key_id` have been in `sentinel_audits` since `v0.2.0` and are outside the canonical
+payload, so filling them moves nothing about the chain. Signing is off by default; switching it on
+signs what is written from that moment and leaves the history as `unsigned`, which is not a failure
+and is reported as what it is. See [UPGRADE.md](UPGRADE.md#v0170--v0180).
+
 ## v0.17.0 — Mass operations (2026-08-29)
 
 The blind spot every auditing package in this ecosystem documents as a limitation. Eloquent fires no

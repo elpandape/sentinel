@@ -9,6 +9,112 @@ before `1.0.0`.
 
 ---
 
+## v0.17.0 → v0.18.0
+
+Nothing to migrate: no new tables, no new columns, and `payload_version` stays at `1`. `signature`
+and `signature_key_id` have been in `sentinel_audits` since `v0.2.0`, and both sit outside
+`CanonicalPayload::COLUMNS` — so this is the first version that writes them, and writing them
+changes nothing about any hash.
+
+An installation that changes nothing behaves exactly as it did. Signing is off by default.
+
+### `ext-openssl` is now declared
+
+It moves into `require`. This is documentation of a fact rather than a new constraint:
+`illuminate/encryption` already demands it and `Security\Keyring` has always built an `Encrypter`
+that calls through it, so no installation of Sentinel has ever run without it. This is simply the
+first version whose own code names `openssl_*` functions.
+
+### `toArray()` gains one key
+
+`signature` joins the `integrity` block, beside `hash` and `signature_key_id`:
+
+```php
+$entry['integrity']['signature'];   // string|null
+```
+
+Keys are only ever added to the shape `v0.15.0` froze, so this is the ordinary kind of change — but
+a consumer asserting on an exact key list will see one more:
+
+```php
+// Fine, and what the contract is for
+$entry['integrity']['hash'];
+
+// Will now find one more key than it did
+expect(array_keys($audit->toArray()['integrity']))->toBe([...]);
+```
+
+It is published because without it an exported entry cannot be verified by the third party the
+signature exists for. `encryption` stays out, for its own reason: `toArray()` never decrypts.
+
+### Turning signing on over an existing trail
+
+```php
+'integrity' => [
+    'signature' => [
+        'enabled' => true,
+        'signer' => 'hmac',
+        'key_id' => 'default',
+        'keys' => ['default' => env('SENTINEL_SIGNING_KEY')],
+    ],
+],
+```
+
+**Entries written before this point stay unsigned, and that is the correct outcome.** They are
+reported as `unsigned`, `sentinel:verify` exits zero over them, and nothing about them is a failure.
+
+Signing them retroactively is not offered, and not because it would be slow: it would mean an
+`UPDATE` over rows the package refuses to let anything update, and it would produce a signature
+proving only that someone with write access passed through afterwards. That is the opposite of what
+a signature is for.
+
+Leaving `keys.default` null derives the secret from `APP_KEY`. Rotating `APP_KEY` then invalidates
+every signature made under it — the entries still verify their own hashes, and their signatures
+report as `invalid`. Name a secret of your own if `APP_KEY` rotation is part of your operations.
+
+### Rotating and retiring a signing key
+
+Move `key_id` and **leave the old key on the ring**:
+
+```php
+'key_id' => 'v2',
+'keys' => [
+    'v1' => env('SENTINEL_SIGNING_KEY_V1'),   // retired: still verifies
+    'v2' => env('SENTINEL_SIGNING_KEY_V2'),   // current: signs from now on
+],
+```
+
+Removing `v1` instead does not make its history invalid — it makes it undecidable, and it is
+reported as `unknown_key` rather than as forgery. If you need to prove that history later, the key
+has to still be there.
+
+### A new capability interface on the Ledger contract
+
+`Contracts\EnumeratesStreams` declares that a driver can list the chains it holds.
+`Contracts\Ledger` itself is unchanged, so **a driver you wrote keeps working**; it simply does not
+answer `Sentinel::verifyEverything()` or a `sentinel:verify` with no `--stream`, and is told so
+rather than answered with an empty report.
+
+```php
+final class YourLedger implements Ledger, EnumeratesStreams
+{
+    /** @return list<string> */
+    public function streams(): array
+    {
+        return [...];   // stable order: a report that reshuffles cannot be diffed
+    }
+}
+```
+
+### `writeMany()` and a repeated capture id
+
+`Contracts\Ledger` now states what it always meant: a batch naming the same `capture_id` twice is a
+caller error. The driver seals both and the unique index refuses them together. Nothing the package
+hands a ledger contains one — `Dispatch\Settlement` drops the repeat first — but a direct caller of
+`writeMany()` should not build one.
+
+---
+
 ## v0.16.1 → v0.17.0
 
 Nothing to migrate: no new columns, no new tables, and `payload_version` stays at `1`. `criteria`
