@@ -68,6 +68,7 @@ it('gathers what makes the entry provable under one key', function (): void {
         'payload_version' => 1,
         'previous_hash' => null,
         'hash' => $audit->hash,
+        'signature' => null,
         'signature_key_id' => null,
         'verified' => null,
     ]);

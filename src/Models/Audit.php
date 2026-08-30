@@ -224,6 +224,7 @@ class Audit extends Model
                 'payload_version' => $this->payload_version,
                 'previous_hash' => $this->previous_hash,
                 'hash' => $this->hash,
+                'signature' => $this->signature,
                 'signature_key_id' => $this->signature_key_id,
                 'verified' => null,
             ],

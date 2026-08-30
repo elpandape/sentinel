@@ -6,10 +6,12 @@ use ElPandaPe\Sentinel\Facades\Sentinel;
 use ElPandaPe\Sentinel\Http\Resources\AuditResource;
 use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Tests\Fixtures\SigningKeys;
 use Illuminate\Http\Request;
 
 use function ElPandaPe\Sentinel\Tests\auditData;
 use function ElPandaPe\Sentinel\Tests\seedTheFrozenTrail;
+use function ElPandaPe\Sentinel\Tests\signingWith;
 
 /**
  * The shape of a serialised entry is public from v0.15.0 and can only grow. A key appearing here
@@ -52,6 +54,7 @@ const FROZEN_INTEGRITY_KEYS = [
     'payload_version',
     'previous_hash',
     'hash',
+    'signature',
     'signature_key_id',
     'verified',
 ];
@@ -79,7 +82,7 @@ it('publishes them for every entry payload version one wrote', function (): void
     });
 });
 
-it('keeps the ciphertext and the signature where they are', function (): void {
+it('keeps the ciphertext where it is, and everything else the shape does not name', function (): void {
     $audit = app(DatabaseLedger::class)->write(auditData([
         'encryption' => ['fields' => ['secret'], 'key_id' => 'default'],
     ]));
@@ -89,6 +92,15 @@ it('keeps the ciphertext and the signature where they are', function (): void {
         ->not->toHaveKey('capture_id')
         ->not->toHaveKey('redacted_at')
         ->not->toHaveKey('relation');
+});
+
+it('publishes the signature inside the block that makes the entry provable', function (): void {
+    signingWith('v1', SigningKeys::SECRET);
+
+    $audit = app(DatabaseLedger::class)->write(auditData());
+
+    expect($audit->toArray()['integrity']['signature'])->toBe($audit->signature)
+        ->and($audit->toArray()['integrity']['signature_key_id'])->toBe('v1');
 });
 
 it('publishes the two keys v0.17.0 owns, and null for an entry that is not a mass operation', function (): void {
