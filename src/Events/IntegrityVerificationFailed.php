@@ -17,10 +17,6 @@ final readonly class IntegrityVerificationFailed
 
     public function message(): string
     {
-        return (string) trans('sentinel::sentinel.integrity.'.$this->reason->value, [
-            'stream' => $this->stream,
-            'sequence' => $this->sequence,
-            'id' => $this->auditId,
-        ]);
+        return $this->reason->message($this->stream, $this->sequence, $this->auditId);
     }
 }

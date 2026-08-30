@@ -11,6 +11,26 @@ return [
             'not_buffered' => 'Sentinel está escribiendo en modo :mode, así que no hay nada esperando en un buffer. Pon el modo en buffered antes de vaciar uno.',
             'failed' => 'El buffer no se pudo asentar: :reason. No se perdió nada: lo que no se asentó volvió al buffer.',
         ],
+        'verify' => [
+            'description' => 'Recorre la cadena y reporta lo que encuentra',
+            'columns' => [
+                'stream' => 'Stream',
+                'entries' => 'Asientos',
+                'chain' => 'Cadena',
+                'signatures' => 'Firmas',
+            ],
+            'states' => [
+                'signed' => 'firmados',
+                'unsigned' => 'sin firmar',
+                'invalid' => 'FIRMA INVÁLIDA',
+                'unknown_key' => 'clave desconocida',
+            ],
+            'sound' => 'íntegra',
+            'broken' => 'ROTA',
+            'intact' => 'Verificados :entries asientos en :streams streams. La cadena está íntegra.',
+            'unscoped_range' => 'Un rango de secuencias es una pregunta sobre un solo stream: los mismos números significan asientos distintos en cada uno. Pasa --stream junto a --from y --to.',
+            'failed' => 'La cadena no se pudo verificar: :reason. No se comprobó nada, que no es lo mismo que que no haya nada mal.',
+        ],
     ],
 
     'discarded' => [

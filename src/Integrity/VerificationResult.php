@@ -30,4 +30,15 @@ final readonly class VerificationResult
     {
         return ! $this->reason instanceof IntegrityBreak;
     }
+
+    /**
+     * The sentence for what was found, empty for a walk that found nothing. Same source as the
+     * event's, so a reason cannot say one thing when it is announced and another when it is read.
+     */
+    public function message(): string
+    {
+        return $this->reason instanceof IntegrityBreak
+            ? $this->reason->message($this->stream, $this->sequence ?? 0, $this->auditId ?? '')
+            : '';
+    }
 }

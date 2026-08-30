@@ -11,6 +11,26 @@ return [
             'not_buffered' => 'Sentinel is writing in :mode mode, so nothing is waiting in a buffer. Set the mode to buffered before flushing one.',
             'failed' => 'The buffer could not be settled: :reason. Nothing was lost: what did not settle is back in the buffer.',
         ],
+        'verify' => [
+            'description' => 'Walk the chain and report what it found',
+            'columns' => [
+                'stream' => 'Stream',
+                'entries' => 'Entries',
+                'chain' => 'Chain',
+                'signatures' => 'Signatures',
+            ],
+            'states' => [
+                'signed' => 'signed',
+                'unsigned' => 'unsigned',
+                'invalid' => 'INVALID',
+                'unknown_key' => 'unknown key',
+            ],
+            'sound' => 'intact',
+            'broken' => 'BROKEN',
+            'intact' => 'Verified :entries entries across :streams streams. The chain is intact.',
+            'unscoped_range' => 'A range of sequences is a question about one stream: the same numbers mean different entries in each of them. Pass --stream with --from and --to.',
+            'failed' => 'The chain could not be verified: :reason. Nothing was checked, which is not the same as nothing being wrong.',
+        ],
     ],
 
     'discarded' => [

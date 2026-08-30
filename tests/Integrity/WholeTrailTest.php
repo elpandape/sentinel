@@ -7,7 +7,7 @@ use ElPandaPe\Sentinel\Enums\SignatureState;
 use ElPandaPe\Sentinel\Events\IntegrityVerificationFailed;
 use ElPandaPe\Sentinel\Exceptions\QueryException;
 use ElPandaPe\Sentinel\Facades\Sentinel;
-use ElPandaPe\Sentinel\Integrity\StreamVerification;
+use ElPandaPe\Sentinel\Integrity\VerificationResult;
 use ElPandaPe\Sentinel\Ledger\NullLedger;
 use ElPandaPe\Sentinel\Tests\Fixtures\ReferenceChain;
 use ElPandaPe\Sentinel\Tests\Fixtures\SigningKeys;
@@ -46,10 +46,10 @@ it('reports the whole trail as broken when one stream in it is', function (): vo
     $report = Sentinel::verifyEverything();
 
     expect($report->isIntact())->toBeFalse()
-        ->and($report->firstBreak())->toBeInstanceOf(StreamVerification::class)
-        ->and($report->firstBreak()?->stream())->toBe(ReferenceChain::STREAM)
-        ->and($report->firstBreak()?->break()?->reason)->toBe(IntegrityBreak::HashMismatch)
-        ->and($report->firstBreak()?->break()?->sequence)->toBe(6);
+        ->and($report->firstBreak())->toBeInstanceOf(VerificationResult::class)
+        ->and($report->firstBreak()?->stream)->toBe(ReferenceChain::STREAM)
+        ->and($report->firstBreak()?->reason)->toBe(IntegrityBreak::HashMismatch)
+        ->and($report->firstBreak()?->sequence)->toBe(6);
 });
 
 it('refuses to answer for a ledger that cannot say which chains it holds', function (): void {

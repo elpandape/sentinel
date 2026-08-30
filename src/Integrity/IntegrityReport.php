@@ -31,13 +31,14 @@ final readonly class IntegrityReport
     }
 
     /**
-     * The first stream that was not sound, so a reader who wants one line has one to take.
+     * The first thing that was wrong, so a reader who wants one line has one to take. It carries the
+     * stream it belongs to, which is why the stream itself is not handed back around it.
      */
-    public function firstBreak(): ?StreamVerification
+    public function firstBreak(): ?VerificationResult
     {
         foreach ($this->streams as $verification) {
             if (! $verification->isIntact()) {
-                return $verification;
+                return $verification->break();
             }
         }
 
