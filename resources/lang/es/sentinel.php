@@ -23,6 +23,22 @@ return [
             'anchored' => 'Se anclaron :count rangos.',
             'failed' => 'No se ancló nada: :reason',
         ],
+        'prune' => [
+            'description' => 'Aplica las políticas de retención y reporta lo que se fue',
+            'columns' => [
+                'stream' => 'Stream',
+                'ranges' => 'Rangos',
+                'entries' => 'Asientos',
+                'rate' => 'Ritmo',
+                'note' => 'Nota',
+            ],
+            'per_second' => ':rate/s',
+            'nothing' => 'No se retiró nada. La nota de cada stream dice qué lo está reteniendo.',
+            'removed' => 'Se retiraron :entries asientos en :windows rangos de :streams streams.',
+            'planned' => 'Se retirarían :entries asientos en :windows rangos de :streams streams. No se tocó nada.',
+            'unknown_action' => 'No existe la acción :action. Pasa una de: :accepted.',
+            'failed' => 'No se retiró nada: :reason',
+        ],
         'verify' => [
             'description' => 'Recorre la cadena y reporta lo que encuentra',
             'columns' => [

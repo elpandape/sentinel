@@ -102,6 +102,21 @@ final readonly class Checkpoints
         return is_numeric($anchored) ? (int) $anchored : 0;
     }
 
+    /**
+     * The root the anchor before this range folded to, and null when this range is the first. It is
+     * what refolding one range in the middle needs and what walking from the first anchor would
+     * otherwise have to pay for.
+     */
+    public function rootBefore(string $stream, int $from): ?string
+    {
+        $row = $from <= 1 ? null : $this->anchors->newQuery()
+            ->where('stream', $stream)
+            ->where('sequence_to', $from - 1)
+            ->first();
+
+        return $row instanceof AuditCheckpoint ? $row->root_hash : null;
+    }
+
     public function last(string $stream): ?Checkpoint
     {
         $row = $this->anchors->newQuery()

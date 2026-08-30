@@ -42,6 +42,7 @@ use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Restore\Planner;
 use ElPandaPe\Sentinel\Retention\Cascade;
 use ElPandaPe\Sentinel\Retention\Frontiers;
+use ElPandaPe\Sentinel\Retention\Pruner;
 use ElPandaPe\Sentinel\Retention\RetainedPredicate;
 use ElPandaPe\Sentinel\Retention\Schedule;
 use ElPandaPe\Sentinel\Security\Digester;
@@ -154,6 +155,37 @@ function phpFiles(?string $directory = null): array
     }
 
     return $files;
+}
+
+/**
+ * A real chain of the given length, written through the database ledger so every link is the one
+ * the ledger built. Nothing here forges a hash, which is what lets a purge test verify afterwards.
+ */
+function seedChain(int $entries, string $stream = 'global'): void
+{
+    foreach (range(1, $entries) as $ignored) {
+        ledger()->write(auditData(['stream' => $stream]));
+    }
+}
+
+/**
+ * Moves when an entry was recorded, which is the clock retention reads. It is deliberately not part
+ * of the canonical payload, so a test can age a range without touching what its hash covers.
+ */
+function ageEntries(string $stream, int $from, int $to, string $at): void
+{
+    DB::table(auditsTable())
+        ->where('stream', $stream)
+        ->whereBetween('sequence', [$from, $to])
+        ->update(['created_at' => $at]);
+}
+
+function pruner(): Pruner
+{
+    /** @var Pruner $pruner */
+    $pruner = app(Pruner::class);
+
+    return $pruner;
 }
 
 function cascade(): Cascade

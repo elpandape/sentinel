@@ -23,6 +23,22 @@ return [
             'anchored' => 'Anchored :count ranges.',
             'failed' => 'Nothing was anchored: :reason',
         ],
+        'prune' => [
+            'description' => 'Apply the retention policies and report what went',
+            'columns' => [
+                'stream' => 'Stream',
+                'ranges' => 'Ranges',
+                'entries' => 'Entries',
+                'rate' => 'Rate',
+                'note' => 'Note',
+            ],
+            'per_second' => ':rate/s',
+            'nothing' => 'Nothing was removed. The note beside each stream says what is holding it.',
+            'removed' => 'Removed :entries entries in :windows ranges across :streams streams.',
+            'planned' => 'Would remove :entries entries in :windows ranges across :streams streams. Nothing was touched.',
+            'unknown_action' => 'There is no :action action. Pass one of: :accepted.',
+            'failed' => 'Nothing was removed: :reason',
+        ],
         'verify' => [
             'description' => 'Walk the chain and report what it found',
             'columns' => [
