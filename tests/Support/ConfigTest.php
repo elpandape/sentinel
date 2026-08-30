@@ -249,3 +249,45 @@ it('reads the redaction mask the configuration names', function (): void {
 it('rejects a mask that is not a string', function (): void {
     sentinelConfig(['security.redaction.mask' => 42])->redactionMask();
 })->throws(ConfigurationException::class, 'a string');
+
+it('falls back to the shipped signature defaults when the section is null', function (): void {
+    $config = sentinelConfig([
+        'integrity.signature.signer' => null,
+        'integrity.signature.algorithm' => null,
+        'integrity.signature.key_id' => null,
+    ]);
+
+    expect($config->signatureDriver())->toBe('hmac')
+        ->and($config->signatureAlgorithm())->toBe('sha256')
+        ->and($config->signatureKeyId())->toBe('default');
+});
+
+it('rejects a signer that is not a string', function (): void {
+    sentinelConfig(['integrity.signature.signer' => 42])->signatureDriver();
+})->throws(ConfigurationException::class, 'integrity.signature.signer] must be a non-empty string or null');
+
+it('rejects a signature algorithm that is not a string', function (): void {
+    sentinelConfig(['integrity.signature.algorithm' => 42])->signatureAlgorithm();
+})->throws(ConfigurationException::class, 'integrity.signature.algorithm] must be a string');
+
+it('rejects a signature algorithm php cannot hash with', function (): void {
+    sentinelConfig(['integrity.signature.algorithm' => 'enigma'])->signatureAlgorithm();
+})->throws(ConfigurationException::class, 'integrity.signature.algorithm] has unknown value [enigma]');
+
+it('rejects a signing key identifier that is not a string', function (): void {
+    sentinelConfig(['integrity.signature.key_id' => 42])->signatureKeyId();
+})->throws(ConfigurationException::class, 'integrity.signature.key_id] must be a non-empty string or null');
+
+it('rejects a signing ring that is not a map', function (): void {
+    sentinelConfig(['integrity.signature.keys' => 'one-key'])->signatureKey('default');
+})->throws(ConfigurationException::class, 'integrity.signature.keys] must be a map of key id to key');
+
+it('rejects a signing key that is not a string', function (): void {
+    sentinelConfig(['integrity.signature.keys' => ['default' => 42]])->signatureKey('default');
+})->throws(ConfigurationException::class, 'integrity.signature.keys.default] must be a non-empty string or null');
+
+it('refuses to derive a signing secret with no application key to derive it from', function (): void {
+    config()->set('app.key');
+
+    sentinelConfig()->derivedSigningSecret();
+})->throws(ConfigurationException::class, 'integrity.signature.keys.default');

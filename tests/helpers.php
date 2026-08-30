@@ -10,6 +10,7 @@ use DateTimeImmutable;
 use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Context\Runtime;
 use ElPandaPe\Sentinel\Contracts\Ledger;
+use ElPandaPe\Sentinel\Contracts\Signer;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Data\RelationLine;
 use ElPandaPe\Sentinel\Diff\Diff;
@@ -17,7 +18,11 @@ use ElPandaPe\Sentinel\Enums\FanoutPolicy;
 use ElPandaPe\Sentinel\Enums\RelationOperation;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Integrity\Hasher;
+use ElPandaPe\Sentinel\Integrity\HmacSigner;
 use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
+use ElPandaPe\Sentinel\Integrity\NullSigner;
+use ElPandaPe\Sentinel\Integrity\OpenSslSigner;
+use ElPandaPe\Sentinel\Integrity\Signers;
 use ElPandaPe\Sentinel\Integrity\Stream;
 use ElPandaPe\Sentinel\Integrity\Verifier;
 use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
@@ -43,6 +48,7 @@ use ElPandaPe\Sentinel\Tests\Fixtures\EventLog;
 use ElPandaPe\Sentinel\Tests\Fixtures\GoldenLedger;
 use ElPandaPe\Sentinel\Tests\Fixtures\ProtectedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\ReferenceChain;
+use ElPandaPe\Sentinel\Tests\Fixtures\SigningKeys;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
@@ -683,6 +689,35 @@ function planner(): Planner
     $planner = app(Planner::class);
 
     return $planner;
+}
+
+function hashToSign(): string
+{
+    return hash('sha256', 'an entry');
+}
+
+/**
+ * The three implementations, each with whether it produces a signature at all. Every expectation
+ * the contract makes has to hold for all three, and the one that signs nothing is the reason the
+ * shape of that expectation is a pair rather than a signer.
+ *
+ * @return array<string, array{Signer, bool}>
+ */
+function signers(): array
+{
+    return [
+        'hmac' => [new HmacSigner('v1', SigningKeys::SECRET, 'sha256'), true],
+        'openssl' => [new OpenSslSigner('v1', SigningKeys::PUBLIC_KEY, SigningKeys::PRIVATE_KEY, 'sha256'), true],
+        'null' => [new NullSigner, false],
+    ];
+}
+
+function signerRing(): Signers
+{
+    /** @var Signers $ring */
+    $ring = app(Signers::class);
+
+    return $ring;
 }
 
 function verifier(?Ledger $ledger = null): Verifier

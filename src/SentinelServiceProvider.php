@@ -18,6 +18,7 @@ use ElPandaPe\Sentinel\Enums\MassMode;
 use ElPandaPe\Sentinel\Enums\Mode;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
 use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
+use ElPandaPe\Sentinel\Integrity\Signers;
 use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
 use ElPandaPe\Sentinel\Ledger\FanoutLedger;
 use ElPandaPe\Sentinel\Ledger\MemoryLedger;
@@ -99,6 +100,7 @@ final class SentinelServiceProvider extends ServiceProvider
         $this->app->scoped(Keyring::class);
         $this->app->scoped(Maskers::class);
         $this->app->scoped(PolicyRegistry::class);
+        $this->app->scoped(Signers::class);
         $this->app->scoped(ExecutionContext::class);
         $this->app->scoped(Runtime::class);
         $this->app->scoped(TransactionScope::class);

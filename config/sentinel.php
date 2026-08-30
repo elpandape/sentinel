@@ -190,8 +190,21 @@ return [
         ],
         'signature' => [
             'enabled' => false,
-            'signer' => null,
+            'signer' => 'hmac',
+            'algorithm' => 'sha256',
+            // The key every new entry is signed with. Older entries keep the identifier they
+            // recorded, so rotating this leaves them verifiable as long as their key stays below.
             'key_id' => 'default',
+            // What each identifier VERIFIES with: the shared secret under hmac, the public key
+            // under openssl. It is the half an external auditor is given, and holding it is not
+            // enough to sign anything. Derived from APP_KEY when 'default' is left null.
+            'keys' => [
+                'default' => env('SENTINEL_SIGNING_KEY'),
+            ],
+            // What the current identifier SIGNS with, under openssl only: the private key, which
+            // a verifying node does not need and should not have. Unused by hmac, where one
+            // secret does both.
+            'private_key' => env('SENTINEL_SIGNING_PRIVATE_KEY'),
         ],
     ],
 

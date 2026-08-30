@@ -311,6 +311,87 @@ final readonly class Config
             : throw ConfigurationException::unknown('integrity.algorithm', $algorithm, implode(', ', hash_algos()));
     }
 
+    public function signatureEnabled(): bool
+    {
+        return $this->repository->get('sentinel.integrity.signature.enabled') === true;
+    }
+
+    public function signatureDriver(): string
+    {
+        $value = $this->repository->get('sentinel.integrity.signature.signer');
+
+        return match (true) {
+            $value === null => 'hmac',
+            is_string($value) && $value !== '' => $value,
+            default => throw ConfigurationException::expected('integrity.signature.signer', 'a non-empty string or null', get_debug_type($value)),
+        };
+    }
+
+    public function signatureAlgorithm(): string
+    {
+        $value = $this->repository->get('sentinel.integrity.signature.algorithm') ?? 'sha256';
+
+        if (! is_string($value)) {
+            throw ConfigurationException::expected('integrity.signature.algorithm', 'a string', get_debug_type($value));
+        }
+
+        return in_array($value, hash_algos(), true)
+            ? $value
+            : throw ConfigurationException::unknown('integrity.signature.algorithm', $value, implode(', ', hash_algos()));
+    }
+
+    public function signatureKeyId(): string
+    {
+        $value = $this->repository->get('sentinel.integrity.signature.key_id');
+
+        return match (true) {
+            $value === null => 'default',
+            is_string($value) && $value !== '' => $value,
+            default => throw ConfigurationException::expected('integrity.signature.key_id', 'a non-empty string or null', get_debug_type($value)),
+        };
+    }
+
+    /**
+     * What one identifier verifies with, and nothing about whether it can sign. An identifier the
+     * ring does not name reads as null rather than as an exception: a signature nobody can resolve
+     * is a report state, not a crash, and the verification has to be able to say so.
+     */
+    public function signatureKey(string $keyId): ?string
+    {
+        $keys = $this->repository->get('sentinel.integrity.signature.keys');
+
+        if ($keys !== null && ! is_array($keys)) {
+            throw ConfigurationException::expected('integrity.signature.keys', 'a map of key id to key', get_debug_type($keys));
+        }
+
+        $key = is_array($keys) ? $keys[$keyId] ?? null : null;
+
+        return match (true) {
+            is_string($key) && $key !== '' => $key,
+            $key === null => null,
+            default => throw ConfigurationException::expected("integrity.signature.keys.{$keyId}", 'a non-empty string or null', get_debug_type($key)),
+        };
+    }
+
+    public function signaturePrivateKey(): ?string
+    {
+        return $this->nullableString('integrity.signature.private_key');
+    }
+
+    /**
+     * The secret an unnamed HMAC key falls back to. Derived from the application key with a label
+     * of its own, so the signing secret is not the same bytes as the digest salt: one leaking must
+     * not hand over the other.
+     */
+    public function derivedSigningSecret(): string
+    {
+        $key = $this->repository->get('app.key');
+
+        return is_string($key) && $key !== ''
+            ? hash_hmac('sha256', 'sentinel:signature', $key)
+            : throw ConfigurationException::missingApplicationKey('integrity.signature.keys.default');
+    }
+
     public function streamStrategy(): string|Closure
     {
         $value = $this->value('integrity.stream');
