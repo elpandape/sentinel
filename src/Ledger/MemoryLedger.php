@@ -6,6 +6,7 @@ namespace ElPandaPe\Sentinel\Ledger;
 
 use ElPandaPe\Sentinel\Contracts\DeclaresFilters;
 use ElPandaPe\Sentinel\Contracts\Deduplicates;
+use ElPandaPe\Sentinel\Contracts\EnumeratesStreams;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Contracts\LedgerStream;
 use ElPandaPe\Sentinel\Data\AuditData;
@@ -25,7 +26,7 @@ use ElPandaPe\Sentinel\Support\AuditCollection;
  * reachable as a default driver: a ledger with no durability that looks like it works is
  * worse than one that fails.
  */
-final class MemoryLedger implements DeclaresFilters, Deduplicates, Ledger
+final class MemoryLedger implements DeclaresFilters, Deduplicates, EnumeratesStreams, Ledger
 {
     /**
      * @var array<string, list<Audit>>
@@ -72,6 +73,18 @@ final class MemoryLedger implements DeclaresFilters, Deduplicates, Ledger
         $this->streams[$audit->stream][] = $audit;
 
         return $audit;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function streams(): array
+    {
+        $streams = array_keys($this->streams);
+
+        sort($streams);
+
+        return $streams;
     }
 
     /**

@@ -90,6 +90,7 @@ return [
         'hash_mismatch' => 'El asiento :id ya no reproduce su propio hash en la secuencia :sequence del stream :stream.',
         'link_mismatch' => 'El asiento :id no enlaza con el anterior en la secuencia :sequence del stream :stream.',
         'sequence_gap' => 'Al stream :stream le falta la secuencia :sequence, así que su cadena no se puede seguir más allá.',
+        'signature_mismatch' => 'El asiento :id lleva una firma que su propia clave no valida, en la secuencia :sequence del stream :stream.',
     ],
 
 ];

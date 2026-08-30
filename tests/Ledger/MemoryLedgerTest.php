@@ -225,3 +225,14 @@ it('tells seven subjects apart however their type and key run together', functio
 
     expect($written->pluck('version')->all())->toBe([1, 1, 1, 1, 1, 1, 1]);
 });
+
+it('names every stream it kept, in an order two runs can be diffed on', function (): void {
+    $ledger = app(MemoryLedger::class);
+
+    expect($ledger->streams())->toBeEmpty();
+
+    $ledger->write(auditData(['stream' => 'second']));
+    $ledger->write(auditData(['stream' => 'first']));
+
+    expect($ledger->streams())->toBe(['first', 'second']);
+});

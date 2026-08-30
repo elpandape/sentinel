@@ -61,6 +61,14 @@ final class QueryException extends InvalidArgumentException
         return new self("A page of {$perPage} entries numbered {$page} is not a page: both have to be at least one.");
     }
 
+    public static function cannotEnumerateStreams(string $ledger): self
+    {
+        return new self(
+            "[{$ledger}] cannot say which streams it holds, so it cannot be asked to verify all of them. "
+            .'Name the stream to verify, or implement Contracts\\EnumeratesStreams on the driver.',
+        );
+    }
+
     public static function unreferenceable(string $type): self
     {
         return new self("Cannot query for {$type}: pass an Eloquent model, or the type and key the entry recorded.");

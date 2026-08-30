@@ -69,6 +69,15 @@ it('answers for the filters its primary can translate, not for the ones it canno
         ->and(fanout(new LimitedLedger, [])->supportedFilters())->toBe([Filter::Subject]);
 });
 
+it('names the streams its primary holds, and none when the primary cannot name them', function (): void {
+    $primary = app(MemoryLedger::class);
+    $primary->write(auditData(['stream' => 'first']));
+    $primary->write(auditData(['stream' => 'second']));
+
+    expect(fanout($primary, [])->streams())->toBe(['first', 'second'])
+        ->and(fanout(new LimitedLedger, [])->streams())->toBeEmpty();
+});
+
 it('fails the whole write under strict when any destination refuses', function (): void {
     expect(fn (): mixed => fanout(app(MemoryLedger::class), [new FailingLedger])->write(auditData()))
         ->toThrow(RuntimeException::class, FailingLedger::REASON);

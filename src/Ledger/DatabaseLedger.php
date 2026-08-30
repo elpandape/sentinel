@@ -7,6 +7,7 @@ namespace ElPandaPe\Sentinel\Ledger;
 use Closure;
 use ElPandaPe\Sentinel\Contracts\DeclaresFilters;
 use ElPandaPe\Sentinel\Contracts\Deduplicates;
+use ElPandaPe\Sentinel\Contracts\EnumeratesStreams;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Contracts\LedgerStream;
 use ElPandaPe\Sentinel\Data\AuditData;
@@ -28,7 +29,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Database\UniqueConstraintViolationException;
 
-final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, Ledger
+final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, EnumeratesStreams, Ledger
 {
     private const int MAX_ATTEMPTS = 3;
 
@@ -109,6 +110,24 @@ final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, Le
             ->all();
 
         return $found;
+    }
+
+    /**
+     * One distinct scan of the leading column of the chain's own unique index. Ordered by name so
+     * two runs of the same report can be diffed against each other.
+     *
+     * @return list<string>
+     */
+    public function streams(): array
+    {
+        /** @var list<string> $streams */
+        $streams = $this->model->newQuery()
+            ->distinct()
+            ->orderBy('stream')
+            ->pluck('stream')
+            ->all();
+
+        return $streams;
     }
 
     /**

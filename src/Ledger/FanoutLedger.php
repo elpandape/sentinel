@@ -6,6 +6,7 @@ namespace ElPandaPe\Sentinel\Ledger;
 
 use ElPandaPe\Sentinel\Contracts\DeclaresFilters;
 use ElPandaPe\Sentinel\Contracts\Deduplicates;
+use ElPandaPe\Sentinel\Contracts\EnumeratesStreams;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Contracts\LedgerStream;
 use ElPandaPe\Sentinel\Data\AuditData;
@@ -26,7 +27,7 @@ use Throwable;
  * produce two different truths about one fact. For the same reason every read goes to the
  * primary: it is the destination whose chain the sequence belongs to.
  */
-final readonly class FanoutLedger implements DeclaresFilters, Deduplicates, Ledger
+final readonly class FanoutLedger implements DeclaresFilters, Deduplicates, EnumeratesStreams, Ledger
 {
     /**
      * @param  list<Ledger>  $secondaries
@@ -75,6 +76,17 @@ final readonly class FanoutLedger implements DeclaresFilters, Deduplicates, Ledg
     public function settled(array $captureIds): array
     {
         return $this->primary instanceof Deduplicates ? $this->primary->settled($captureIds) : [];
+    }
+
+    /**
+     * Asked of the primary, like every read: the secondaries hold what it sealed, and a chain that
+     * only reached one of them is still the primary's chain.
+     *
+     * @return list<string>
+     */
+    public function streams(): array
+    {
+        return $this->primary instanceof EnumeratesStreams ? $this->primary->streams() : [];
     }
 
     public function query(AuditQuery $query): AuditCollection

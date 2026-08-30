@@ -10,6 +10,7 @@ use ElPandaPe\Sentinel\Capture\Recorder;
 use ElPandaPe\Sentinel\Context\ExecutionContext;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Data\AuditData;
+use ElPandaPe\Sentinel\Integrity\IntegrityReport;
 use ElPandaPe\Sentinel\Integrity\VerificationResult;
 use ElPandaPe\Sentinel\Integrity\Verifier;
 use ElPandaPe\Sentinel\Query\AuditQuery;
@@ -119,6 +120,16 @@ final class Sentinel
     public function verifyIntegrity(string $stream, ?int $from = null, ?int $to = null): VerificationResult
     {
         return $this->verifier->verifyStream($stream, $from, $to);
+    }
+
+    /**
+     * Every chain the ledger holds, walked one at a time. Bounding by sequence is a question about
+     * one stream and is asked of that stream: the same numbers mean different entries in each of
+     * them, so a range across all of them would be a range across nothing.
+     */
+    public function verifyEverything(): IntegrityReport
+    {
+        return $this->verifier->verifyEverything();
     }
 
     public function config(): Config
