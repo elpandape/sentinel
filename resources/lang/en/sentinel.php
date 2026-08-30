@@ -130,6 +130,13 @@ return [
         'unchanged' => 'The :key already holds the value this entry would put back.',
     ],
 
+    'retention' => [
+        'undeclared' => 'No retention policy is declared, so :stream keeps everything.',
+        'unanchored' => 'Stream :stream has no anchors. A range is only retired while an anchor still answers for it, so anchor the history before pruning it.',
+        'tail' => 'Every anchored range of :stream holds the entry the next write links to. Retiring one would restart the chain under the same name, so none of them is offered.',
+        'retained' => 'Retention still keeps :held at sequence :sequence of :stream. A range is retired whole or not at all, so the range around that entry stays.',
+    ],
+
     'integrity' => [
         'hash_mismatch' => 'Audit :id no longer reproduces its own hash at sequence :sequence of stream :stream.',
         'link_mismatch' => 'Audit :id does not link to the entry before it at sequence :sequence of stream :stream.',

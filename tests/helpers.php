@@ -40,6 +40,7 @@ use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Presentation\AuditPresenter;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Restore\Planner;
+use ElPandaPe\Sentinel\Retention\Frontiers;
 use ElPandaPe\Sentinel\Retention\RetainedPredicate;
 use ElPandaPe\Sentinel\Retention\Schedule;
 use ElPandaPe\Sentinel\Security\Digester;
@@ -152,6 +153,21 @@ function phpFiles(?string $directory = null): array
     }
 
     return $files;
+}
+
+/**
+ * @param  array<string, string>  $retention
+ */
+function frontiers(array $retention): Frontiers
+{
+    sentinelConfig(['retention' => $retention]);
+
+    app()->forgetScopedInstances();
+
+    /** @var Frontiers $frontiers */
+    $frontiers = app(Frontiers::class);
+
+    return $frontiers;
 }
 
 /**

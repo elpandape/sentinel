@@ -443,6 +443,15 @@ final readonly class Config
     }
 
     /**
+     * How many anchored ranges one run of the purge will look at. A floor of one: zero would mean a
+     * run that reports it looked and looked at nothing.
+     */
+    public function pruneWindows(): int
+    {
+        return max(1, $this->integer('prune.windows', 100));
+    }
+
+    /**
      * The defaults live here and not only in the publishable file because the config merge is
      * shallow: an installation that published sentinel.php while `resolvers` was still an empty
      * array would otherwise override the whole subtree and end up with no resolvers at all.

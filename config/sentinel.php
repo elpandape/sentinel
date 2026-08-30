@@ -261,6 +261,15 @@ return [
     'retention' => [],
 
     /*
+     * How many anchored ranges one run of sentinel:prune will look at. A range is only offered when
+     * every entry in it has been released, so ranges a long policy holds are re-examined on every
+     * run — and this is what keeps that from growing without bound.
+     */
+    'prune' => [
+        'windows' => 100,
+    ],
+
+    /*
      * Compliance mode makes audits immutable, requires the integrity chain and
      * signatures, forces archiving before pruning, and logs every read.
      */

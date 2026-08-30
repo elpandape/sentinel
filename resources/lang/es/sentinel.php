@@ -130,6 +130,13 @@ return [
         'unchanged' => 'El campo :key ya tiene el valor que este asiento devolvería.',
     ],
 
+    'retention' => [
+        'undeclared' => 'No hay ninguna política de retención declarada, así que :stream lo conserva todo.',
+        'unanchored' => 'El stream :stream no tiene anclas. Un rango solo se retira mientras un ancla siga respondiendo por él, así que ancla el historial antes de purgarlo.',
+        'tail' => 'Todos los rangos anclados de :stream contienen el asiento con el que enlaza la escritura siguiente. Retirar uno reiniciaría la cadena bajo el mismo nombre, así que no se ofrece ninguno.',
+        'retained' => 'La retención todavía conserva :held en la secuencia :sequence de :stream. Un rango se retira entero o no se retira, así que el rango que rodea a ese asiento se queda.',
+    ],
+
     'integrity' => [
         'hash_mismatch' => 'El asiento :id ya no reproduce su propio hash en la secuencia :sequence del stream :stream.',
         'link_mismatch' => 'El asiento :id no enlaza con el anterior en la secuencia :sequence del stream :stream.',
