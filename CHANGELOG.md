@@ -16,9 +16,18 @@ All notable changes to `elpandape/sentinel` are documented here.
   The excuse now requires that the root could not be recomputed *at all*, which is the condition the
   code claimed in a comment and never checked. Nothing that verified before stops verifying: the
   change can only turn a false intact into a true break.
+- **`sentinel:prune` would have deleted such a range instead of stopping on it.** The same shortcut
+  sat in the guard that refolds a window before removing it, and there it was worse: a manifest row
+  made the command skip the check and take the range, which is the exact opposite of what that guard
+  exists to do. It now skips the refold only when the root could not be recomputed at all — which is
+  what a run interrupted halfway actually leaves behind, and the case the shortcut was written for.
 
 An installation that has never run `sentinel:prune` was never exposed, because nothing else writes
 to `sentinel_archives`. Upgrading needs no migration and no configuration change.
+
+Both were found by adversarially re-reading `v0.19.0` while validating the version after it, and
+both are the same mistake in two places: a guard that rested on a row asserting a fact instead of on
+the fact.
 
 ## v0.19.0 — Retention and pruning (2026-08-30)
 

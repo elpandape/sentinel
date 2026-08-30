@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
+use ElPandaPe\Sentinel\Enums\IntegrityBreak;
 use ElPandaPe\Sentinel\Enums\PruneAction;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Tests\Fixtures\ReferenceChain;
@@ -103,4 +104,19 @@ it('takes nothing twice when the same run is asked for again', function () use (
 
     expect($again->removed->audits)->toBe(0)
         ->and(DB::table(auditsTable())->count())->toBe(8);
+});
+
+it('refuses to remove a range a manifest row claims while its entries are still there and altered', function () use ($now): void {
+    seedChain(12);
+    ageEntries('global', 5, 8, '2020-01-01 00:00:00.000000');
+    anchor('global', 4);
+
+    manifest()->record('global', 5, 8, 4);
+    DB::table(auditsTable())->where('sequence', 6)->update(['hash' => str_repeat('0', 64)]);
+
+    $pruning = pruner()->prune(frontiers(['model' => '1 year'])->of('global', $now), PruneAction::Delete, false);
+
+    expect($pruning->succeeded())->toBeFalse()
+        ->and($pruning->break?->reason)->toBe(IntegrityBreak::CheckpointMismatch)
+        ->and(DB::table(auditsTable())->count())->toBe(12);
 });

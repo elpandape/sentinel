@@ -88,16 +88,21 @@ final readonly class Pruner
      */
     private function tampered(string $stream, Checkpoint $window): ?VerificationResult
     {
-        // A range the manifest already claims was settled by a run that did not finish removing it.
-        // Refolding it now would fail for the entries that did go, and report a tampering that is
-        // this command's own half-finished work.
-        if ($this->archives->holds($stream, $window->from, $window->to)) {
+        $root = $this->checkpoints->refold($window, $this->checkpoints->rootBefore($stream, $window->from));
+
+        if ($root === $window->rootHash) {
             return null;
         }
 
-        $root = $this->checkpoints->refold($window, $this->checkpoints->rootBefore($stream, $window->from));
-
-        return $root === $window->rootHash
+        /*
+         * A root that could not be recomputed AT ALL is a range a previous run had already started
+         * removing, and the manifest row is what says the half-finished work is this command's own.
+         * A range that folds to a different root has its entries right here and they have moved, and
+         * a purge must never be what erases that — so the manifest is not allowed to excuse it. The
+         * row is unsigned and unhashed, and taking it as licence to skip the check would make one
+         * insert the price of having evidence deleted rather than reported.
+         */
+        return $root === null && $this->archives->holds($stream, $window->from, $window->to)
             ? null
             : VerificationResult::broken($stream, 0, IntegrityBreak::CheckpointMismatch, $window->from, $window->rootHash);
     }
