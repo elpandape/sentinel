@@ -1080,6 +1080,65 @@ foreach ([
     );
 }
 
+/*
+ * What an anchor costs the write that crosses the threshold. Folding a window is a narrow read of
+ * that window plus one digest a row, and it lands on whichever write happened to complete it — so
+ * the interesting number is not the emission but what it averages out to over the window it covers.
+ *
+ * The window is what moves it: the same work spread over a thousand writes is not the same work
+ * spread over a hundred. Both are measured, against this same pass with anchoring off, and the
+ * signed row is the one a compliance configuration would actually run.
+ *
+ * The figures describe a configuration nobody has by default: checkpoints ship disabled, and the
+ * README recommends the scheduled command over the threshold precisely because of this table.
+ */
+const ANCHOR_ITERATIONS = 1000;
+
+$anchoring = static function (?int $every, bool $signed) use ($app, $run, &$offset): float {
+    $app->make('config')->set('sentinel.integrity.checkpoints.enabled', $every !== null);
+    $app->make('config')->set('sentinel.integrity.checkpoints.every', $every ?? 1000);
+    $app->make('config')->set('sentinel.integrity.signature.enabled', $signed);
+    $app->make('config')->set('sentinel.integrity.signature.signer', 'hmac');
+    $app->make('config')->set('sentinel.integrity.signature.key_id', 'default');
+    $app->forgetScopedInstances();
+
+    $run(BenchAudited::class, WARMUP, $offset);
+    $offset += WARMUP;
+    $total = $run(BenchAudited::class, ANCHOR_ITERATIONS, $offset);
+    $offset += ANCHOR_ITERATIONS;
+
+    return $total;
+};
+
+$unanchored = $anchoring(null, false);
+$wide = $anchoring(1000, false);
+$tight = $anchoring(100, false);
+$tightSigned = $anchoring(100, true);
+
+$app->make('config')->set('sentinel.integrity.checkpoints.enabled', false);
+$app->make('config')->set('sentinel.integrity.signature.enabled', false);
+$app->forgetScopedInstances();
+
+echo PHP_EOL, '| Anchoring variant | Writes | Total (ms) | Per write (µs) | Δ vs unanchored |', PHP_EOL;
+echo '|---|---|---|---|---|', PHP_EOL;
+
+foreach ([
+    'not anchored' => $unanchored,
+    'every 1000 entries' => $wide,
+    'every 100 entries' => $tight,
+    'every 100 entries, HMAC signed' => $tightSigned,
+] as $label => $total) {
+    printf(
+        '| %s | %d | %.1f | %.1f | %s |%s',
+        $label,
+        ANCHOR_ITERATIONS,
+        $total,
+        $total * 1000 / ANCHOR_ITERATIONS,
+        $total === $unanchored ? '—' : sprintf('%+.1f%%', ($total / $unanchored - 1) * 100),
+        PHP_EOL,
+    );
+}
+
 printf(
     '%sPHP %s · %s (synchronous off, journal in memory) · %d columns per subject · %d iterations after %d warm-up writes%s',
     PHP_EOL,

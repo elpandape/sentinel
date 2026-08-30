@@ -118,6 +118,15 @@ final readonly class Checkpoints
 
     private function attempt(string $stream): ?Checkpoint
     {
+        // Asked first without a lock and without a transaction, because on every write of a window
+        // but the one that completes it the answer is no. Opening a transaction and taking the gate
+        // to hear that would put the price of anchoring on every write instead of on one in every
+        // window, and reading the partial window to count it would make that price grow with the
+        // window — which is how a wider window ended up costing more per write than a narrow one.
+        if (! $this->pending($stream)) {
+            return null;
+        }
+
         $connection = $this->audits->getConnection();
 
         return $connection->transaction(function () use ($connection, $stream): ?Checkpoint {
@@ -131,6 +140,21 @@ final readonly class Checkpoints
                 ? Checkpoint::of($this->write($stream, $from, $to, $tail->root, $hashes))
                 : null;
         });
+    }
+
+    /**
+     * Whether the stream has an entry where the next window would end. One seek into the index the
+     * chain already keeps, against one read of where the anchors end.
+     */
+    private function pending(string $stream): bool
+    {
+        $anchored = $this->anchors->newQuery()->where('stream', $stream)->max('sequence_to');
+        $from = (is_numeric($anchored) ? (int) $anchored : 0) + 1;
+
+        return $this->audits->newQuery()
+            ->where('stream', $stream)
+            ->where('sequence', $from + $this->config->checkpointsEvery() - 1)
+            ->exists();
     }
 
     /**
