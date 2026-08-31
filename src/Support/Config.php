@@ -8,6 +8,7 @@ use Closure;
 use ElPandaPe\Sentinel\Contracts\Masker;
 use ElPandaPe\Sentinel\Contracts\Resolver;
 use ElPandaPe\Sentinel\Contracts\Transformer;
+use ElPandaPe\Sentinel\Enums\ArchiveCodec;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
 use ElPandaPe\Sentinel\Enums\FailurePolicy;
 use ElPandaPe\Sentinel\Enums\FanoutPolicy;
@@ -171,6 +172,32 @@ final readonly class Config
 
         return FanoutPolicy::tryFrom($value)
             ?? throw ConfigurationException::unknown('ledger.ledgers.fanout.on_failure', $value, $this->accepted(FanoutPolicy::class));
+    }
+
+    /**
+     * Where a cold batch goes and how its bytes are written. The codec is a name the manifest
+     * records, so an unknown one is refused here rather than discovered by whoever tries to read the
+     * batch back; null is plain text and a legitimate answer.
+     */
+    public function archiveDisk(): string
+    {
+        return $this->nullableString('ledger.ledgers.archive.disk') ?? 'local';
+    }
+
+    public function archivePath(): string
+    {
+        return trim($this->nullableString('ledger.ledgers.archive.path') ?? 'sentinel', '/');
+    }
+
+    public function archiveCodec(): ?ArchiveCodec
+    {
+        $value = $this->nullableString('ledger.ledgers.archive.codec');
+
+        return match (true) {
+            $value === null || $value === '' => null,
+            default => ArchiveCodec::tryFrom($value)
+                ?? throw ConfigurationException::unknown('ledger.ledgers.archive.codec', $value, $this->accepted(ArchiveCodec::class)),
+        };
     }
 
     public function defaultSeverity(AuditEvent|string $event): Severity

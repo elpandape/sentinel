@@ -55,10 +55,16 @@ return [
         'default' => env('SENTINEL_LEDGER', 'database'),
         'ledgers' => [
             'database' => [],
+            /*
+             * Cold storage: NDJSON, one batch per file, on any disk the application configures.
+             * codec names how the bytes are written — gzip, which needs ext-zlib, or null for plain
+             * text. It is a name and not a flag because the manifest records it, and a boolean could
+             * never say what to inflate a batch written two years ago with.
+             */
             'archive' => [
                 'disk' => env('SENTINEL_ARCHIVE_DISK', 'local'),
                 'path' => 'sentinel',
-                'compress' => true,
+                'codec' => 'gzip',
             ],
             // Keeps every entry on the instance and nothing past it: a reference
             // implementation and a test double, never a store.

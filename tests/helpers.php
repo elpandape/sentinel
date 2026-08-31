@@ -7,6 +7,7 @@ namespace ElPandaPe\Sentinel\Tests;
 use Carbon\CarbonImmutable;
 use Closure;
 use DateTimeImmutable;
+use ElPandaPe\Sentinel\Archive\BatchWriter;
 use ElPandaPe\Sentinel\Archive\Manifest;
 use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Context\Runtime;
@@ -61,6 +62,8 @@ use ElPandaPe\Sentinel\Tests\Fixtures\ReferenceChain;
 use ElPandaPe\Sentinel\Tests\Fixtures\SigningKeys;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Contracts\Filesystem\Factory;
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -69,6 +72,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Mockery;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
@@ -186,6 +190,33 @@ function pruner(): Pruner
     $pruner = app(Pruner::class);
 
     return $pruner;
+}
+
+function batchWriter(): BatchWriter
+{
+    /** @var BatchWriter $writer */
+    $writer = app(BatchWriter::class);
+
+    return $writer;
+}
+
+/**
+ * A writer over a disk that misbehaves in one named way. The Filesystem contract has twenty-three
+ * methods and this needs two of them, so it is a double rather than a fixture implementing all of
+ * it — the same call Mockery already answers in the two gate tests.
+ */
+function writerOverDisk(Filesystem $disk): BatchWriter
+{
+    $disks = Mockery::mock(Factory::class);
+    $disks->shouldReceive('disk')->andReturn($disk);
+
+    return new BatchWriter(
+        $disks,
+        new JsonCanonicalizer,
+        hasher(),
+        new Audit,
+        sentinelConfig(),
+    );
 }
 
 function cascade(): Cascade

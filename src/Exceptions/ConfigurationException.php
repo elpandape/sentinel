@@ -132,6 +132,15 @@ final class ConfigurationException extends InvalidArgumentException
         );
     }
 
+    public static function archivePathTooLong(string $path): self
+    {
+        return new self(sprintf(
+            'Sentinel would write an archive batch to [%s], longer than the 512 characters the manifest holds. '
+            .'A row pointing at a truncated path points at nothing; shorten ledger.ledgers.archive.path.',
+            substr($path, 0, 120),
+        ));
+    }
+
     public static function streamEmpty(): self
     {
         return new self('Sentinel resolved an empty stream name; every entry belongs to a named chain.');
