@@ -125,6 +125,8 @@ final class SentinelServiceProvider extends ServiceProvider
 
         $this->flushWhatIsWaiting();
 
+        $this->sealWhatIsOpen();
+
         $this->loadMigrationsFrom($this->migrations()->unpublished());
 
         if ($this->app->runningInConsole()) {
@@ -245,6 +247,32 @@ final class SentinelServiceProvider extends ServiceProvider
         $app->terminating($flush);
 
         $this->app->make(Dispatcher::class)->listen(WorkerStopping::class, $flush);
+    }
+
+    /**
+     * The batch a process is filling, written out before the process stops being one. The Ledger is
+     * scoped, so an open batch is LOST rather than delayed when the scope tears down — the same
+     * reason the buffer has its own two hooks, and these are those two.
+     *
+     * It asks whether the driver was ever resolved rather than resolving it. A request that archived
+     * nothing must not build one on its way out, and an installation that never archives must not
+     * pay for this at all.
+     */
+    private function sealWhatIsOpen(): void
+    {
+        $app = $this->app;
+
+        $seal = static function () use ($app): void {
+            if (! $app->resolved(ArchiveLedger::class)) {
+                return;
+            }
+
+            rescue(static fn (): int => $app->make(ArchiveLedger::class)->seal());
+        };
+
+        $app->terminating($seal);
+
+        $this->app->make(Dispatcher::class)->listen(WorkerStopping::class, $seal);
     }
 
     private function driver(Application $app, string $name, string $key): Ledger
