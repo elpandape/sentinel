@@ -63,7 +63,16 @@ final class CanonicalPayload
         return $payload;
     }
 
-    private static function normalize(mixed $value): mixed
+    /**
+     * How this package renders a value that is about to be encoded. Public because the archived
+     * batch has to render the thirteen columns outside this list the same way it renders the
+     * twenty-seven inside it, and two definitions of what an instant looks like would agree right
+     * up until one of them did not.
+     *
+     * Publishing the rendering is not publishing the list: the list stays the frozen definition of
+     * canonical(core) and nothing else may enumerate it.
+     */
+    public static function normalize(mixed $value): mixed
     {
         return match (true) {
             $value instanceof BackedEnum => $value->value,
