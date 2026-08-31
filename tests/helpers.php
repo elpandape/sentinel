@@ -44,6 +44,7 @@ use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Presentation\AuditPresenter;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Restore\Planner;
+use ElPandaPe\Sentinel\Retention\Archiver;
 use ElPandaPe\Sentinel\Retention\Cascade;
 use ElPandaPe\Sentinel\Retention\Frontiers;
 use ElPandaPe\Sentinel\Retention\Pruner;
@@ -252,6 +253,14 @@ function writerOverDisk(Filesystem $disk): BatchWriter
         new Audit,
         sentinelConfig(),
     );
+}
+
+function archiver(): Archiver
+{
+    /** @var Archiver $archiver */
+    $archiver = app(Archiver::class);
+
+    return $archiver;
 }
 
 function cascade(): Cascade

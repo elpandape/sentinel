@@ -53,7 +53,8 @@
     },
     "suggest": {
         "orchestra/testbench": "^11.0 to run Testing\\LedgerContractTestCase against your own ledger driver: it boots a Laravel application.",
-        "phpunit/phpunit": "^13.0 to run Testing\\LedgerContractTestCase, which is a PHPUnit test case."
+        "phpunit/phpunit": "^13.0 to run Testing\\LedgerContractTestCase, which is a PHPUnit test case.",
+        "ext-zlib": "* to write archived batches with ledger.ledgers.archive.codec set to gzip. A codec of null writes plain NDJSON and needs nothing."
     },
     "autoload": {
         "psr-4": {

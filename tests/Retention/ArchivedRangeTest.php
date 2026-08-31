@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Storage;
 
 use function ElPandaPe\Sentinel\Tests\ageEntries;
 use function ElPandaPe\Sentinel\Tests\anchor;
+use function ElPandaPe\Sentinel\Tests\archiver;
 use function ElPandaPe\Sentinel\Tests\auditData;
 use function ElPandaPe\Sentinel\Tests\auditsTable;
 use function ElPandaPe\Sentinel\Tests\checkpointsTable;
@@ -113,4 +114,23 @@ it('gives back the batch a row points at, and nothing for a range that went nowh
 
     expect(manifest()->batchOf($archived)?->path)->toBe($archived->path)
         ->and(manifest()->batchOf($retired))->toBeNull();
+});
+
+it('finishes a run interrupted between writing the batch and removing the rows', function () use ($now): void {
+    manifest()->archived(archiver()->archive('global', 5, 8));
+
+    $pruning = pruner()->prune(frontiers(['model' => '1 year'])->of('global', $now), PruneAction::Archive, false);
+
+    expect($pruning->succeeded())->toBeTrue()
+        ->and(DB::table(auditsTable())->count())->toBe(8)
+        ->and(AuditArchive::query()->count())->toBe(1);
+});
+
+it('writes the batch again over the same key when it was interrupted before the row was recorded', function () use ($now): void {
+    $orphan = archiver()->archive('global', 5, 8);
+
+    pruner()->prune(frontiers(['model' => '1 year'])->of('global', $now), PruneAction::Archive, false);
+
+    expect(Storage::disk('cold')->allFiles())->toBe([$orphan->path])
+        ->and(AuditArchive::query()->value('path'))->toBe($orphan->path);
 });
