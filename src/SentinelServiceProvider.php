@@ -22,6 +22,7 @@ use ElPandaPe\Sentinel\Enums\Mode;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
 use ElPandaPe\Sentinel\Integrity\JsonCanonicalizer;
 use ElPandaPe\Sentinel\Integrity\Signers;
+use ElPandaPe\Sentinel\Ledger\ArchiveLedger;
 use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
 use ElPandaPe\Sentinel\Ledger\FanoutLedger;
 use ElPandaPe\Sentinel\Ledger\MemoryLedger;
@@ -104,6 +105,8 @@ final class SentinelServiceProvider extends ServiceProvider
         $this->app->scoped(Keyring::class);
         $this->app->scoped(Maskers::class);
         $this->app->scoped(PolicyRegistry::class);
+        // Scoped, so the batch a request or a job is filling is the one the shutdown hook seals.
+        $this->app->scoped(ArchiveLedger::class);
         $this->app->scoped(Schedule::class);
         $this->app->scoped(Signers::class);
         $this->app->scoped(ExecutionContext::class);
@@ -247,11 +250,14 @@ final class SentinelServiceProvider extends ServiceProvider
     private function driver(Application $app, string $name, string $key): Ledger
     {
         return match ($name) {
+            'archive' => $key === 'ledger.default'
+                ? throw ConfigurationException::coldLedgerAsDefault()
+                : $app->make(ArchiveLedger::class),
             'database' => $app->make(DatabaseLedger::class),
             'memory' => $app->make(MemoryLedger::class),
             'null' => $app->make(NullLedger::class),
             'fanout' => $this->fanout($app),
-            default => throw ConfigurationException::unknown($key, $name, 'database, fanout, memory, null'),
+            default => throw ConfigurationException::unknown($key, $name, 'archive, database, fanout, memory, null'),
         };
     }
 

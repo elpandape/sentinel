@@ -132,6 +132,15 @@ final class ConfigurationException extends InvalidArgumentException
         );
     }
 
+    public static function coldLedgerAsDefault(): self
+    {
+        return new self(
+            'Sentinel cannot use the archive driver as [sentinel.ledger.default]. It keeps the tail of a stream on the '
+            .'instance, because the manifest holds no hash to recover one from, so a second process would start a second '
+            .'chain under the same name. Name it as a fanout destination instead, or let sentinel:prune write to it.',
+        );
+    }
+
     public static function archivePathTooLong(string $path): self
     {
         return new self(sprintf(

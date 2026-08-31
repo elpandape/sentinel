@@ -65,6 +65,7 @@ return [
                 'disk' => env('SENTINEL_ARCHIVE_DISK', 'local'),
                 'path' => 'sentinel',
                 'codec' => 'gzip',
+                'batch' => 1000,
             ],
             // Keeps every entry on the instance and nothing past it: a reference
             // implementation and a test double, never a store.

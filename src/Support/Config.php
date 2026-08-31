@@ -189,6 +189,15 @@ final readonly class Config
         return trim($this->nullableString('ledger.ledgers.archive.path') ?? 'sentinel', '/');
     }
 
+    /**
+     * How many entries one batch holds before it is sealed. A floor of one: a batch of zero would
+     * mean a driver that accumulates for ever and writes nothing.
+     */
+    public function archiveBatch(): int
+    {
+        return max(1, $this->integer('ledger.ledgers.archive.batch', 1000));
+    }
+
     public function archiveCodec(): ?ArchiveCodec
     {
         $value = $this->nullableString('ledger.ledgers.archive.codec');

@@ -33,6 +33,7 @@ use ElPandaPe\Sentinel\Integrity\Projections;
 use ElPandaPe\Sentinel\Integrity\Signers;
 use ElPandaPe\Sentinel\Integrity\Stream;
 use ElPandaPe\Sentinel\Integrity\Verifier;
+use ElPandaPe\Sentinel\Ledger\ArchiveLedger;
 use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
 use ElPandaPe\Sentinel\Ledger\FanoutLedger;
 use ElPandaPe\Sentinel\Ledger\MemoryLedger;
@@ -208,6 +209,14 @@ function archivedBatch(int $count = 2, array $overrides = []): ArchiveBatch
     }
 
     return batchWriter()->write('global', 1, $count, $entries, [], '2026-08-31 10:00:00.000000');
+}
+
+function archiveLedger(): ArchiveLedger
+{
+    /** @var ArchiveLedger $ledger */
+    $ledger = app(ArchiveLedger::class);
+
+    return $ledger;
 }
 
 function batchReader(): BatchReader
