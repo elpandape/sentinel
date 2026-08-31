@@ -21,9 +21,15 @@ return new class extends Migration
      * inflate a batch written two years ago with, which is why the anchors store `fold-sha256` and
      * not a flag.
      *
-     * Neither index is unique. Registering a range twice is legal: a batch may be re-written after
-     * a rehydration, and a cold destination that took an entry as it was sealed overlaps a later
-     * prune that takes the range around it.
+     * Neither index is unique. Registering a range twice is legal: a run interrupted between writing
+     * a batch and removing its rows finishes on the next pass, and a range that was rehydrated may
+     * be retired again later.
+     *
+     * There is exactly ONE writer, and it is the purge. A row here means "this range left the hot
+     * table", and nothing else may say it — least of all a cold destination writing copies of ranges
+     * that are still there, which is what an earlier draft of this comment invited. The guard that
+     * refolds a window before removing it and the walk that steps over an absence both read these
+     * rows as licence, so a second writer would disarm them for every range it touched.
      */
     public function up(): void
     {

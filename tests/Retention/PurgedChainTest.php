@@ -31,7 +31,7 @@ it('leaves the frozen chain reproducing its frozen hashes after a range in the m
     seedTheReferenceChain();
     anchor(ReferenceChain::STREAM, 4);
     retireEntries(ReferenceChain::STREAM, 1, 4);
-    manifest()->record(ReferenceChain::STREAM, 1, 4, 4);
+    manifest()->retired(ReferenceChain::STREAM, 1, 4, 4);
 
     $survivors = Audit::query()->where('stream', ReferenceChain::STREAM)->orderBy('sequence')->get();
 
@@ -70,7 +70,7 @@ it('finishes a run that was interrupted between two batches', function () use ($
     ageEntries('global', 5, 8, '2020-01-01 00:00:00.000000');
     anchor('global', 4);
 
-    manifest()->record('global', 5, 8, 4);
+    manifest()->retired('global', 5, 8, 4);
     retireEntries('global', 5, 6);
 
     $pruning = pruner()->prune(frontiers(['model' => '1 year'])->of('global', $now), PruneAction::Delete, false);
@@ -86,7 +86,7 @@ it('writes down a range it is finishing once and not twice', function () use ($n
     ageEntries('global', 5, 8, '2020-01-01 00:00:00.000000');
     anchor('global', 4);
 
-    manifest()->record('global', 5, 8, 4);
+    manifest()->retired('global', 5, 8, 4);
     retireEntries('global', 5, 6);
 
     pruner()->prune(frontiers(['model' => '1 year'])->of('global', $now), PruneAction::Delete, false);
@@ -111,7 +111,7 @@ it('refuses to remove a range a manifest row claims while its entries are still 
     ageEntries('global', 5, 8, '2020-01-01 00:00:00.000000');
     anchor('global', 4);
 
-    manifest()->record('global', 5, 8, 4);
+    manifest()->retired('global', 5, 8, 4);
     DB::table(auditsTable())->where('sequence', 6)->update(['hash' => str_repeat('0', 64)]);
 
     $pruning = pruner()->prune(frontiers(['model' => '1 year'])->of('global', $now), PruneAction::Delete, false);

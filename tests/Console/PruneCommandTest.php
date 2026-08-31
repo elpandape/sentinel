@@ -5,6 +5,7 @@ declare(strict_types=1);
 use ElPandaPe\Sentinel\Console\PruneCommand;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 use function ElPandaPe\Sentinel\Tests\ageEntries;
 use function ElPandaPe\Sentinel\Tests\anchor;
@@ -19,10 +20,16 @@ beforeEach(function (): void {
     sentinelConfig(['retention' => ['model' => '1 year']]);
 });
 
-it('will not run without being told what to do with what it releases', function (): void {
+it('writes a range out when it is told nothing, because that is the action that loses nothing', function (): void {
+    Storage::fake('cold');
+    sentinelConfig(['ledger.ledgers.archive.disk' => 'cold']);
+
     $this->artisan('sentinel:prune')
-        ->expectsOutputToContain('Pass one of: delete')
-        ->assertExitCode(Command::INVALID);
+        ->expectsOutputToContain('Wrote out and removed 4 entries')
+        ->assertExitCode(Command::SUCCESS);
+
+    expect(Storage::disk('cold')->allFiles())->toHaveCount(1)
+        ->and(DB::table(auditsTable())->count())->toBe(8);
 });
 
 it('refuses an action it does not have', function (): void {

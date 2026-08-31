@@ -35,6 +35,8 @@ return [
             'per_second' => ':rate/s',
             'nothing' => 'No se retiró nada. La nota de cada stream dice qué lo está reteniendo.',
             'removed' => 'Se retiraron :entries asientos en :windows rangos de :streams streams.',
+            'archived' => 'Se escribieron y retiraron :entries asientos en :windows rangos de :streams streams. Cada lote se volvió a leer y a rehashear antes de que se fuera una fila.',
+            'planned_archive' => 'Se escribirían y retirarían :entries asientos en :windows rangos de :streams streams. No se tocó nada.',
             'planned' => 'Se retirarían :entries asientos en :windows rangos de :streams streams. No se tocó nada.',
             'unknown_action' => 'No existe la acción :action. Pasa una de: :accepted.',
             'failed' => 'No se retiró nada: :reason',

@@ -31,6 +31,7 @@ final readonly class Pruner
         private Cascade $cascade,
         private Manifest $archives,
         private Checkpoints $checkpoints,
+        private Archiver $archiver,
     ) {}
 
     public function plan(string $stream, CarbonImmutable $now): Frontier
@@ -71,13 +72,22 @@ final readonly class Pruner
         }
 
         if (! $this->archives->holds($stream, $window->from, $window->to)) {
-            $this->archives->record($stream, $window->from, $window->to, $counted->audits);
+            $this->record($stream, $window, $action, $counted->audits);
         }
 
-        // A match and not a comparison: when the action that writes the range out first arrives,
-        // this is where the analyser says so rather than where a boolean quietly picks a side.
-        return match ($action) {
-            PruneAction::Delete => $this->cascade->purge($stream, $window->from, $window->to, $batch),
+        return $this->cascade->purge($stream, $window->from, $window->to, $batch);
+    }
+
+    /**
+     * The range is written down before a row goes, and under `archive` it is written OUT first: the
+     * batch has to be on the disk, read back and rehashed before the manifest hears about it, so an
+     * interruption leaves a file nobody points at rather than a range nobody can restore.
+     */
+    private function record(string $stream, Checkpoint $window, PruneAction $action, int $records): void
+    {
+        match ($action) {
+            PruneAction::Archive => $this->archives->archived($this->archiver->archive($stream, $window->from, $window->to)),
+            PruneAction::Delete => $this->archives->retired($stream, $window->from, $window->to, $records),
         };
     }
 

@@ -20,9 +20,10 @@ use Throwable;
 /**
  * Applies the retention policies, and says what it would do before it does anything.
  *
- * The action has no default. This release can only remove, and a default that means "remove" today
- * and "write it out first" tomorrow would change what a scheduled command does without the schedule
- * changing. Naming it is one word an operator writes once.
+ * Archive is the default, because the action that loses nothing is the one an operator should get
+ * for forgetting a flag. It was deliberately not a default while `delete` was the only action there
+ * was: a default that meant "remove" then and "write it out first" now would have changed what a
+ * scheduled command did without the schedule changing.
  *
  * Three exit codes, the same three sentinel:verify uses and for the same reason: a chain that does
  * not add up and a command that could not run are different facts. A run that removed nothing exits
@@ -36,7 +37,7 @@ final class PruneCommand extends Command
      * the constructor, before the package has loaded its translations.
      */
     protected $signature = 'sentinel:prune
-        {--action= : What to do with a range retention has released. Required, and delete is the only one this release has}
+        {--action=archive : What to do with a range retention has released: archive writes it out and proves it before removing it, delete removes it without writing it anywhere}
         {--stream= : Prune this stream instead of every one}
         {--batch= : How many entries one statement removes; defaults to the configured size}
         {--dry-run : Report what a run would remove, and remove nothing}';
@@ -81,7 +82,7 @@ final class PruneCommand extends Command
             return self::FAILURE;
         }
 
-        $this->info($this->summary($report, $dryRun));
+        $this->info($this->summary($report, $action, $dryRun));
 
         return self::SUCCESS;
     }
@@ -137,17 +138,27 @@ final class PruneCommand extends Command
         return $rate === null ? '—' : $this->translated('per_second', ['rate' => number_format($rate)]);
     }
 
-    private function summary(PruneReport $report, bool $dryRun): string
+    private function summary(PruneReport $report, PruneAction $action, bool $dryRun): string
     {
         if ($report->entries() === 0) {
             return $this->translated('nothing');
         }
 
-        return $this->translated($dryRun ? 'planned' : 'removed', [
+        return $this->translated($this->summaryKey($action, $dryRun), [
             'entries' => $report->entries(),
             'windows' => $report->windows(),
             'streams' => count($report->streams),
         ]);
+    }
+
+    private function summaryKey(PruneAction $action, bool $dryRun): string
+    {
+        return match (true) {
+            $action === PruneAction::Archive && $dryRun => 'planned_archive',
+            $action === PruneAction::Archive => 'archived',
+            $dryRun => 'planned',
+            default => 'removed',
+        };
     }
 
     /**

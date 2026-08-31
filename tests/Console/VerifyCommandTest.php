@@ -180,7 +180,7 @@ it('says how many entries it stepped over because they are no longer here', func
     seedTheReferenceChain();
     anchor(ReferenceChain::STREAM, 4);
     retireEntries(ReferenceChain::STREAM, 1, 4);
-    manifest()->record(ReferenceChain::STREAM, 1, 4, 4);
+    manifest()->retired(ReferenceChain::STREAM, 1, 4, 4);
 
     $this->artisan('sentinel:verify', ['--stream' => ReferenceChain::STREAM])
         ->expectsOutputToContain('(+4 retired)')
@@ -192,7 +192,7 @@ it('names a retired range in the column the anchors report through', function ()
     seedTheReferenceChain();
     anchor(ReferenceChain::STREAM, 4);
     retireEntries(ReferenceChain::STREAM, 1, 4);
-    manifest()->record(ReferenceChain::STREAM, 1, 4, 4);
+    manifest()->retired(ReferenceChain::STREAM, 1, 4, 4);
 
     $this->artisan('sentinel:verify', ['--stream' => ReferenceChain::STREAM, '--depth' => 'roots'])
         ->expectsOutputToContain('1 retired')

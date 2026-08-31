@@ -35,6 +35,8 @@ return [
             'per_second' => ':rate/s',
             'nothing' => 'Nothing was removed. The note beside each stream says what is holding it.',
             'removed' => 'Removed :entries entries in :windows ranges across :streams streams.',
+            'archived' => 'Wrote out and removed :entries entries in :windows ranges across :streams streams. Every batch was read back and rehashed before a row went.',
+            'planned_archive' => 'Would write out and remove :entries entries in :windows ranges across :streams streams. Nothing was touched.',
             'planned' => 'Would remove :entries entries in :windows ranges across :streams streams. Nothing was touched.',
             'unknown_action' => 'There is no :action action. Pass one of: :accepted.',
             'failed' => 'Nothing was removed: :reason',

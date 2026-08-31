@@ -20,19 +20,56 @@ final readonly class Manifest
 {
     public function __construct(private AuditArchive $archives) {}
 
-    public function record(string $stream, int $from, int $to, int $records): AuditArchive
+    /**
+     * A range that left the hot table without being written anywhere. The four cold columns stay
+     * null, which is what says the entries are gone rather than moved.
+     */
+    public function retired(string $stream, int $from, int $to, int $records): AuditArchive
     {
-        $archive = $this->archives->newInstance();
-
-        $archive->forceFill([
+        return $this->write([
             'stream' => $stream,
             'sequence_from' => $from,
             'sequence_to' => $to,
             'records' => $records,
-            'created_at' => CarbonImmutable::now(),
-        ])->save();
+        ]);
+    }
 
-        return $archive;
+    /**
+     * A range that left the hot table into a batch that has been written, read back and proved. The
+     * row names where it went and what the bytes digest to, so a reader can refuse a file that is no
+     * longer the one this row describes.
+     */
+    public function archived(ArchiveBatch $batch): AuditArchive
+    {
+        return $this->write([
+            'stream' => $batch->stream,
+            'sequence_from' => $batch->from,
+            'sequence_to' => $batch->to,
+            'records' => $batch->records,
+            'disk' => $batch->disk,
+            'path' => $batch->path,
+            'checksum' => $batch->checksum,
+            'compressed' => $batch->codec,
+        ]);
+    }
+
+    /**
+     * The batch a row points at, or null for a range that went nowhere.
+     */
+    public function batchOf(AuditArchive $archive): ?ArchiveBatch
+    {
+        return $archive->disk === null || $archive->path === null || $archive->checksum === null
+            ? null
+            : new ArchiveBatch(
+                $archive->stream,
+                $archive->sequence_from,
+                $archive->sequence_to,
+                $archive->records,
+                $archive->disk,
+                $archive->path,
+                $archive->checksum,
+                $archive->compressed,
+            );
     }
 
     /**
@@ -60,6 +97,18 @@ final readonly class Manifest
     public function holds(string $stream, int $from, int $to): bool
     {
         return $this->claim($stream, $from)->explains($to);
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function write(array $row): AuditArchive
+    {
+        $archive = $this->archives->newInstance();
+
+        $archive->forceFill([...$row, 'created_at' => CarbonImmutable::now()])->save();
+
+        return $archive;
     }
 
     /**

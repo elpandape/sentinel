@@ -22,7 +22,7 @@ beforeEach(function (): void {
 
 it('steps over a range the manifest accounts for and the anchors reach past', function (): void {
     retireEntries(ReferenceChain::STREAM, 1, 4);
-    manifest()->record(ReferenceChain::STREAM, 1, 4, 4);
+    manifest()->retired(ReferenceChain::STREAM, 1, 4, 4);
 
     $verification = verifier()->verify(ReferenceChain::STREAM);
 
@@ -33,7 +33,7 @@ it('steps over a range the manifest accounts for and the anchors reach past', fu
 
 it('counts what it stepped over apart from what it read', function (): void {
     retireEntries(ReferenceChain::STREAM, 1, 4);
-    manifest()->record(ReferenceChain::STREAM, 1, 4, 4);
+    manifest()->retired(ReferenceChain::STREAM, 1, 4, 4);
 
     $verification = verifier()->verify(ReferenceChain::STREAM);
 
@@ -52,7 +52,7 @@ it('reports a gap nothing accounts for, as it always did', function (): void {
 
 it('refuses to take the manifest word when no anchor reaches the range', function (): void {
     retireEntries(ReferenceChain::STREAM, 1, 4);
-    manifest()->record(ReferenceChain::STREAM, 1, 4, 4);
+    manifest()->retired(ReferenceChain::STREAM, 1, 4, 4);
     DB::table(checkpointsTable())->delete();
 
     expect(verifier()->verify(ReferenceChain::STREAM)->chain->reason)->toBe(IntegrityBreak::SequenceGap);
@@ -60,14 +60,14 @@ it('refuses to take the manifest word when no anchor reaches the range', functio
 
 it('refuses to take the manifest word for more than it claims', function (): void {
     retireEntries(ReferenceChain::STREAM, 1, 4);
-    manifest()->record(ReferenceChain::STREAM, 1, 3, 3);
+    manifest()->retired(ReferenceChain::STREAM, 1, 3, 3);
 
     expect(verifier()->verify(ReferenceChain::STREAM)->chain->reason)->toBe(IntegrityBreak::SequenceGap);
 });
 
 it('still reads every entry that is there', function (): void {
     retireEntries(ReferenceChain::STREAM, 1, 4);
-    manifest()->record(ReferenceChain::STREAM, 1, 4, 4);
+    manifest()->retired(ReferenceChain::STREAM, 1, 4, 4);
 
     DB::table(auditsTable())
         ->where('stream', ReferenceChain::STREAM)
@@ -79,7 +79,7 @@ it('still reads every entry that is there', function (): void {
 
 it('calls a range whose root it cannot fold again retired, when something accounts for it', function (): void {
     retireEntries(ReferenceChain::STREAM, 1, 4);
-    manifest()->record(ReferenceChain::STREAM, 1, 4, 4);
+    manifest()->retired(ReferenceChain::STREAM, 1, 4, 4);
 
     $verification = verifier()->verifyRoots(ReferenceChain::STREAM);
 
@@ -101,7 +101,7 @@ it('still calls a range whose root it cannot fold again a break when nothing acc
 
 it('leaves the anchor walk alone, which never read those entries anyway', function (): void {
     retireEntries(ReferenceChain::STREAM, 1, 4);
-    manifest()->record(ReferenceChain::STREAM, 1, 4, 4);
+    manifest()->retired(ReferenceChain::STREAM, 1, 4, 4);
 
     $verification = verifier()->verifyAnchors(ReferenceChain::STREAM);
 
@@ -115,7 +115,7 @@ it('does not let a manifest row excuse a range whose entries are still there and
         ->where('sequence', 2)
         ->update(['hash' => str_repeat('0', 64)]);
 
-    manifest()->record(ReferenceChain::STREAM, 1, 4, 4);
+    manifest()->retired(ReferenceChain::STREAM, 1, 4, 4);
 
     $verification = verifier()->verifyRoots(ReferenceChain::STREAM);
 
