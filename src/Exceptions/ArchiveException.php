@@ -23,6 +23,16 @@ final class ArchiveException extends RuntimeException
         return new self("The archive batch at [{$path}] did not come back as the bytes that were written to it. Nothing was removed.");
     }
 
+    public static function miscounted(string $path, int $claimed, int $found): self
+    {
+        return new self("The archive batch at [{$path}] is recorded as holding {$claimed} entries and holds {$found}.");
+    }
+
+    public static function discontiguous(string $path, int $sequence): self
+    {
+        return new self("The archive batch at [{$path}] is missing sequence {$sequence} of the range it is recorded as holding.");
+    }
+
     /**
      * The entry was written out and did not survive being read back and hashed again. It is checked
      * before anything is deleted precisely so that this is a batch nobody keeps rather than a hot

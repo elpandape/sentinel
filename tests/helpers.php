@@ -7,6 +7,8 @@ namespace ElPandaPe\Sentinel\Tests;
 use Carbon\CarbonImmutable;
 use Closure;
 use DateTimeImmutable;
+use ElPandaPe\Sentinel\Archive\ArchiveBatch;
+use ElPandaPe\Sentinel\Archive\BatchReader;
 use ElPandaPe\Sentinel\Archive\BatchWriter;
 use ElPandaPe\Sentinel\Archive\Manifest;
 use ElPandaPe\Sentinel\Context\ContextEngine;
@@ -190,6 +192,30 @@ function pruner(): Pruner
     $pruner = app(Pruner::class);
 
     return $pruner;
+}
+
+/**
+ * A batch of freshly written entries, already on the fake disk.
+ *
+ * @param  array<string, mixed>  $overrides
+ */
+function archivedBatch(int $count = 2, array $overrides = []): ArchiveBatch
+{
+    $entries = [];
+
+    foreach (range(1, $count) as $ignored) {
+        $entries[] = ledger()->write(auditData($overrides));
+    }
+
+    return batchWriter()->write('global', 1, $count, $entries, [], '2026-08-31 10:00:00.000000');
+}
+
+function batchReader(): BatchReader
+{
+    /** @var BatchReader $reader */
+    $reader = app(BatchReader::class);
+
+    return $reader;
 }
 
 function batchWriter(): BatchWriter
