@@ -131,3 +131,10 @@ it('refuses to write where the configured prefix would make a path the manifest 
     expect(fn (): mixed => batchWriter()->write('global', 1, 1, [ledger()->write(auditData())], [], '2026-08-31 10:00:00.000000'))
         ->toThrow(ConfigurationException::class, 'longer than the 512 characters');
 });
+
+it('refuses to archive while the config still names the key that became the codec', function (): void {
+    sentinelConfig(['ledger.ledgers.archive.compress' => true]);
+
+    expect(fn (): mixed => batchWriter()->write('global', 1, 1, [ledger()->write(auditData())], [], '2026-08-31 10:00:00.000000'))
+        ->toThrow(ConfigurationException::class, 'became [codec]');
+});

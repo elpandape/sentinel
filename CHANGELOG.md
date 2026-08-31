@@ -2,6 +2,65 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.19.1 — Cold archiving (2026-08-31)
+
+`v0.19.0` made the table stop growing. This is where what leaves it goes instead of nowhere:
+`Ledger\ArchiveLedger` writes NDJSON batches to any disk `Storage` can reach, and **nothing is
+removed until the batch has been written, read back, and rehashed entry by entry against the hash
+each one carries sealed**.
+
+That last step is the version. RFC 8785 canonicalisation sorts keys, so a PHP map whose keys happen
+to be `{0..n-1}` in the wrong order goes out as an object and comes back as a list — a shape the
+database round trip preserves and a JSON file does not. Without the check, such an entry is
+archived, purged, and found unrestorable years later.
+
+Reading a batch back **into the table** is `v0.19.2`. Here it is written, proved legible and
+reproducible, and left where it is.
+
+### Added
+
+- **`Ledger\ArchiveLedger`**, passing the whole published contract suite over a fake disk. No new
+  Composer package: it talks to `Illuminate\Contracts\Filesystem` and nothing else, so S3, R2 and
+  MinIO work through the application's own `filesystems.php`.
+- **A typed line format.** Every line names its kind — `batch`, `entry`, `operation` — because a
+  reader that inferred it from position could never be given a new kind. An entry line's key set is
+  the entry's column set plus `tags`, asserted against the live schema, so a column added later is a
+  loud failure rather than a silent loss.
+- **`operation` lines.** A purge removes a `sentinel_transactions` header once its last entry is
+  gone, and no column of an entry holds an operation's *name*. Without them, archiving would have
+  saved an operation's entries and destroyed what it was called.
+- **`--action=archive` as the default**, because the action that loses nothing is the one you should
+  get for forgetting a flag. `delete` keeps meaning exactly what it meant when it was the only one.
+- **The manifest gains where a batch went** — disk, path, self-describing checksum and codec — and
+  the codec is a name and not a flag, in the config as in the column: a boolean could never say what
+  to inflate a batch written two years ago with.
+- **Hot and cold in one write.** The fanout composition the contract suite could only exercise
+  against synthetic destinations now runs against a real one, under `strict` and under `primary`.
+- **A batch survives the scope.** The Ledger is scoped, so an open batch would be lost rather than
+  delayed when a request or worker ends; it now goes out through the same two hooks the buffer uses,
+  and only for a process that actually resolved the driver.
+
+### Declared rather than pretended
+
+- **The archive refuses to be `ledger.default`.** Its stream tail lives on the instance, because the
+  manifest holds no hash to recover one from, so a second process would start a second chain under
+  the same name. It is a destination.
+- **It does not implement `Contracts\Deduplicates`**: answering whether a capture has settled would
+  be a scan with no index behind it.
+- **`find()` and `query()` are scans**, and answer every published filter by reading files.
+- **It never writes to `sentinel_archives`.** A row there means a range left the hot table, and both
+  the purge's tamper guard and the verification read those rows as licence — a cold copy of a range
+  that is still hot would disarm both. The manifest has exactly one writer.
+- **An entry archived without the summary of its mass operation stays without a criterion.**
+  `criteria` is inside the canonical payload, so copying it at archive time would stop that entry
+  reproducing its own hash — and this version's own check would reject the line it just wrote.
+
+### Upgrade notes
+
+No migration. `payload_version` stays at `1` and no hash is recomputed. The one behaviour change is
+that `sentinel:prune --action` now has a default, and it is `archive`. See
+[UPGRADE.md](UPGRADE.md#v01901--v0191).
+
 ## v0.19.0.1 — A manifest row could excuse a tampering (2026-08-30)
 
 ### Fixed

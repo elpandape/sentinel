@@ -200,6 +200,10 @@ final readonly class Config
 
     public function archiveCodec(): ?ArchiveCodec
     {
+        if ($this->repository->get('sentinel.ledger.ledgers.archive.compress') !== null) {
+            throw ConfigurationException::renamedArchiveCodec();
+        }
+
         $value = $this->nullableString('ledger.ledgers.archive.codec');
 
         return match (true) {

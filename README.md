@@ -54,8 +54,9 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.18.0` | Signatures over the hash, a key ring that rotates and retires, verification of the whole trail, and `sentinel:verify` with its exit codes |
 | `v0.18.1` | Checkpoints: a signed root over a fixed window, a chain of anchors, two shallower verification depths and `sentinel:checkpoint` |
 | `v0.19.0` | Retention by logical type, `sentinel:prune` with a dry run, and a verification that tells a range you retired from an entry that went missing |
+| `v0.19.1` | Cold archiving: NDJSON batches on any `Storage` disk, read back and rehashed before a row is removed, and `--action=archive` as the default |
 
-Everything else is on the roadmap: cold archiving, tombstones and compliance, partitioning and
+Everything else is on the roadmap: rehydration, tombstones and compliance, partitioning and
 distributed tracing.
 
 `v0.4.0` is the version that starts auditing: a model with the trait writes its own chained entries.
@@ -2623,6 +2624,108 @@ walk treats it exactly as it treats the edge of a bounded range: not checked, an
 either. That is why those entries are counted apart — an entry nobody read is not an entry that
 verified.
 
+## Cold archiving
+
+Retention decides what stops being kept. This decides where it goes instead of nowhere.
+
+`Ledger\ArchiveLedger` writes NDJSON to any disk `Storage` can reach — configure S3, R2 or MinIO in
+`filesystems.php` and it works there, because this package only ever talks to the Filesystem
+contract and has no idea those exist.
+
+```php
+// config/sentinel.php
+'ledger' => [
+    'ledgers' => [
+        'archive' => [
+            'disk' => env('SENTINEL_ARCHIVE_DISK', 'local'),
+            'path' => 'sentinel',
+            'codec' => 'gzip',   // or null for plain text
+            'batch' => 1000,
+        ],
+    ],
+],
+```
+
+```bash
+php artisan sentinel:prune --dry-run     # archive is the default action
+php artisan sentinel:prune
+```
+
+`--action` defaults to `archive`, because the action that loses nothing is the one you should get
+for forgetting a flag. `--action=delete` still removes a range without writing it anywhere.
+
+### Nothing is removed until the batch has been read back and rehashed
+
+The order is deliberate and it is the whole feature:
+
+1. build the lines, compress them, and digest the bytes that are about to be written;
+2. write them;
+3. **read them back** and digest again — the only proof the Filesystem contract offers that the
+   bytes landed at all;
+4. **rebuild every entry out of what came back and rehash it** against the hash it carries sealed;
+5. only then record the batch in `sentinel_archives`;
+6. only then remove a row.
+
+Step 4 is not belt and braces. RFC 8785 canonicalisation sorts keys, and a PHP map whose keys happen
+to be `{0..n-1}` in the wrong order goes out as an object and comes back as a **list** — a shape the
+database round trip preserves and a JSON file does not. Without that check, such an entry is
+archived, purged, and found to be unrestorable years later, when there is nothing left to do about
+it. It has a test, and a second one pinning that the hot rows are still there when it fires.
+
+An interruption anywhere before step 5 leaves a file nobody points at. That is garbage, never
+evidence loss, and it is what makes the run resumable.
+
+### What a batch holds
+
+One JSON object per line, and every line names its own kind:
+
+| Kind | What it is |
+|---|---|
+| `batch` | The first line: the container's own `format` version, the stream, the range, the count |
+| `entry` | One sealed entry — the forty columns of `sentinel_audits`, plus its labels |
+| `operation` | The `sentinel_transactions` header of an operation the range touches |
+
+The rule for an entry line is one sentence: **its key set is the entry's column set plus `tags`**.
+Nothing derived, nothing computed, nothing left out — and a test compares it against the live schema,
+so a column added later is a loud failure rather than a silent loss.
+
+The `operation` lines are there because a purge removes a header once its last entry is gone, and no
+column of an entry holds an operation's *name*. Without them, archiving would save an operation's
+entries and destroy what it was called.
+
+Relation lines are **not** in the batch and do not need to be: they live inside the entry's own
+`changes`, which the chain seals, and the database ledger re-derives the projection when an entry is
+put back.
+
+The checksum is over the exact bytes written, compression included, so you can `sha256sum` a
+downloaded object and get the recorded value. It is stored self-describing — `sha256:…` — the same
+way an anchor records `fold-sha256`.
+
+### The archive is a destination, not a hot ledger
+
+It refuses to be `ledger.default`, with an error that says why. The tail of a stream lives on the
+instance, because `sentinel_archives` holds no hash and could never hand one back, so a second
+process would start a second chain under the same name. Name it as a fanout destination, or let
+`sentinel:prune` write to it.
+
+```php
+'ledger' => [
+    'default' => 'fanout',
+    'ledgers' => [
+        'fanout' => ['destinations' => ['database', 'archive'], 'on_failure' => 'strict'],
+    ],
+],
+```
+
+Two more things it declares rather than pretends. It does not implement `Contracts\Deduplicates`:
+answering whether a capture has settled would be a scan with no index behind it. And `find()` and
+`query()` are scans of the batches it wrote, not index lookups — it answers every published filter,
+and it answers them by reading files.
+
+**It never writes to `sentinel_archives`.** A row there means a range *left the hot table*, and the
+purge's tamper guard and the verification both read those rows as licence. A cold copy of a range
+that is still hot would disarm both, so the manifest has exactly one writer: the purge.
+
 ## Artisan commands
 
 | Command | What it does | Exit codes |
@@ -2694,7 +2797,8 @@ row would change what the hash covers, which is exactly why it does not.
 
 ## Ledger drivers
 
-`Contracts\Ledger` ships four drivers, chosen by `ledger.default`:
+`Contracts\Ledger` ships five drivers. Four are chosen by `ledger.default`; the fifth is a
+destination:
 
 ```php
 // config/sentinel.php
@@ -2709,8 +2813,9 @@ row would change what the hash covers, which is exactly why it does not.
 | `Ledger\FanoutLedger` | Sends one entry to several destinations at once |
 | `Ledger\MemoryLedger` | The whole contract over plain arrays. A reference implementation and a test double — everything it holds dies with the instance, so it is never a store |
 | `Ledger\NullLedger` | Auditing off without taking the code path apart: it still builds, seals and chains, and keeps nothing. `find()` answers nothing and `stream()` walks nothing |
+| `Ledger\ArchiveLedger` | [Cold storage](#cold-archiving) over any `Storage` disk: NDJSON batches, checksummed and rehashed before anything is removed. A destination, never `ledger.default` |
 
-All four run the same contract suite, so they cannot drift apart.
+All five run the same contract suite, so they cannot drift apart.
 
 ### Writing to more than one place
 

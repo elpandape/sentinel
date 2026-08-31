@@ -132,6 +132,16 @@ final class ConfigurationException extends InvalidArgumentException
         );
     }
 
+    public static function renamedArchiveCodec(): self
+    {
+        return new self(
+            'Sentinel configuration key [sentinel.ledger.ledgers.archive.compress] became [codec], which names the codec '
+            .'rather than answering yes or no — a boolean cannot say what to inflate a batch written two years ago with. '
+            .'The config merge is one level deep, so a published file that still has the old key would quietly write '
+            .'batches in the clear. Replace it with codec => \'gzip\' or codec => null.',
+        );
+    }
+
     public static function coldLedgerAsDefault(): self
     {
         return new self(

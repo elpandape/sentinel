@@ -9,6 +9,52 @@ before `1.0.0`.
 
 ---
 
+## v0.19.0.1 → v0.19.1
+
+No migration, no new column, no hash recomputed. `sentinel_archives` was born complete in `v0.19.0`
+and this version fills the four columns it left null.
+
+### `--action` now has a default, and it is `archive`
+
+```bash
+php artisan sentinel:prune --action=delete   # exactly what it did before
+php artisan sentinel:prune                   # now archives, where before it refused to run
+```
+
+A command that names `--action=delete` keeps doing what it did. One that named nothing used to exit
+`2`; it now archives. That is the change the defaultlessness of `v0.19.0` existed to make safe: the
+default could only ever be introduced once the action that loses nothing existed.
+
+**Before scheduling it**, point `ledger.ledgers.archive.disk` at a disk you mean, and run a dry run:
+
+```php
+'archive' => ['disk' => 's3', 'path' => 'sentinel', 'codec' => 'gzip', 'batch' => 1000],
+```
+
+```bash
+php artisan sentinel:prune --dry-run
+```
+
+`compress => true` became `codec => 'gzip'`. This one matters even if you never touched it: the
+config merge is one level deep, so a `sentinel.php` published before this version still has
+`compress` and **no** `codec` — which would resolve to null and write every batch in the clear
+without saying so. Sentinel refuses to start archiving while the old key is there, and the error
+says what to replace it with. Delete `compress` and set `codec` to `'gzip'` or to `null`.
+
+### `gzip` needs `ext-zlib`
+
+It is a `suggest` and not a `require`, because archiving is a driver most installations never
+resolve. If you archive with `codec => 'gzip'`, make sure the extension is there; `codec => null`
+writes plain NDJSON and needs nothing.
+
+### The archive driver cannot be `ledger.default`
+
+It is a destination. Naming it as the default now fails at boot with an error saying why: its stream
+tail lives on the instance, so a second process would start a second chain under the same name. Use
+it as a fanout destination, or let `sentinel:prune` write to it.
+
+---
+
 ## v0.18.1 → v0.19.0
 
 One new table, `sentinel_archives`. `payload_version` stays at `1`, `sentinel_audits` is not touched,
