@@ -44,6 +44,14 @@ final class ArchiveException extends RuntimeException
         return new self("The archive batch at [{$path}] is missing sequence {$sequence} of the range it is recorded as holding.");
     }
 
+    public static function occupied(string $stream, int $sequence): self
+    {
+        return new self(
+            "Sequence {$sequence} of stream {$stream} is already held by an entry with a different hash, "
+            .'so the archived one was not put back. Two entries cannot occupy one position of a chain.',
+        );
+    }
+
     /**
      * The entry was written out and did not survive being read back and hashed again. It is checked
      * before anything is deleted precisely so that this is a batch nobody keeps rather than a hot

@@ -11,6 +11,7 @@ use ElPandaPe\Sentinel\Archive\ArchiveBatch;
 use ElPandaPe\Sentinel\Archive\BatchReader;
 use ElPandaPe\Sentinel\Archive\BatchWriter;
 use ElPandaPe\Sentinel\Archive\Manifest;
+use ElPandaPe\Sentinel\Archive\Rehydrator;
 use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Context\Runtime;
 use ElPandaPe\Sentinel\Contracts\Ledger;
@@ -269,6 +270,14 @@ function batchAtFormat(int $format): ArchiveBatch
 
     return new ArchiveBatch('global', 1, 1, 0, 'cold', 'sentinel/forged.ndjson',
         'sha256:'.hash('sha256', $body), null);
+}
+
+function rehydrator(): Rehydrator
+{
+    /** @var Rehydrator $rehydrator */
+    $rehydrator = app(Rehydrator::class);
+
+    return $rehydrator;
 }
 
 function archiver(): Archiver
