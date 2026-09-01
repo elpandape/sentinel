@@ -39,6 +39,21 @@ final class ArchiveException extends RuntimeException
         return new self("The archive batch at [{$path}] is recorded as holding {$claimed} entries and holds {$found}.");
     }
 
+    /**
+     * A line that names fewer columns than an operation has. It is refused rather than filled in:
+     * headers go back in one insert, and a row with a narrower set of keys than its neighbours makes
+     * that insert fail somewhere far from here, or name the wrong columns.
+     *
+     * @param  list<string>  $missing
+     */
+    public static function incompleteOperation(array $missing): self
+    {
+        return new self(
+            'An operation line in the batch does not name the columns ['.implode(', ', $missing).'], '
+            .'so no header was rebuilt from it and nothing was put back.',
+        );
+    }
+
     public static function discontiguous(string $path, int $sequence): self
     {
         return new self("The archive batch at [{$path}] is missing sequence {$sequence} of the range it is recorded as holding.");

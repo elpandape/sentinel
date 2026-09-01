@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Archive;
 
 use ElPandaPe\Sentinel\Enums\BatchLine;
+use ElPandaPe\Sentinel\Exceptions\ArchiveException;
 use ElPandaPe\Sentinel\Integrity\CanonicalPayload;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Models\AuditTag;
@@ -157,15 +158,22 @@ final readonly class Line
     /**
      * The operation header a line describes. Like an entry, everything that is not a column is
      * dropped before the fill — and unlike an entry, the header is mutable by design, so what comes
-     * back is the row as the batch found it and not a reconstruction of it.
+     * back is the row as the batch found it and not a reconstruction of it. A line that names fewer
+     * columns than there are is refused rather than filled in.
      *
      * @param  array<string, mixed>  $line
      */
     public static function toTransaction(array $line, AuditTransaction $model): AuditTransaction
     {
         $header = $model->newInstance();
+        $columns = array_intersect_key($line, array_flip(self::OPERATION));
+        $missing = array_values(array_diff(self::OPERATION, array_keys($columns)));
 
-        $header->forceFill(array_intersect_key($line, array_flip(self::OPERATION)));
+        if ($missing !== []) {
+            throw ArchiveException::incompleteOperation($missing);
+        }
+
+        $header->forceFill($columns);
 
         $header->exists = true;
         $header->syncOriginal();

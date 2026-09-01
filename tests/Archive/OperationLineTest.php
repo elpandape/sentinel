@@ -59,6 +59,14 @@ it('keeps what is not a column out of the header it rebuilds', function (): void
     expect(array_keys($rebuilt->getAttributes()))->not->toContain('kind');
 });
 
+it('refuses an operation line that names fewer columns than a header has', function (): void {
+    $line = Line::operation(new AuditTransaction);
+    unset($line['metadata'], $line['tenant_id']);
+
+    expect(fn (): AuditTransaction => Line::toTransaction($line, new AuditTransaction))
+        ->toThrow(ArchiveException::class, 'does not name the columns [tenant_id, metadata]');
+});
+
 it('reads the operation lines out of a batch', function (): void {
     $header = new AuditTransaction()->forceFill([
         'id' => str_pad('01JOP', 26, '0'),
