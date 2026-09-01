@@ -2,6 +2,62 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.19.2 — Rehydration (2026-09-01)
+
+`v0.19.1` wrote a batch out and proved it could be read. This puts one back: same `sequence`, same
+`hash`, same link, same labels, same `version` and same `created_at` — and with the operation
+headers the purge removed, without which every restored entry would point at something that no
+longer exists.
+
+### Added
+
+- **`Archive\Rehydrator`**, writing through `DatabaseLedger` by name and never through the
+  configured `Ledger`. Under the hot-plus-cold composition the README recommends, writing through
+  the resolved ledger would hand every entry to the cold destination, which would write a fresh
+  batch at the same deterministic key — the path is a pure function of the range — **overwriting the
+  very file being read**, and without its operation lines.
+- **Headers go back before entries.** `append()` commits its own transaction per entry, so a pass
+  that started with the entries and died would leave a range the next pass reads as already
+  restored, and therefore permanently without the operation it belonged to.
+- **The reader for lines nobody could read.** `v0.19.1` wrote operation headers into every batch and
+  published no way to get one back. An operation line now names its columns the way an entry line
+  does, which is what makes a key-set assertion against the live schema possible.
+- **A container format check**, before a line is parsed. This is the first file this package opens
+  that it did not write.
+- **A way in to the manifest row that names a batch.** `batchOf()` shipped with no caller and no way
+  to get one; the manifest now answers the question rehydration actually asks.
+- **`append()` maintains the per-subject counter.** Three drivers kept one and none moved it when
+  taking an entry they had not numbered, so an append followed by a write handed out a number the
+  appended entry already held — permanently, and with nothing to notice it by.
+
+### Fixed
+
+- **A purge would have removed a range that had just come back.** It skipped recording whenever the
+  manifest already claimed a window, which was written for a run that died halfway. A restored range
+  carries its original `created_at`, so the frontier offers it again the moment it has rows, and the
+  next scheduled run would have removed it recording nothing. The question is now asked of the rows.
+  Third time this package has had to learn that a guard rests on a fact and not on the row asserting
+  it; the other two were `v0.19.0.1`.
+
+### Declared rather than pretended
+
+- **Rehydration is single-writer.** The skip check happens before the write and not inside it, so
+  two passes at once can still collide on a unique index.
+- **The manifest row is not withdrawn.** It is the only place `disk`, `path`, `checksum` and the
+  codec exist, so withdrawing it would leave bytes this package could neither find nor verify.
+- **What comes back is the entry, not the bytes of its row.** `append()` inserts what the model holds
+  after the fill, so PHP re-encodes the text of a JSON column. The hash is taken over decoded values
+  and is what is promised.
+- **`version` can repeat for one subject.** Renumbering is not an option — it is inside the canonical
+  payload — so `whereVersion()` may legitimately return several entries and `compare()` can pair two
+  eras.
+
+### Upgrade notes
+
+No migration. `payload_version` stays at `1` and no hash is recomputed. `Testing\LedgerContractTestCase`
+gains an assertion, which is a deliberate break for third-party drivers. See
+[UPGRADE.md](UPGRADE.md#v0191--v0192).
+
 ## v0.19.1 — Cold archiving (2026-08-31)
 
 `v0.19.0` made the table stop growing. This is where what leaves it goes instead of nowhere:

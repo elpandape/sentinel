@@ -9,6 +9,54 @@ before `1.0.0`.
 
 ---
 
+## v0.19.1 → v0.19.2
+
+No migration, no new column, no hash recomputed.
+
+### `LedgerContractTestCase` gains an assertion, and your driver may fail it
+
+This is the one thing that can break you, and only if you ship a driver of your own that runs the
+published suite.
+
+`Contracts\Ledger::append()` now says in writing that it moves whatever the driver uses to number a
+subject's next entry, and the suite checks it. A driver that derives the number from what it holds —
+as `DatabaseLedger` does, reading the highest version back out of the table — passes without doing
+anything. A driver that keeps a counter has to be told:
+
+```php
+public function append(Audit $audit): Audit
+{
+    // …store it as before…
+    $this->versions->seen($audit);   // whatever your counter is
+
+    return $audit;
+}
+```
+
+Failing loudly is the point. Until now such a driver handed the next write of that subject a number
+the appended entry already held, permanently and with nothing to notice it by.
+
+### `version` stops being unique per subject
+
+A restored entry brings its original number back, so a subject whose whole history was purged and
+then written to again can end up with two entries claiming version 1. Renumbering is not an option:
+`version` is inside the canonical payload, so a renumbered entry stops reproducing its own hash,
+breaks its successor's link and undoes its anchor's fold.
+
+Two consequences to read before you rely on either:
+
+- `whereVersion()` is a filter that may legitimately return several entries.
+- `Query\Comparison` can pair two eras of one subject. Where it used to fail loudly on a missing
+  version, it can now succeed on the wrong pairing. That is the only real cost of returning entries
+  verbatim, and it cannot be avoided without renumbering.
+
+### Rehydration is single-writer
+
+The check for what is already restored happens before the write and not inside it, so two passes at
+once can still collide on a unique index. Run one.
+
+---
+
 ## v0.19.0.1 → v0.19.1
 
 No migration, no new column, no hash recomputed. `sentinel_archives` was born complete in `v0.19.0`

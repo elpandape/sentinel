@@ -55,9 +55,9 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.18.1` | Checkpoints: a signed root over a fixed window, a chain of anchors, two shallower verification depths and `sentinel:checkpoint` |
 | `v0.19.0` | Retention by logical type, `sentinel:prune` with a dry run, and a verification that tells a range you retired from an entry that went missing |
 | `v0.19.1` | Cold archiving: NDJSON batches on any `Storage` disk, read back and rehashed before a row is removed, and `--action=archive` as the default |
+| `v0.19.2` | Rehydration: a batch goes back into the table exactly as it left, headers included, and `append()` keeps the counter it was silently leaving behind |
 
-Everything else is on the roadmap: rehydration, tombstones and compliance, partitioning and
-distributed tracing.
+Everything else is on the roadmap: tombstones and compliance, partitioning and distributed tracing.
 
 `v0.4.0` is the version that starts auditing: a model with the trait writes its own chained entries.
 `v0.5.0` is the one that answers what changed, instead of leaving you two states to compare.
@@ -2725,6 +2725,38 @@ and it answers them by reading files.
 **It never writes to `sentinel_archives`.** A row there means a range *left the hot table*, and the
 purge's tamper guard and the verification both read those rows as licence. A cold copy of a range
 that is still hot would disarm both, so the manifest has exactly one writer: the purge.
+
+### Bringing a batch back
+
+A batch goes back into the hot table exactly as it left — same `sequence`, same `hash`, same link,
+same labels, same `version`, same `created_at` — and with the operation headers the purge removed,
+without which every restored entry would point at something that no longer exists.
+
+```php
+use ElPandaPe\Sentinel\Archive\Rehydrator;
+
+app(Rehydrator::class)->restore('global', 5000, 6000);
+```
+
+It is **idempotent and not atomic**. What is already there with the same hash is skipped, a sequence
+held by a different hash is refused, and an interruption leaves a prefix a second pass finishes. The
+check happens before the write rather than inside it, so rehydration is single-writer — two passes at
+once can still collide on a unique index.
+
+Every entry is rehashed before it goes in. "Without recomputing hashes" means without *reassigning*
+one; recalculating to compare is exactly what is called for when rows return to the table that serves
+as evidence.
+
+**The manifest row stays.** It is the only place `disk`, `path`, `checksum` and the codec exist — not
+even the file's own header carries them — so withdrawing it would leave bytes this package could
+neither find nor verify. What a standing row would have licensed is the range being *absent* again,
+and the purge no longer takes it as licence: it asks the rows instead.
+
+**What `version` stops guaranteeing.** A restored entry brings its original number back, so a subject
+whose whole history was purged and then written to again can end up with two entries claiming
+version 1. Renumbering is not an option — `version` is inside the canonical payload, so a renumbered
+entry stops reproducing its own hash. `whereVersion()` is therefore a filter that may legitimately
+return several entries, and `compare()` can pair two eras of one subject.
 
 ## Artisan commands
 
