@@ -19,6 +19,7 @@ use function ElPandaPe\Sentinel\Tests\frontiers;
 use function ElPandaPe\Sentinel\Tests\ledger;
 use function ElPandaPe\Sentinel\Tests\manifest;
 use function ElPandaPe\Sentinel\Tests\pruner;
+use function ElPandaPe\Sentinel\Tests\rehydrator;
 use function ElPandaPe\Sentinel\Tests\seedChain;
 use function ElPandaPe\Sentinel\Tests\sentinelConfig;
 use function ElPandaPe\Sentinel\Tests\transactionsTable;
@@ -122,8 +123,15 @@ it('finishes a run interrupted between writing the batch and removing the rows',
     $pruning = pruner()->prune(frontiers(['model' => '1 year'])->of('global', $now), PruneAction::Archive, false);
 
     expect($pruning->succeeded())->toBeTrue()
-        ->and(DB::table(auditsTable())->count())->toBe(8)
-        ->and(AuditArchive::query()->count())->toBe(1);
+        ->and(DB::table(auditsTable())->count())->toBe(8);
+});
+
+it('records a range twice rather than risk not recording it at all', function () use ($now): void {
+    manifest()->archived(archiver()->archive('global', 5, 8));
+
+    pruner()->prune(frontiers(['model' => '1 year'])->of('global', $now), PruneAction::Archive, false);
+
+    expect(AuditArchive::query()->count())->toBe(2);
 });
 
 it('writes the batch again over the same key when it was interrupted before the row was recorded', function () use ($now): void {
@@ -133,4 +141,16 @@ it('writes the batch again over the same key when it was interrupted before the 
 
     expect(Storage::disk('cold')->allFiles())->toBe([$orphan->path])
         ->and(AuditArchive::query()->value('path'))->toBe($orphan->path);
+});
+
+it('records a rehydrated range again instead of removing it in silence', function () use ($now): void {
+    pruner()->prune(frontiers(['model' => '1 year'])->of('global', $now), PruneAction::Archive, false);
+    rehydrator()->restore('global', 5, 8);
+
+    expect(DB::table(auditsTable())->count())->toBe(12);
+
+    pruner()->prune(frontiers(['model' => '1 year'])->of('global', $now), PruneAction::Archive, false);
+
+    expect(DB::table(auditsTable())->count())->toBe(8)
+        ->and(AuditArchive::query()->count())->toBe(2);
 });

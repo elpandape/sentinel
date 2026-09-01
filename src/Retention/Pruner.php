@@ -71,11 +71,33 @@ final readonly class Pruner
             return $counted;
         }
 
-        if (! $this->archives->holds($stream, $window->from, $window->to)) {
+        if (! $this->unfinished($stream, $window, $counted->audits)) {
             $this->record($stream, $window, $action, $counted->audits);
         }
 
         return $this->cascade->purge($stream, $window->from, $window->to, $batch);
+    }
+
+    /**
+     * Whether a claim over this window is a run that did not finish removing it, rather than a range
+     * that is simply back.
+     *
+     * The claim alone is not the answer, and that is the third time this package has had to learn
+     * it. A rehydrated range carries its original created_at, so the frontier offers it again the
+     * moment it has rows — and a purge that took the standing claim as licence would remove it
+     * without recording anything, believing it was finishing its own half-done work.
+     *
+     * A window that still holds every row it should is therefore treated as present, not as
+     * half-removed. That deliberately loses one distinction the database cannot make anyway: a run
+     * interrupted between recording the range and removing the first row looks exactly like a range
+     * that came back. The cost of getting it wrong is asymmetric — recording twice costs one row,
+     * which the schema declares legal, and recording nothing loses the record of a deletion — so it
+     * is decided in the direction that cannot lose.
+     */
+    private function unfinished(string $stream, Checkpoint $window, int $present): bool
+    {
+        return $present < $window->length()
+            && $this->archives->holds($stream, $window->from, $window->to);
     }
 
     /**
