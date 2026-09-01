@@ -75,6 +75,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Mockery;
 use RecursiveDirectoryIterator;
@@ -253,6 +254,21 @@ function writerOverDisk(Filesystem $disk): BatchWriter
         new Audit,
         sentinelConfig(),
     );
+}
+
+/**
+ * A batch written by hand at a chosen container format, with a checksum that matches its bytes — the
+ * only way to reach the format guard, which sits behind the digest.
+ */
+function batchAtFormat(int $format): ArchiveBatch
+{
+    $body = json_encode(['kind' => 'batch', 'format' => $format, 'stream' => 'global',
+        'sequence_from' => 1, 'sequence_to' => 1, 'records' => 0, 'written_at' => '2026-08-31 10:00:00.000000'])."\n";
+
+    Storage::disk('cold')->put('sentinel/forged.ndjson', $body);
+
+    return new ArchiveBatch('global', 1, 1, 0, 'cold', 'sentinel/forged.ndjson',
+        'sha256:'.hash('sha256', $body), null);
 }
 
 function archiver(): Archiver

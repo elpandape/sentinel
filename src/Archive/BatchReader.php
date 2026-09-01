@@ -8,6 +8,7 @@ use ElPandaPe\Sentinel\Enums\ArchiveCodec;
 use ElPandaPe\Sentinel\Exceptions\ArchiveException;
 use ElPandaPe\Sentinel\Integrity\Hasher;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Models\AuditTransaction;
 use Illuminate\Contracts\Filesystem\Factory;
 
 /**
@@ -26,6 +27,7 @@ final readonly class BatchReader
         private Factory $disks,
         private Hasher $hasher,
         private Audit $model,
+        private AuditTransaction $headers,
     ) {}
 
     /**
@@ -53,6 +55,24 @@ final readonly class BatchReader
             : throw ArchiveException::miscounted($batch->path, $batch->records, count($entries));
     }
 
+    /**
+     * The operation headers a batch carries, one per distinct transaction its entries belong to. The
+     * purge removes a header when its last entry goes, and no column of an entry holds an
+     * operation's name, so these are the only copy left.
+     *
+     * @return list<AuditTransaction>
+     */
+    public function operations(ArchiveBatch $batch): array
+    {
+        $headers = [];
+
+        foreach (Batch::operationsIn($this->body($batch)) as $decoded) {
+            $headers[] = Line::toTransaction($decoded, $this->headers);
+        }
+
+        return $headers;
+    }
+
     private function body(ArchiveBatch $batch): string
     {
         $bytes = $this->disks->disk($batch->disk)->get($batch->path);
@@ -68,7 +88,11 @@ final readonly class BatchReader
         }
 
         $codec = $batch->codec === null ? null : ArchiveCodec::from($batch->codec);
+        $body = $codec?->decompress($bytes) ?? $bytes;
+        $format = Batch::formatOf($body);
 
-        return $codec?->decompress($bytes) ?? $bytes;
+        return $format === Line::FORMAT
+            ? $body
+            : throw ArchiveException::unknownFormat($batch->path, $format, Line::FORMAT);
     }
 }

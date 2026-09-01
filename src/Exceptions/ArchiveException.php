@@ -23,6 +23,17 @@ final class ArchiveException extends RuntimeException
         return new self("The archive batch at [{$path}] did not come back as the bytes that were written to it. Nothing was removed.");
     }
 
+    public static function unknownFormat(string $path, ?int $format, int $known): self
+    {
+        return new self(sprintf(
+            'The archive batch at [%s] declares container format %s and this build reads %d. '
+            .'A file it cannot read is a refusal, not something to parse and hope.',
+            $path,
+            $format === null ? 'nothing' : (string) $format,
+            $known,
+        ));
+    }
+
     public static function miscounted(string $path, int $claimed, int $found): self
     {
         return new self("The archive batch at [{$path}] is recorded as holding {$claimed} entries and holds {$found}.");

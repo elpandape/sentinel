@@ -48,6 +48,26 @@ final readonly class Line
     ];
 
     /**
+     * The columns of an operation header. Named here rather than read off whatever the model
+     * happened to have loaded, for the same reason the entry's are: a line has to hold the same
+     * fields whoever hands it the row, and a column added to that table later has to be a failure
+     * somebody sees.
+     *
+     * @var list<string>
+     */
+    public const array OPERATION = [
+        'id',
+        'name',
+        'actor_type',
+        'actor_id',
+        'tenant_id',
+        'started_at',
+        'finished_at',
+        'audits_count',
+        'metadata',
+    ];
+
+    /**
      * @var list<string>
      */
     public const array KEPT = [
@@ -99,7 +119,7 @@ final readonly class Line
     {
         $line = ['kind' => BatchLine::Operation->value];
 
-        foreach (array_keys($header->getAttributes()) as $column) {
+        foreach (self::OPERATION as $column) {
             $line[$column] = CanonicalPayload::normalize($header->getAttribute($column));
         }
 
@@ -132,6 +152,25 @@ final readonly class Line
         $audit->syncOriginal();
 
         return $audit;
+    }
+
+    /**
+     * The operation header a line describes. Like an entry, everything that is not a column is
+     * dropped before the fill — and unlike an entry, the header is mutable by design, so what comes
+     * back is the row as the batch found it and not a reconstruction of it.
+     *
+     * @param  array<string, mixed>  $line
+     */
+    public static function toTransaction(array $line, AuditTransaction $model): AuditTransaction
+    {
+        $header = $model->newInstance();
+
+        $header->forceFill(array_intersect_key($line, array_flip(self::OPERATION)));
+
+        $header->exists = true;
+        $header->syncOriginal();
+
+        return $header;
     }
 
     /**

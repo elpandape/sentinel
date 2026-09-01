@@ -28,6 +28,30 @@ final readonly class Batch
     /**
      * @return iterable<array<string, mixed>>
      */
+    public static function operationsIn(string $body): iterable
+    {
+        return self::linesOf($body, BatchLine::Operation);
+    }
+
+    /**
+     * The container's own version, or null for a file with no header line. It is asked before
+     * anything else is read: this is the first file this package opens that it did not write, and a
+     * format it does not know is a refusal a reader can act on rather than a parse in the dark.
+     */
+    public static function formatOf(string $body): ?int
+    {
+        foreach (self::linesOf($body, BatchLine::Header) as $header) {
+            $format = $header['format'] ?? null;
+
+            return is_int($format) ? $format : null;
+        }
+
+        return null;
+    }
+
+    /**
+     * @return iterable<array<string, mixed>>
+     */
     private static function linesOf(string $body, BatchLine $kind): iterable
     {
         foreach (explode("\n", trim($body)) as $line) {
