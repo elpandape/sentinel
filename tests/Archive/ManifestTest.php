@@ -2,7 +2,13 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Storage;
+
+use function ElPandaPe\Sentinel\Tests\auditData;
+use function ElPandaPe\Sentinel\Tests\batchWriter;
+use function ElPandaPe\Sentinel\Tests\ledger;
 use function ElPandaPe\Sentinel\Tests\manifest;
+use function ElPandaPe\Sentinel\Tests\sentinelConfig;
 
 it('writes down the range it retired', function (): void {
     $archive = manifest()->retired('global', 1, 1000, 1000);
@@ -76,4 +82,32 @@ it('does not let a later range explain an absence in front of it', function (): 
     manifest()->retired('global', 500, 1000, 501);
 
     expect(manifest()->claim('global', 1)->reaches)->toBe(0);
+});
+
+it('gives back the batches that hold part of a range, oldest first', function (): void {
+    Storage::fake('cold');
+    sentinelConfig(['ledger.ledgers.archive.disk' => 'cold']);
+
+    $second = batchWriter()->write('global', 3, 4, [ledger()->write(auditData())], [], '2026-08-31 10:00:00.000000');
+    $first = batchWriter()->write('global', 1, 2, [ledger()->write(auditData())], [], '2026-08-31 10:00:00.000000');
+
+    manifest()->archived($second);
+    manifest()->archived($first);
+
+    expect(array_map(fn ($batch): int => $batch->from, manifest()->batchesIn('global', 1, 4)))->toBe([1, 3]);
+});
+
+it('skips a range that was retired without being written anywhere', function (): void {
+    manifest()->retired('global', 1, 4, 4);
+
+    expect(manifest()->batchesIn('global', 1, 4))->toBeEmpty();
+});
+
+it('stops at a range that starts past the one it was asked about', function (): void {
+    Storage::fake('cold');
+    sentinelConfig(['ledger.ledgers.archive.disk' => 'cold']);
+
+    manifest()->archived(batchWriter()->write('global', 9, 10, [ledger()->write(auditData())], [], '2026-08-31 10:00:00.000000'));
+
+    expect(manifest()->batchesIn('global', 1, 4))->toBeEmpty();
 });

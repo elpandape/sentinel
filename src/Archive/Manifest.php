@@ -54,6 +54,36 @@ final readonly class Manifest
     }
 
     /**
+     * Every batch that holds part of a range, oldest range first. It is the way in to a file this
+     * process did not write: the driver only knows what its own instance wrote, and the row is the
+     * only place `disk`, `path`, `checksum` and the codec exist.
+     *
+     * A range that was retired without being written anywhere is skipped, not refused — a row with
+     * no cold columns is a truthful record of a deletion, and having nothing to give back is the
+     * answer to asking it for a batch.
+     *
+     * @return list<ArchiveBatch>
+     */
+    public function batchesIn(string $stream, int $from, int $to): array
+    {
+        $batches = [];
+
+        foreach ($this->rangesFrom($stream, $from) as $archive) {
+            if ($archive->sequence_from > $to) {
+                break;
+            }
+
+            $batch = $this->batchOf($archive);
+
+            if ($batch instanceof ArchiveBatch) {
+                $batches[] = $batch;
+            }
+        }
+
+        return $batches;
+    }
+
+    /**
      * The batch a row points at, or null for a range that went nowhere.
      */
     public function batchOf(AuditArchive $archive): ?ArchiveBatch
