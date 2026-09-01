@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use ElPandaPe\Sentinel\Enums\PruneAction;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Models\AuditRelation;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
@@ -111,4 +112,26 @@ it('puts an operation header back when a second pass finds it missing too', func
     expect($second->restored)->toBe(2)
         ->and($second->operations)->toBe(1)
         ->and(Audit::query()->where('sequence', 3)->firstOrFail()->transaction?->name)->toBe('billing.run');
+});
+
+it('asks the hot table only about the captures its batch carries, never about every one it holds', function () use ($later): void {
+    foreach (range(1, 8) as $number) {
+        ledger()->write(auditData(['capture_id' => str_pad((string) $number, 26, '0', STR_PAD_LEFT)]));
+    }
+
+    anchor('global', 4);
+    pruner()->prune(frontiers(['model' => '1 day'])->of('global', $later), PruneAction::Archive, false);
+
+    $asked = [];
+
+    DB::listen(function (QueryExecuted $query) use (&$asked): void {
+        if (str_contains($query->sql, 'capture_id') && str_starts_with(strtolower(trim($query->sql)), 'select')) {
+            $asked[] = $query->bindings;
+        }
+    });
+
+    rehydrator()->restore('global', 1, 4);
+
+    expect($asked)->not->toBeEmpty()
+        ->and(array_filter($asked, static fn (array $bindings): bool => $bindings === []))->toBeEmpty();
 });

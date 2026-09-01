@@ -53,11 +53,12 @@ final readonly class Rehydrator
     private function batch(ArchiveBatch $batch): Rehydration
     {
         $operations = $this->restoreHeaders($batch);
-        $present = $this->present($batch);
+        $entries = $this->reader->read($batch);
+        $present = $this->present($batch, $entries);
         $restored = 0;
         $skipped = 0;
 
-        foreach ($this->reader->read($batch) as $entry) {
+        foreach ($entries as $entry) {
             if ($this->alreadyThere($entry, $present)) {
                 $skipped++;
 
@@ -93,22 +94,32 @@ final readonly class Rehydrator
     }
 
     /**
-     * What the hot table already holds for this range: the hash at each sequence, and the capture
-     * identifiers in it. The capture is a fourth axis the declared key cannot see — a capture that
-     * was archived, purged and then replayed occupies that unique index from a sequence slot that
-     * reads as free.
+     * What the hot table already holds against this batch: the hash at each sequence of the range,
+     * and which of the captures the batch carries are taken. The capture is a fourth axis the
+     * declared key cannot see — a capture that was archived, purged and then replayed occupies that
+     * unique index from a sequence slot that reads as free — and it is asked about by name. Reading
+     * every capture in the table would answer the same question and grow with the table rather than
+     * with the batch, which is the one thing a restore of a whole anchor window must not do.
      *
+     * @param  list<Audit>  $entries
      * @return array{hashes: array<int, string>, captures: list<string>}
      */
-    private function present(ArchiveBatch $batch): array
+    private function present(ArchiveBatch $batch, array $entries): array
     {
         $rows = $this->audits->newQuery()
             ->where('stream', $batch->stream)
             ->whereBetween('sequence', [$batch->from, $batch->to])
             ->get(['sequence', 'hash']);
 
+        $carried = array_values(array_filter(array_map(
+            static fn (Audit $entry): ?string => $entry->capture_id,
+            $entries,
+        )));
+
         /** @var list<string> $captures */
-        $captures = $this->audits->newQuery()->whereNotNull('capture_id')->pluck('capture_id')->all();
+        $captures = $carried === []
+            ? []
+            : $this->audits->newQuery()->whereIn('capture_id', $carried)->pluck('capture_id')->all();
 
         /** @var array<int, string> $hashes */
         $hashes = $rows->pluck('hash', 'sequence')->all();
