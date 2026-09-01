@@ -45,11 +45,6 @@ final class ArchiveLedger implements DeclaresFilters, EnumeratesStreams, Ledger
     private array $tails = [];
 
     /**
-     * @var array<string, int>
-     */
-    private array $versions = [];
-
-    /**
      * @var array<string, non-empty-list<Audit>>
      */
     private array $open = [];
@@ -59,6 +54,8 @@ final class ArchiveLedger implements DeclaresFilters, EnumeratesStreams, Ledger
      */
     private array $written = [];
 
+    private readonly SubjectVersions $versions;
+
     public function __construct(
         private readonly Stream $stream,
         private readonly EntryBuilder $builder,
@@ -66,7 +63,9 @@ final class ArchiveLedger implements DeclaresFilters, EnumeratesStreams, Ledger
         private readonly BatchWriter $writer,
         private readonly BatchReader $reader,
         private readonly Config $config,
-    ) {}
+    ) {
+        $this->versions = new SubjectVersions;
+    }
 
     public function write(AuditData $audit): Audit
     {
@@ -78,7 +77,7 @@ final class ArchiveLedger implements DeclaresFilters, EnumeratesStreams, Ledger
             $stream,
             $tail->sequence + 1,
             $tail->hash,
-            $this->version($audit),
+            $this->versions->next($audit),
         ));
     }
 
@@ -164,6 +163,7 @@ final class ArchiveLedger implements DeclaresFilters, EnumeratesStreams, Ledger
     {
         $this->open[$audit->stream] = [...$this->open[$audit->stream] ?? [], $audit];
         $this->tails[$audit->stream] = new StreamTail($audit->sequence, $audit->hash);
+        $this->versions->seen($audit);
 
         if (count($this->open[$audit->stream]) >= $this->config->archiveBatch()) {
             $this->flush($audit->stream, $this->open[$audit->stream]);
@@ -229,16 +229,5 @@ final class ArchiveLedger implements DeclaresFilters, EnumeratesStreams, Ledger
             ),
             $this->open,
         ));
-    }
-
-    private function version(AuditData $audit): ?int
-    {
-        if ($audit->subject_type === null || $audit->subject_id === null) {
-            return null;
-        }
-
-        $key = $audit->subject_type.'|'.$audit->subject_id;
-
-        return $this->versions[$key] = ($this->versions[$key] ?? 0) + 1;
     }
 }

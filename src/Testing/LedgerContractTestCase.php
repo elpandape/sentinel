@@ -196,6 +196,22 @@ abstract class LedgerContractTestCase extends TestCase
         ];
     }
 
+    /**
+     * A driver that keeps its own counter has to move it when it takes an entry it did not number,
+     * or the next write of that subject hands out a number the appended entry already holds —
+     * permanently, and with nothing to notice it by. A driver that derives the number from what it
+     * holds passes this without doing anything.
+     */
+    public function test_it_goes_on_numbering_a_subject_after_taking_an_entry_it_did_not_number(): void
+    {
+        $ledger = $this->ledger();
+
+        $ledger->append($this->sealedForSubject(3));
+        $written = $ledger->write($this->narrowedAuditData());
+
+        $this->assertSame(4, $written->version);
+    }
+
     public function test_it_hands_an_entry_back_carrying_the_labels_it_was_written_with(): void
     {
         $written = $this->ledger()->write($this->narrowedAuditData());
@@ -457,6 +473,16 @@ abstract class LedgerContractTestCase extends TestCase
     protected function sealedElsewhere(): Audit
     {
         return app(EntryBuilder::class)->build($this->auditData(), 'imported', 1, null, null);
+    }
+
+    /**
+     * An entry another ledger sealed about the subject the query expectations narrow to, already
+     * carrying a version. The helpers above build entries with no subject at all, so nothing about a
+     * subject's numbering is reachable through them.
+     */
+    protected function sealedForSubject(int $version): Audit
+    {
+        return app(EntryBuilder::class)->build($this->narrowedAuditData(), 'imported', 1, null, $version);
     }
 
     protected function asking(): AuditQuery

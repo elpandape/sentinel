@@ -47,6 +47,11 @@ interface Ledger
      * stores the entry and drops them has stored something else. Labels travel on the entry as a
      * loaded relation, so an entry that arrives without that relation loaded is one that says
      * nothing about its labels, and storing none is the right answer there.
+     *
+     * It also moves whatever the driver uses to number a subject's next entry. A driver that
+     * derives that from what it holds gets this for nothing; one that keeps a counter has to be
+     * told, and one that is not told hands the next write a number the appended entry already has —
+     * permanently, and with nothing to notice it by.
      */
     public function append(Audit $audit): Audit;
 

@@ -32,15 +32,14 @@ final class NullLedger implements DeclaresFilters, Ledger
      */
     private array $tails = [];
 
-    /**
-     * @var array<string, int>
-     */
-    private array $versions = [];
+    private readonly SubjectVersions $versions;
 
     public function __construct(
         private readonly Stream $stream,
         private readonly EntryBuilder $builder,
-    ) {}
+    ) {
+        $this->versions = new SubjectVersions;
+    }
 
     public function write(AuditData $audit): Audit
     {
@@ -52,7 +51,7 @@ final class NullLedger implements DeclaresFilters, Ledger
             $stream,
             $tail->sequence + 1,
             $tail->hash,
-            $this->version($audit),
+            $this->versions->next($audit),
         );
 
         return $this->remember($written);
@@ -97,18 +96,8 @@ final class NullLedger implements DeclaresFilters, Ledger
     private function remember(Audit $audit): Audit
     {
         $this->tails[$audit->stream] = new StreamTail($audit->sequence, $audit->hash);
+        $this->versions->seen($audit);
 
         return $audit;
-    }
-
-    private function version(AuditData $audit): ?int
-    {
-        if ($audit->subject_type === null || $audit->subject_id === null) {
-            return null;
-        }
-
-        $key = $audit->subject_type.'|'.$audit->subject_id;
-
-        return $this->versions[$key] = ($this->versions[$key] ?? 0) + 1;
     }
 }

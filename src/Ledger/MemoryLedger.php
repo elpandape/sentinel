@@ -33,16 +33,15 @@ final class MemoryLedger implements DeclaresFilters, Deduplicates, EnumeratesStr
      */
     private array $streams = [];
 
-    /**
-     * @var array<string, int>
-     */
-    private array $versions = [];
+    private readonly SubjectVersions $versions;
 
     public function __construct(
         private readonly Stream $stream,
         private readonly EntryBuilder $builder,
         private readonly ArrayQuery $queries,
-    ) {}
+    ) {
+        $this->versions = new SubjectVersions;
+    }
 
     public function write(AuditData $audit): Audit
     {
@@ -55,7 +54,7 @@ final class MemoryLedger implements DeclaresFilters, Deduplicates, EnumeratesStr
             $stream,
             count($entries) + 1,
             $last === false ? null : $last->hash,
-            $this->version($audit),
+            $this->versions->next($audit),
         );
 
         $this->streams[$stream][] = $written;
@@ -71,6 +70,7 @@ final class MemoryLedger implements DeclaresFilters, Deduplicates, EnumeratesStr
     public function append(Audit $audit): Audit
     {
         $this->streams[$audit->stream][] = $audit;
+        $this->versions->seen($audit);
 
         return $audit;
     }
@@ -135,16 +135,5 @@ final class MemoryLedger implements DeclaresFilters, Deduplicates, EnumeratesStr
     public function stream(string $stream): LedgerStream
     {
         return new ArrayStream($stream, $this->streams[$stream] ?? []);
-    }
-
-    private function version(AuditData $audit): ?int
-    {
-        if ($audit->subject_type === null || $audit->subject_id === null) {
-            return null;
-        }
-
-        $key = $audit->subject_type.'|'.$audit->subject_id;
-
-        return $this->versions[$key] = ($this->versions[$key] ?? 0) + 1;
     }
 }
