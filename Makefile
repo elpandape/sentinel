@@ -1,5 +1,11 @@
 DC = docker compose
-PHP = $(DC) run --rm php
+
+# Storage::fake cleans one directory per disk name, and that directory lives under the bind mount
+# every container shares. The two engine passes run at once over it, so one of them wiping the
+# archive disk between another's write and its read-back fails a test that has nothing wrong with
+# it. An anonymous volume gives each container that subtree to itself, and --rm takes it away.
+EPHEMERAL = /app/vendor/orchestra/testbench-core/laravel/storage/framework/testing
+PHP = $(DC) run --rm -v $(EPHEMERAL) php
 
 .PHONY: build install update test test-quiet bench coverage types stan lint lint-fix rector rector-fix mutation validate ci shell redis-up dbs-up test-mysql test-pgsql test-dbs
 
