@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Integrity;
 
+use ElPandaPe\Sentinel\Enums\ContentState;
+
 /**
  * What one walk of one stream found: whether the chain holds, what it found out about the
  * signatures along the way, and how much of the stream it took on the word of an anchor rather
@@ -24,6 +26,7 @@ final readonly class StreamVerification
      * @param  array<string, int>  $signatures  how many entries landed in each SignatureState
      * @param  array<string, int>  $anchors  how many ranges landed in each CheckpointState
      * @param  int  $covered  entries an anchor answered for, which is to say entries nobody read
+     * @param  array<string, int>  $content  how many entries landed in each ContentState
      */
     public function __construct(
         public VerificationResult $chain,
@@ -31,7 +34,19 @@ final readonly class StreamVerification
         public ?VerificationResult $signature = null,
         public array $anchors = [],
         public int $covered = 0,
+        public array $content = [],
     ) {}
+
+    /**
+     * How many entries of this walk were redacted. A declared redaction is counted and not announced:
+     * it does not break the chain, does not stop the walk and does not invert isIntact(), because it
+     * is an act somebody performed on purpose and left a trail for. A tampering does all three, and
+     * wins over a tombstone standing next to it — otherwise a redaction would be a place to hide one.
+     */
+    public function redacted(): int
+    {
+        return $this->content[ContentState::Redacted->value] ?? 0;
+    }
 
     /**
      * Entries the walk stepped over because they are not in the ledger any more. It is read off the

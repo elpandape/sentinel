@@ -109,6 +109,7 @@ final readonly class Verifier
         $archived = 0;
         $reach = null;
         $signatures = [];
+        $content = [];
         $forged = null;
 
         foreach ($this->ledger->stream($name)->range($expected, $to) as $audit) {
@@ -121,6 +122,7 @@ final readonly class Verifier
                         $this->announce($name, $checked, IntegrityBreak::SequenceGap, $expected, $audit->id, $archived),
                         $signatures,
                         $forged,
+                        content: $content,
                     );
                 }
 
@@ -133,9 +135,12 @@ final readonly class Verifier
                 $previous = null;
             }
 
+            $state = $this->verifyContent($audit);
+            $content[$state->value] = ($content[$state->value] ?? 0) + 1;
+
             $broken = match (true) {
                 $audit->sequence !== $expected => IntegrityBreak::SequenceGap,
-                ! $this->verifyEntry($audit) => IntegrityBreak::HashMismatch,
+                $state === ContentState::Altered => IntegrityBreak::HashMismatch,
                 $this->unlinked($audit, $previous) => IntegrityBreak::LinkMismatch,
                 default => null,
             };
@@ -145,6 +150,7 @@ final readonly class Verifier
                     $this->announce($name, $checked, $broken, min($audit->sequence, $expected), $audit->id, $archived),
                     $signatures,
                     $forged,
+                    content: $content,
                 );
             }
 
@@ -160,7 +166,12 @@ final readonly class Verifier
             $checked++;
         }
 
-        return new StreamVerification(VerificationResult::intact($name, $checked, $archived), $signatures, $forged);
+        return new StreamVerification(
+            VerificationResult::intact($name, $checked, $archived),
+            $signatures,
+            $forged,
+            content: $content,
+        );
     }
 
     /**

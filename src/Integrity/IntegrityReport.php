@@ -92,6 +92,20 @@ final readonly class IntegrityReport
     }
 
     /**
+     * How many entries of the whole trail landed in each ContentState. Read next to signatures():
+     * a redaction is a declared act and belongs in a count, not in a break.
+     *
+     * @return array<string, int>
+     */
+    public function content(): array
+    {
+        return $this->tally(array_map(
+            static fn (StreamVerification $verification): array => $verification->content,
+            $this->streams,
+        ));
+    }
+
+    /**
      * @param  list<array<string, int>>  $counts
      * @return array<string, int>
      */
