@@ -2,6 +2,48 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.19.5 — Compliance mode, export and rekey (2026-09-02)
+
+`compliance` stops being a configuration key with no behaviour. **Sentinel still certifies nothing**:
+what this ships are technical primitives, and whether a regime is satisfied by them is a question for
+somebody who knows that regime.
+
+### Added
+
+- **Compliance mode refuses to boot without what it would otherwise be claiming.** Signatures and
+  anchors have to be on. The chain is not on the list because it cannot be turned off. It fails at
+  boot rather than at the first write: by then, the entries that should have been signed are not.
+- **A redaction has to name who ordered it.** The one operation that destroys evidence cannot be the
+  one entry with nobody's name on it.
+- **`--action=delete` requires an archive.** The evidence is the manifest row of a real batch, not a
+  flag.
+- **Every read leaves two records of one fact**: an entry with `audit_type = 'access'`, chained,
+  hashed and signed like any other, and a row in `sentinel_access_log` with the shape of the question,
+  the result count and who asked. The entry makes a read provable; the row makes it searchable. The
+  editable copy is deliberately the second one and never the only one.
+- **`php artisan sentinel:export`** in `json`, `ndjson` and `csv`, narrowed with the Query API rather
+  than a second query language, and carrying a manifest: entry count, the digest of the body, and a
+  signature over that digest. A recipient verifies the file without access to anything. `csv` is lossy
+  and says so; `ndjson` round-trips. A redacted entry exports as redacted.
+- **`php artisan sentinel:rekey`**, putting the v0.7.0 rotation service in an operator's hands: a new
+  entry under the new key, the original untouched and still verifying while its old key stays on the
+  keyring. It is the opposite of a redaction and shares no path with it.
+- **`sentinel_access_log`**, born whole: actor, tenant, the query, the result count, the context, and
+  the id of the entry that proves it. Only written in compliance mode.
+
+### Declared
+
+- **The access log is a projection and not the evidence.** Nothing in it is hashed or signed, and a
+  row can be edited by anyone who can write the table. What makes a read provable is the entry it
+  points at.
+- **Sentinel certifies no regime.** It ships primitives. The README says so in the first line of the
+  section rather than in a footnote.
+
+### Upgrade notes
+
+One new table, `sentinel_access_log`, created by a migration this release ships. Nothing is written to
+it unless compliance mode is on. See [UPGRADE.md](UPGRADE.md#v0194--v0195).
+
 ## v0.19.4 — Redaction over the archive (2026-09-02)
 
 `v0.19.3` shipped two refusals: a range holding a tombstone could not be archived, and an entry whose

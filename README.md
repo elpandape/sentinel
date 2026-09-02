@@ -2869,6 +2869,83 @@ Redaction is also not masking. `security.redaction.*` in the config masks values
 captured**, before an entry is ever sealed; `Redactor` destroys the contents of an entry that was
 sealed long ago. They share a word and nothing else.
 
+## Compliance mode
+
+**Sentinel certifies nothing.** It ships technical primitives — a chain, signatures, anchors, a
+tombstone, an access record — and whether a given regime is satisfied by them is a question for
+somebody who knows that regime. This section describes what the switch hardens, and nothing more.
+
+```php
+'compliance' => true,
+```
+
+**It refuses to boot without the things it would otherwise be claiming.** Signatures and anchors have
+to be on. The chain is not on that list because it cannot be turned off; everything built on top of it
+can, and an installation that calls itself compliant while running without them is making a claim its
+configuration does not support. The failure happens at boot, not at the first write — by the time the
+first write arrives, the entries that should have been signed are not.
+
+**A redaction has to name who ordered it.** Outside compliance mode the actor is optional; inside it,
+the one operation that destroys evidence cannot be the one with nobody's name on it.
+
+**Deleting requires archiving.** `sentinel:prune --action=delete` refuses a range that has no archive
+batch. The evidence is the manifest row of a real file, not a flag somebody set.
+
+**Every read is recorded, in two places.** An entry with `audit_type = 'access'` — chained, hashed and
+signed like any other — and a row in `sentinel_access_log` carrying the shape of the question, how
+many results came back, and who asked. The entry is what makes a read provable; the row is what makes
+it searchable. The editable copy is deliberately the second one and never the only one, because an
+access log that can be edited proves nothing about who looked.
+
+```php
+$reads = AuditAccess::query()
+    ->where('actor_id', $suspect->getKey())
+    ->latest('created_at')
+    ->get();
+
+$reads->first()->audit(); // the entry that proves it, if it has not been pruned
+```
+
+It does not audit itself: writing the access entry is a write, not a read, and there is a reentrancy
+latch behind that so no future caller can turn one read into a chain of them.
+
+**What it costs**, measured over a hundred reads of fifty entries each on one machine: `0.309s`
+without it, `0.557s` with it — about **+2.5ms per read**, or 1.8× what a read cost before. That buys a
+chained entry and a row per query. On a read-heavy installation, decide with the number in front of
+you rather than with an impression.
+
+### Handing the trail to someone else
+
+```bash
+php artisan sentinel:export --format=ndjson --tenant=acme --disk=exports --path=trail.ndjson
+```
+
+Every export carries a manifest beside it — entry count, the digest of the body, and a signature over
+that digest with the key this installation signs entries with. A recipient with the verifying half of
+the key can tell the bytes are the bytes that were exported, without being given access to anything.
+
+`ndjson` round-trips. `csv` flattens the nested columns into JSON inside cells: fine for a person with
+a spreadsheet, wrong for anything that would be read back in. A redacted entry exports **as redacted**,
+carrying its redaction block, so what leaves the building says the contents were destroyed rather than
+pretending they were empty.
+
+In compliance mode an export is a read like any other, and leaves the same two records. That is the
+point rather than an oversight: it is the largest read a trail ever serves.
+
+### Rotating the key without rewriting anything
+
+```bash
+php artisan sentinel:rekey --key=2027-q1 --tenant=acme --dry-run
+```
+
+Rotation writes; it never rewrites. Each entry carrying protected fields gets a **new** entry holding
+the same values under the new key and pointing back at the one it stands in for. The original keeps
+its hash, its link and its sequence, and keeps verifying for as long as its old key stays on the
+keyring.
+
+Which is the opposite of a redaction, and why no path of this command calls that one: a tombstone
+destroys content, a rekey preserves it under a different lock.
+
 ## Artisan commands
 
 | Command | What it does | Exit codes |
@@ -2878,6 +2955,8 @@ sealed long ago. They share a word and nothing else.
 | `sentinel:checkpoint` | Anchors every complete window the streams still owe | `0` anchored, or nothing left to anchor · `2` could not run |
 | `sentinel:prune` | Applies the retention policies and reports what went | `0` removed, or nothing to remove · `1` a range no longer folds to its root · `2` could not run |
 | `sentinel:redact` | Destroys the contents of one entry and leaves the rest of it standing | `0` redacted, or already redacted · `1` refused: archived, or no longer reproducing its hash · `2` could not run |
+| `sentinel:export` | Hands the trail to somebody who does not have the database | `0` exported · `2` a format it does not write |
+| `sentinel:rekey` | Re-encrypts a range of the trail under another key | `0` re-encrypted, or nothing to re-encrypt · `2` could not run |
 
 ```bash
 php artisan sentinel:verify

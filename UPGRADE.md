@@ -9,6 +9,46 @@ before `1.0.0`.
 
 ---
 
+## v0.19.4 → v0.19.5
+
+One new table. Nothing else changes shape.
+
+### `sentinel_access_log`
+
+A migration ships with this release. Run it. The table is only written to in compliance mode, so an
+installation that has not switched compliance on pays nothing for it beyond the migration.
+
+### Compliance mode now refuses to boot
+
+If you have `'compliance' => true` **and** signatures or anchors switched off, the application will
+now fail at boot with a message naming which. That is the point: the mode is a claim about what the
+trail can prove, and it could not prove it.
+
+Either turn them on:
+
+```php
+'integrity' => [
+    'signature' => ['enabled' => true, /* ... */],
+    'checkpoints' => ['enabled' => true, /* ... */],
+],
+```
+
+or turn compliance off. There is no third state, deliberately.
+
+### Compliance mode changes two operations you may already be calling
+
+- `Redactor::redact()` throws without an actor. Pass one.
+- `sentinel:prune --action=delete` refuses a range that has no archive batch. Archive first, or use
+  `--action=archive`, which has been the default since `v0.19.0`.
+
+### Every read now writes, in compliance mode
+
+Each `AuditQuery::get()` produces one chained entry and one row. On a read-heavy installation that is
+a write per query — measure before switching it on, and note that the access entries consume sequences
+in their stream like any other entry.
+
+---
+
 ## v0.19.3 → v0.19.4
 
 No migration, no new column, no batch format change.
