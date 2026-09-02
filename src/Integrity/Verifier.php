@@ -21,7 +21,7 @@ final readonly class Verifier
 {
     public function __construct(
         private Ledger $ledger,
-        private Hasher $hasher,
+        private Content $content,
         private Signers $signers,
         private Checkpoints $checkpoints,
         private Manifest $archives,
@@ -40,19 +40,7 @@ final readonly class Verifier
      */
     public function verifyContent(Audit $audit): ContentState
     {
-        $rehashed = $this->hasher->hash($audit);
-
-        if ($audit->redacted_at === null) {
-            return hash_equals($audit->hash, $rehashed)
-                ? ContentState::Sealed
-                : ContentState::Altered;
-        }
-
-        $redacted = $audit->redacted_hash;
-
-        return $redacted !== null && hash_equals($redacted, $rehashed)
-            ? ContentState::Redacted
-            : ContentState::Altered;
+        return $this->content->of($audit);
     }
 
     /**

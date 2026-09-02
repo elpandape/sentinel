@@ -134,11 +134,30 @@ final readonly class Manifest
      */
     private function write(array $row): AuditArchive
     {
-        $archive = $this->archives->newInstance();
+        $archive = $this->rowFor($row) ?? $this->archives->newInstance();
 
         $archive->forceFill([...$row, 'created_at' => CarbonImmutable::now()])->save();
 
         return $archive;
+    }
+
+    /**
+     * The row already describing this exact range, when there is one. A range can be recorded twice —
+     * a run interrupted after recording and before removing leaves one, and a range that was brought
+     * back, redacted and written out again produces another — and two rows for one range are two
+     * answers to `batchesIn()` with no tiebreak, so the second read of that range would take it from
+     * both files. The row is updated in place: what changes is where the bytes are and what they
+     * digest to, never which range it is about.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private function rowFor(array $row): ?AuditArchive
+    {
+        return $this->archives->newQuery()
+            ->where('stream', $row['stream'])
+            ->where('sequence_from', $row['sequence_from'])
+            ->where('sequence_to', $row['sequence_to'])
+            ->first();
     }
 
     /**

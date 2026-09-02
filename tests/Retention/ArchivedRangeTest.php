@@ -126,12 +126,13 @@ it('finishes a run interrupted between writing the batch and removing the rows',
         ->and(DB::table(auditsTable())->count())->toBe(8);
 });
 
-it('records a range twice rather than risk not recording it at all', function () use ($now): void {
+it('keeps one row for a range however many times it is written out', function () use ($now): void {
     manifest()->archived(archiver()->archive('global', 5, 8));
 
     pruner()->prune(frontiers(['model' => '1 year'])->of('global', $now), PruneAction::Archive, false);
 
-    expect(AuditArchive::query()->count())->toBe(2);
+    expect(AuditArchive::query()->count())->toBe(1)
+        ->and(AuditArchive::query()->value('sequence_from'))->toBe(5);
 });
 
 it('writes the batch again over the same key when it was interrupted before the row was recorded', function () use ($now): void {
@@ -152,5 +153,6 @@ it('records a rehydrated range again instead of removing it in silence', functio
     pruner()->prune(frontiers(['model' => '1 year'])->of('global', $now), PruneAction::Archive, false);
 
     expect(DB::table(auditsTable())->count())->toBe(8)
-        ->and(AuditArchive::query()->count())->toBe(2);
+        ->and(AuditArchive::query()->count())->toBe(1)
+        ->and(AuditArchive::query()->value('path'))->not->toBeNull();
 });

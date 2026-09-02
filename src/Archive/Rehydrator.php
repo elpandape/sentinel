@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Archive;
 
 use ElPandaPe\Sentinel\Exceptions\ArchiveException;
-use ElPandaPe\Sentinel\Integrity\Verifier;
+use ElPandaPe\Sentinel\Integrity\Content;
 use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Models\AuditTransaction;
@@ -36,7 +36,7 @@ final readonly class Rehydrator
         private DatabaseLedger $ledger,
         private Audit $audits,
         private AuditTransaction $headers,
-        private Verifier $verifier,
+        private Content $content,
     ) {}
 
     public function restore(string $stream, int $from, int $to): Rehydration
@@ -65,7 +65,7 @@ final readonly class Rehydrator
                 continue;
             }
 
-            if (! $this->verifier->verifyEntry($entry)) {
+            if (! $this->content->holds($entry)) {
                 throw ArchiveException::unverifiable($batch->path, $entry->sequence);
             }
 

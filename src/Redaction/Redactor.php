@@ -76,16 +76,23 @@ final readonly class Redactor
     }
 
     /**
-     * A range that already left the hot table has no row to empty, and this version cannot reach the
-     * batch that holds its content. Refusing by name is what keeps the operator from reading "redacted"
-     * about a redaction that updated zero rows.
+     * An entry that is not in the hot table has no row to empty. The question is asked of the rows and
+     * not of the manifest, which is the rule this package has had to learn four times now: a range
+     * that was brought back is claimed by a manifest row AND present, and refusing it because the row
+     * exists would make a rehydrated range permanently unredactable.
      *
-     * The question goes to `holds()` and not to `batchesIn()`: a range retired with `--action=delete`
-     * has a manifest row with no cold columns, which `batchesIn()` skips and `holds()` still answers.
+     * When it really is gone, the refusal names which kind of gone: a batch still holds the content —
+     * and says which file — or the range was retired with nothing kept. The batch lookup goes through
+     * `batchesIn()`, which skips a row with no cold columns, and the fallback covers exactly that row.
      */
     private function refuseWhatIsNotHere(Audit $audit): void
     {
-        if (! $this->archives->holds($audit->stream, $audit->sequence, $audit->sequence)) {
+        $present = $this->audits->newQuery()
+            ->where('stream', $audit->stream)
+            ->where('sequence', $audit->sequence)
+            ->exists();
+
+        if ($present) {
             return;
         }
 

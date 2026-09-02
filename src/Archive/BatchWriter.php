@@ -6,6 +6,7 @@ namespace ElPandaPe\Sentinel\Archive;
 
 use ElPandaPe\Sentinel\Contracts\Canonicalizer;
 use ElPandaPe\Sentinel\Exceptions\ArchiveException;
+use ElPandaPe\Sentinel\Integrity\Content;
 use ElPandaPe\Sentinel\Integrity\Hasher;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Models\AuditTransaction;
@@ -32,6 +33,7 @@ final readonly class BatchWriter
         private Factory $disks,
         private Canonicalizer $canonicalizer,
         private Hasher $hasher,
+        private Content $content,
         private Audit $model,
         private Config $config,
     ) {}
@@ -83,13 +85,17 @@ final readonly class BatchWriter
     /**
      * Every entry line, rebuilt out of what came back and hashed again. An entry that no longer
      * reproduces what it was sealed with is refused here, where the cost is a batch nobody keeps.
+     *
+     * What it is entitled to reproduce depends on whether it was redacted: a tombstone reproduces its
+     * second hash and never its first, so asking only for the first would make every redacted range
+     * unarchivable — which is exactly the refusal v0.19.3 had to publish and this version lifts.
      */
     private function prove(string $path, string $body): void
     {
         foreach (Batch::entriesIn($body) as $decoded) {
             $rebuilt = Line::toAudit($decoded, $this->model);
 
-            if (! hash_equals($rebuilt->hash, $this->hasher->hash($rebuilt))) {
+            if (! $this->content->holds($rebuilt)) {
                 throw ArchiveException::unverifiable($path, $rebuilt->sequence);
             }
         }

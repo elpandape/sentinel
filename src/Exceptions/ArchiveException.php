@@ -54,20 +54,6 @@ final class ArchiveException extends RuntimeException
         );
     }
 
-    /**
-     * A range this build cannot archive because one of its entries was redacted: the writer proves a
-     * batch by rehashing every entry against the hash it carries sealed, and a tombstone reproduces
-     * its second hash instead. Declared here rather than discovered at the point of proof, where the
-     * file is already written and the whole run is lost.
-     */
-    public static function redacted(string $stream, int $sequence): self
-    {
-        return new self(
-            "Sequence {$sequence} of stream {$stream} was redacted, and this build cannot archive a range "
-            .'that holds a tombstone. Nothing was written and nothing was removed.',
-        );
-    }
-
     public static function discontiguous(string $path, int $sequence): self
     {
         return new self("The archive batch at [{$path}] is missing sequence {$sequence} of the range it is recorded as holding.");

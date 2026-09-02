@@ -24,6 +24,7 @@ use ElPandaPe\Sentinel\Enums\RelationOperation;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Integrity\Checkpoint;
 use ElPandaPe\Sentinel\Integrity\Checkpoints;
+use ElPandaPe\Sentinel\Integrity\Content;
 use ElPandaPe\Sentinel\Integrity\Fold;
 use ElPandaPe\Sentinel\Integrity\Hasher;
 use ElPandaPe\Sentinel\Integrity\HmacSigner;
@@ -253,6 +254,7 @@ function writerOverDisk(Filesystem $disk): BatchWriter
         $disks,
         new JsonCanonicalizer,
         hasher(),
+        new Content(hasher()),
         new Audit,
         sentinelConfig(),
     );

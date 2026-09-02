@@ -6,7 +6,6 @@ namespace ElPandaPe\Sentinel\Retention;
 
 use ElPandaPe\Sentinel\Archive\ArchiveBatch;
 use ElPandaPe\Sentinel\Archive\BatchWriter;
-use ElPandaPe\Sentinel\Exceptions\ArchiveException;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Models\AuditTransaction;
 use Illuminate\Support\Carbon;
@@ -40,8 +39,6 @@ final readonly class Archiver
             ->get()
             ->all());
 
-        $this->refuseRedacted($stream, $entries);
-
         return $this->writer->write(
             $stream,
             $from,
@@ -50,24 +47,6 @@ final readonly class Archiver
             $this->operations($entries),
             Carbon::now()->format(Audit::SERIALIZED_AT),
         );
-    }
-
-    /**
-     * A range holding a tombstone is refused before a byte is written. The writer proves every entry
-     * by rehashing it against the hash it carries sealed, and a redacted entry reproduces its second
-     * hash and not that one — so the batch would be written to disk and only then thrown out, taking
-     * the whole prune run with it. Refusing here costs a readable message; not refusing costs every
-     * stream in a scheduled run.
-     *
-     * @param  list<Audit>  $entries
-     */
-    private function refuseRedacted(string $stream, array $entries): void
-    {
-        foreach ($entries as $entry) {
-            if ($entry->redacted_at !== null) {
-                throw ArchiveException::redacted($stream, $entry->sequence);
-            }
-        }
     }
 
     /**
