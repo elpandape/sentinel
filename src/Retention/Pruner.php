@@ -8,9 +8,11 @@ use Carbon\CarbonImmutable;
 use ElPandaPe\Sentinel\Archive\Manifest;
 use ElPandaPe\Sentinel\Enums\IntegrityBreak;
 use ElPandaPe\Sentinel\Enums\PruneAction;
+use ElPandaPe\Sentinel\Exceptions\ComplianceException;
 use ElPandaPe\Sentinel\Integrity\Checkpoint;
 use ElPandaPe\Sentinel\Integrity\Checkpoints;
 use ElPandaPe\Sentinel\Integrity\VerificationResult;
+use ElPandaPe\Sentinel\Support\Config;
 
 /**
  * Retires the windows a stream has released, one at a time and in order.
@@ -32,6 +34,7 @@ final readonly class Pruner
         private Manifest $archives,
         private Checkpoints $checkpoints,
         private Archiver $archiver,
+        private Config $config,
     ) {}
 
     public function plan(string $stream, CarbonImmutable $now): Frontier
@@ -71,11 +74,30 @@ final readonly class Pruner
             return $counted;
         }
 
+        $this->refuseUnarchivedDelete($stream, $window, $action);
+
         if (! $this->unfinished($stream, $window, $counted->audits)) {
             $this->record($stream, $window, $action, $counted->audits);
         }
 
         return $this->cascade->purge($stream, $window->from, $window->to, $batch);
+    }
+
+    /**
+     * Under compliance mode a range leaves only after a copy of it exists somewhere. The evidence is
+     * the manifest row of a batch and not a flag — `holds()` answers for a range retired with nothing
+     * kept as well, so the question goes to `batchesIn()`, which skips a row with no cold columns and
+     * therefore only answers yes when there is a file.
+     */
+    private function refuseUnarchivedDelete(string $stream, Checkpoint $window, PruneAction $action): void
+    {
+        if ($action !== PruneAction::Delete || ! $this->config->complianceEnabled()) {
+            return;
+        }
+
+        if ($this->archives->batchesIn($stream, $window->from, $window->to) === []) {
+            throw ComplianceException::unarchived($stream, $window->from, $window->to);
+        }
     }
 
     /**

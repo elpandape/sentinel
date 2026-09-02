@@ -7,6 +7,7 @@ namespace ElPandaPe\Sentinel;
 use ElPandaPe\Sentinel\Buffer\Flusher;
 use ElPandaPe\Sentinel\Buffer\MemoryBuffer;
 use ElPandaPe\Sentinel\Buffer\RedisBuffer;
+use ElPandaPe\Sentinel\Compliance\Requirements;
 use ElPandaPe\Sentinel\Console\CheckpointCommand;
 use ElPandaPe\Sentinel\Console\FlushCommand;
 use ElPandaPe\Sentinel\Console\PruneCommand;
@@ -119,6 +120,13 @@ final class SentinelServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->loadTranslationsFrom(__DIR__.'/../resources/lang', 'sentinel');
+
+        // Nothing to enforce before the package's own configuration is there: boot() can be called
+        // on a provider whose register() never ran, and an installation with no configuration has
+        // not declared compliance mode.
+        if ($this->app->make('config')->has('sentinel.compliance')) {
+            $this->app->make(Requirements::class)->enforce();
+        }
 
         $this->openTheMassOperationDoor();
 

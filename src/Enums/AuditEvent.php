@@ -18,6 +18,7 @@ enum AuditEvent: string
     case Transition = 'transition';
     case Restore = 'restore';
     case Rekeyed = 'rekeyed';
+    case Read = 'read';
     case Redacted = 'redacted';
     case Custom = 'custom';
 }

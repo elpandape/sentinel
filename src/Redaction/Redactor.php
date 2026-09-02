@@ -9,6 +9,7 @@ use ElPandaPe\Sentinel\Archive\Manifest;
 use ElPandaPe\Sentinel\Capture\Recorder;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
+use ElPandaPe\Sentinel\Exceptions\ComplianceException;
 use ElPandaPe\Sentinel\Exceptions\RedactionException;
 use ElPandaPe\Sentinel\Integrity\Hasher;
 use ElPandaPe\Sentinel\Integrity\Verifier;
@@ -34,6 +35,10 @@ use ElPandaPe\Sentinel\Support\Reference;
  * The row is written through the query builder because the model refuses updates by contract. That is
  * the same door an unsanctioned write would use, and nothing in the row tells them apart. It is said
  * out loud here rather than left to be discovered.
+ *
+ * Under compliance mode the actor stops being optional: the one operation that destroys evidence has
+ * to name who ordered it, and a trail entry with nobody on it is the shape of an unattributable
+ * deletion.
  */
 final readonly class Redactor
 {
@@ -61,6 +66,10 @@ final readonly class Redactor
         }
 
         $this->refuseWhatIsNotHere($audit);
+
+        if (! $actor instanceof Reference && $this->config->complianceEnabled()) {
+            throw ComplianceException::unattributed();
+        }
 
         if (! $this->verifier->verifyEntry($audit)) {
             throw RedactionException::unverifiable($audit->stream, $audit->sequence);

@@ -6,6 +6,7 @@ namespace ElPandaPe\Sentinel\Query;
 
 use DateTimeImmutable;
 use DateTimeInterface;
+use ElPandaPe\Sentinel\Compliance\AccessLog;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Diff\Pointer;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
@@ -333,7 +334,7 @@ final class AuditQuery
     public function get(): AuditCollection
     {
         if ($this->limit !== null) {
-            return $this->ledger->query($this);
+            return $this->read($this->ledger->query($this));
         }
 
         $query = clone $this;
@@ -343,7 +344,7 @@ final class AuditQuery
 
         return $entries->count() > self::DEFAULT_LIMIT
             ? throw QueryException::unbounded(self::DEFAULT_LIMIT)
-            : $entries;
+            : $this->read($entries);
     }
 
     /**
@@ -403,6 +404,21 @@ final class AuditQuery
         $entries = $this->whereVersion($from, $to)->latest()->get();
 
         return Comparison::between($this->at($entries, $from), $this->at($entries, $to));
+    }
+
+    /**
+     * What compliance mode records about a read: an entry that proves it happened, and a row that
+     * makes it searchable. A refused read is not recorded, because nothing was handed over — the
+     * unbounded read above throws before this is reached, deliberately.
+     */
+    private function read(AuditCollection $entries): AuditCollection
+    {
+        /** @var AccessLog $log */
+        $log = app(AccessLog::class);
+
+        $log->read($this, $entries);
+
+        return $entries;
     }
 
     private function at(AuditCollection $entries, int $version): Audit
