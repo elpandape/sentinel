@@ -43,6 +43,30 @@ return [
             'would' => 'Would destroy the contents of entry :audit, at sequence :sequence of stream :stream. Its position, its hash and its link would stay.',
             'redacted' => 'Destroyed the contents of entry :audit, at sequence :sequence of stream :stream. Its position, its hash and its link are untouched, and a new entry records who did it and why.',
         ],
+        'partitions' => [
+            'description' => 'Keep a partitioned trail supplied with months ahead and clear of empty ones behind',
+            'columns' => [
+                'partition' => 'Partition',
+                'action' => 'Action',
+                'note' => 'Note',
+            ],
+            'actions' => [
+                'created' => 'Created',
+                'retired' => 'Retired',
+                'kept' => 'Kept',
+            ],
+            'reasons' => [
+                'unarchived' => 'Still holds entries, and compliance mode does not let a range leave without a copy of it existing first. Archive it with sentinel:prune.',
+                'occupied' => 'Still holds entries. Archive them with sentinel:prune, or pass --force to drop the range anyway.',
+            ],
+            'undivided' => 'The table [:table] is not partitioned, so there was nothing to maintain.',
+            'nothing' => 'Nothing to do on [:table]: the months ahead are already there and nothing behind is due.',
+            'planned' => 'Would create :created partitions and retire :retired on [:table]. Nothing was changed.',
+            'maintained' => 'Created :created partitions and retired :retired on [:table].',
+            'refused' => 'Refused to retire :partitions partitions. Nothing was removed.',
+            'unknown_table' => 'The table [:table] is not one this command maintains. Accepted: :accepted.',
+            'failed' => 'Nothing was maintained: :reason',
+        ],
         'prune' => [
             'description' => 'Apply the retention policies and report what went',
             'columns' => [

@@ -164,4 +164,12 @@ final class ConfigurationException extends InvalidArgumentException
     {
         return new self('Sentinel resolved an empty stream name; every entry belongs to a named chain.');
     }
+
+    public static function doesNotPartition(string $driver): self
+    {
+        return new self(
+            "The [{$driver}] engine does not partition a table, so there is nothing for Sentinel to maintain there. "
+            .'Partitioning is supported on mysql and pgsql.',
+        );
+    }
 }

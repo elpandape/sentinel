@@ -41,6 +41,9 @@ use ElPandaPe\Sentinel\Ledger\FanoutLedger;
 use ElPandaPe\Sentinel\Ledger\MemoryLedger;
 use ElPandaPe\Sentinel\Mass\Criteria;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Partitions\Calendar;
+use ElPandaPe\Sentinel\Partitions\Grammar;
+use ElPandaPe\Sentinel\Partitions\Maintainer;
 use ElPandaPe\Sentinel\Pipeline\Discard;
 use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Presentation\AuditPresenter;
@@ -71,6 +74,8 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Filesystem\Factory;
 use Illuminate\Contracts\Filesystem\Filesystem;
+use Illuminate\Database\Connection;
+use Illuminate\Database\DatabaseManager;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Database\Migrations\Migration;
@@ -82,6 +87,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Mockery;
+use Mockery\MockInterface;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
@@ -1637,4 +1643,52 @@ function jsonIndexMigration(): Migration
         : throw new RuntimeException('The json-indexes stub is missing.');
 
     return $migration;
+}
+
+/**
+ * A connection that answers as a dividing engine, so the maintainer's whole decision can be read
+ * on SQLite — where `make ci` runs and where neither dialect is executable.
+ *
+ * @param  list<object>  $partitions
+ */
+function dividedConnection(array $partitions, int $entries = 0): Connection&MockInterface
+{
+    $connection = Mockery::mock(Connection::class);
+
+    $connection->shouldReceive('getDriverName')->andReturn('pgsql');
+    $connection->shouldReceive('select')->andReturn($partitions);
+    $connection->shouldReceive('selectOne')->andReturn((object) ['total' => $entries]);
+    $connection->shouldReceive('statement')->andReturn(true)->byDefault();
+
+    return $connection;
+}
+
+function maintainer(bool $compliance = false): Maintainer
+{
+    return new Maintainer(new Grammar, new Calendar, sentinelConfig(['compliance' => $compliance]));
+}
+
+/**
+ * How many partitions the trail is divided into right now, asked of whichever catalogue the engine
+ * keeps them in.
+ */
+function partitionCount(): int
+{
+    $driver = DB::connection()->getDriverName();
+
+    return count(DB::select(new Grammar()->partitions($driver), [auditsTable()]));
+}
+
+/**
+ * Puts a connection that answers as a dividing engine in front of the command, so the whole report
+ * is reachable on the engine `make ci` runs against.
+ *
+ * @param  list<object>  $partitions
+ */
+function dividingDatabase(array $partitions, int $entries = 0): void
+{
+    $databases = Mockery::mock(DatabaseManager::class);
+    $databases->shouldReceive('connection')->andReturn(dividedConnection($partitions, $entries));
+
+    app()->instance(DatabaseManager::class, $databases);
 }

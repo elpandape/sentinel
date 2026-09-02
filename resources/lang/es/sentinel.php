@@ -43,6 +43,30 @@ return [
             'would' => 'Destruiría el contenido del asiento :audit, en la secuencia :sequence del stream :stream. Su posición, su hash y su eslabón se quedarían.',
             'redacted' => 'Destruido el contenido del asiento :audit, en la secuencia :sequence del stream :stream. Su posición, su hash y su eslabón siguen intactos, y un asiento nuevo registra quién lo hizo y por qué.',
         ],
+        'partitions' => [
+            'description' => 'Mantener un rastro particionado con meses por delante y sin vacíos por detrás',
+            'columns' => [
+                'partition' => 'Partición',
+                'action' => 'Acción',
+                'note' => 'Nota',
+            ],
+            'actions' => [
+                'created' => 'Creada',
+                'retired' => 'Retirada',
+                'kept' => 'Conservada',
+            ],
+            'reasons' => [
+                'unarchived' => 'Todavía contiene asientos, y el modo compliance no deja que un rango se vaya sin que exista antes una copia. Archívalo con sentinel:prune.',
+                'occupied' => 'Todavía contiene asientos. Archívalos con sentinel:prune, o pasa --force para retirar el rango de todos modos.',
+            ],
+            'undivided' => 'La tabla [:table] no está particionada, así que no había nada que mantener.',
+            'nothing' => 'Nada que hacer en [:table]: los meses de delante ya están y no vence nada de atrás.',
+            'planned' => 'Crearía :created particiones y retiraría :retired en [:table]. No se cambió nada.',
+            'maintained' => 'Se crearon :created particiones y se retiraron :retired en [:table].',
+            'refused' => 'Se negó a retirar :partitions particiones. No se eliminó nada.',
+            'unknown_table' => 'La tabla [:table] no es una de las que mantiene este comando. Aceptadas: :accepted.',
+            'failed' => 'No se mantuvo nada: :reason',
+        ],
         'prune' => [
             'description' => 'Aplica las políticas de retención y reporta lo que se fue',
             'columns' => [
