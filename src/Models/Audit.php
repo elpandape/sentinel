@@ -10,6 +10,7 @@ use ElPandaPe\Sentinel\Database\Factories\AuditFactory;
 use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Diff\DiffException;
 use ElPandaPe\Sentinel\Diff\Pointer;
+use ElPandaPe\Sentinel\Enums\ContentState;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\SignatureState;
 use ElPandaPe\Sentinel\Enums\Source;
@@ -283,6 +284,11 @@ class Audit extends Model
      * Whether this row still reproduces its own hash, and only that. The signature is a second
      * question with four answers, so it is asked separately rather than folded into a boolean that
      * would have to call an unsigned entry a failure.
+     *
+     * A tombstone answers false. It no longer reproduces the hash it carries, which is what this
+     * method has always meant, and erring towards the alarm is the point: calling it true would rest
+     * on redacted_hash, a column no signature covers, and would report a row somebody emptied by hand
+     * as healthy. What it was is answered by verifyContent().
      */
     public function verifyIntegrity(): bool
     {
@@ -290,6 +296,20 @@ class Audit extends Model
         $verifier = app(Verifier::class);
 
         return $verifier->verifyEntry($this);
+    }
+
+    /**
+     * What this row's content says about itself: sealed, redacted, or altered. It is asked next to
+     * verifyIntegrity() rather than through it, the way verifySignature() was added in v0.18.0 —
+     * three states do not fit in one bool, and widening the bool would reinterpret a published
+     * contract by leaning on a column nobody signs.
+     */
+    public function verifyContent(): ContentState
+    {
+        /** @var Verifier $verifier */
+        $verifier = app(Verifier::class);
+
+        return $verifier->verifyContent($this);
     }
 
     public function verifySignature(): SignatureState

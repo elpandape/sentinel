@@ -9,6 +9,7 @@ use ElPandaPe\Sentinel\Contracts\EnumeratesStreams;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Contracts\Signer;
 use ElPandaPe\Sentinel\Enums\CheckpointState;
+use ElPandaPe\Sentinel\Enums\ContentState;
 use ElPandaPe\Sentinel\Enums\IntegrityBreak;
 use ElPandaPe\Sentinel\Enums\SignatureState;
 use ElPandaPe\Sentinel\Events\IntegrityVerificationFailed;
@@ -29,7 +30,29 @@ final readonly class Verifier
 
     public function verifyEntry(Audit $audit): bool
     {
-        return hash_equals($audit->hash, $this->hasher->hash($audit));
+        return $this->verifyContent($audit) === ContentState::Sealed;
+    }
+
+    /**
+     * What the row's content is, in one rehash. A redaction is declared by redacted_at and confirmed
+     * by redacted_hash; a redacted_at written by hand without a second hash that reproduces is not a
+     * redaction, it is an alteration wearing the word.
+     */
+    public function verifyContent(Audit $audit): ContentState
+    {
+        $rehashed = $this->hasher->hash($audit);
+
+        if ($audit->redacted_at === null) {
+            return hash_equals($audit->hash, $rehashed)
+                ? ContentState::Sealed
+                : ContentState::Altered;
+        }
+
+        $redacted = $audit->redacted_hash;
+
+        return $redacted !== null && hash_equals($redacted, $rehashed)
+            ? ContentState::Redacted
+            : ContentState::Altered;
     }
 
     /**
