@@ -2,6 +2,57 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.19.4 — Redaction over the archive (2026-09-02)
+
+`v0.19.3` shipped two refusals: a range holding a tombstone could not be archived, and an entry whose
+range had left the hot table could not be redacted. Both are lifted, with one composed flow — bring
+the range back, redact it in the hot table, let the next prune write it out again.
+
+### Added
+
+- **`Integrity\Content`**, the one definition of which hash an entry is entitled to reproduce: the
+  original, or the second one once it has been redacted. The verifier delegates to it and the archive
+  uses it, so the rule cannot drift between two subsystems that do not talk — a drift that ends with a
+  redacted entry archived as tampered.
+- **A batch can hold a tombstone.** `BatchWriter` proves it against `redacted_hash`, `Rehydrator`
+  checks it the same way, and the batch format did not have to change: `Line::KEPT` was already
+  carrying the three redaction columns to NDJSON and back since `v0.19.1`.
+
+### Fixed
+
+- **A rehydrated range was permanently unredactable.** The redaction guard asked the manifest, and a
+  range that was brought back is claimed by a manifest row *and* present. It asks the rows now, which
+  is the rule this package has had to learn four times.
+- **A range written out twice left two manifest rows**, which are two answers to `batchesIn()` with no
+  tiebreak — so a rehydration would have read that range from both files. One row per range, updated
+  in place.
+
+### Changed
+
+- `sentinel_archives` keeps **one row per range**. `v0.19.0` deliberately recorded a range twice
+  rather than risk recording it too little, facing an ambiguity it could not resolve; nothing is
+  recorded less now, and this version writes the same range often enough that duplicates would have
+  become the norm.
+
+### Not shipped, and closed rather than deferred
+
+- **The `cold` prune action**, carried since `v0.19.0`'s D-2, is not built and stops being debt. What
+  it wanted — cooling a long-lived window's content without losing verifiability — is already covered:
+  archiving removes the content and the anchors verify a retired range without reading it. All `cold`
+  would add is per-entry verification without opening the archive, and that costs a new table, a new
+  writer, and the risk of three guards reading a present range as absent.
+
+### Declared
+
+- **Writing a batch out again overwrites the same object key.** On a bucket with versioning or
+  object-lock, the previous version survives with the unredacted content in it.
+- **`sentinel_archives` has no subject axis**, so an erasure request over someone's whole history is
+  answered range by range.
+
+### Upgrade notes
+
+No migration, no format change. See [UPGRADE.md](UPGRADE.md#v0193--v0194).
+
 ## v0.19.3 — Tombstone and redaction (2026-09-02)
 
 Forced content deletion stops competing with the chain. A redaction leaves the entry where it is,

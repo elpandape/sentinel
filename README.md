@@ -2852,12 +2852,18 @@ tampering.
 
 ### What redaction does not reach
 
-- **A range already archived or purged.** Redacting an entry whose range left the hot table is
-  refused, naming the batch that holds it. Cold storage is out of reach for this version.
-- **Archiving a range that holds a tombstone** is refused too: the batch writer proves every entry by
-  rehashing it against the hash it carries sealed, and a tombstone reproduces its second hash instead.
+- **A range already archived or purged**, directly. Redacting an entry whose range left the hot table
+  is refused, naming the batch that holds it — but the round trip is open: bring the range back with
+  `Archive\Rehydrator`, redact it there, and let the next prune write it out again. A batch holds a
+  tombstone perfectly well, and comes back redacted.
+- **A bucket that keeps versions.** A batch's path is a pure function of its range, so writing one out
+  again overwrites the same object key. With versioning or object-lock on — which this README
+  recommends — the previous version of the batch survives, with the unredacted content in it. The
+  package cannot promise a deletion the storage undoes.
 - **Replicas, backups and copies you made yourself.** The package offers no way to prove a redaction
   completed everywhere, and does not pretend to.
+- **Finding every batch that holds one person.** `sentinel_archives` is indexed by stream and range,
+  never by subject, so an erasure request over someone's whole history is answered range by range.
 
 Redaction is also not masking. `security.redaction.*` in the config masks values **as they are
 captured**, before an entry is ever sealed; `Redactor` destroys the contents of an entry that was

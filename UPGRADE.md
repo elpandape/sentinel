@@ -9,6 +9,44 @@ before `1.0.0`.
 
 ---
 
+## v0.19.3 → v0.19.4
+
+No migration, no new column, no batch format change.
+
+### One manifest row per range, not two
+
+`sentinel_archives` now keeps a single row per `(stream, sequence_from, sequence_to)` and updates it
+when the range is written out again. Before, a second write added a second row.
+
+`v0.19.0` chose to record twice on purpose: a run interrupted after recording and before removing
+looks exactly like a range that was brought back, and it preferred recording too much over recording
+too little. Nothing is recorded less now — the row is updated where it stands — and the reason for the
+change is that two rows for one range are two answers to `Manifest::batchesIn()` with no tiebreak, so
+a rehydration would read that range from both files.
+
+**If you query `sentinel_archives` yourself** and counted rows to detect re-archived ranges, that
+signal is gone. The row's `checksum` and `path` tell you what the current batch is.
+
+### Redaction now reaches archived ranges, through a round trip
+
+Redacting an entry whose range left the hot table is still refused directly, and the refusal still
+names the batch. What changed is that the round trip works:
+
+```php
+app(Rehydrator::class)->restore($stream, $from, $to);
+app(Redactor::class)->redact($entry, $reason, $actor);
+// the next prune writes the range out again, tombstone included
+```
+
+`v0.19.3` refused to archive a range holding a tombstone. That refusal, and its message, are gone.
+
+### A rehydrated range can be redacted
+
+If you brought a range back with `v0.19.3` and tried to redact one of its entries, it was refused
+because a manifest row still claimed the range. It is not refused any more.
+
+---
+
 ## v0.19.2 → v0.19.3
 
 No migration, no new column, no hash recomputed. The three redaction columns were created back in
