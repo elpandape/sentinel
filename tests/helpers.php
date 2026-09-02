@@ -44,6 +44,7 @@ use ElPandaPe\Sentinel\Pipeline\Discard;
 use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Presentation\AuditPresenter;
 use ElPandaPe\Sentinel\Query\AuditQuery;
+use ElPandaPe\Sentinel\Redaction\Redactor;
 use ElPandaPe\Sentinel\Restore\Planner;
 use ElPandaPe\Sentinel\Retention\Archiver;
 use ElPandaPe\Sentinel\Retention\Cascade;
@@ -1567,4 +1568,12 @@ function reachesByIndex(string $plan, string $table): bool
 function frozenUlid(string $suffix): string
 {
     return str_pad('01J', 26 - strlen($suffix), '0').$suffix;
+}
+
+function redactor(): Redactor
+{
+    /** @var Redactor $redactor */
+    $redactor = app(Redactor::class);
+
+    return $redactor;
 }
