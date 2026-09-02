@@ -23,6 +23,18 @@ return [
             'anchored' => 'Anchored :count ranges.',
             'failed' => 'Nothing was anchored: :reason',
         ],
+        'export' => [
+            'description' => 'Hand the trail to somebody who does not have the database',
+            'unknown_format' => 'The format [:format] is not one this command writes. Accepted: :accepted.',
+            'rendered' => 'Rendered :entries entries. Digest :digest — the manifest beside it is what a recipient verifies against.',
+            'written' => 'Wrote :entries entries to [:path] on the [:disk] disk, with its manifest beside it. Digest :digest.',
+        ],
+        'rekey' => [
+            'description' => 'Re-encrypt a range of the trail under another key',
+            'would' => 'Would re-encrypt what it finds among :entries entries. Nothing was written.',
+            'rekeyed' => 'Re-encrypted :entries of the :read entries read. The originals keep their hash, their link and their sequence, and keep verifying while their old key stays on the keyring.',
+            'failed' => 'Nothing was re-encrypted: :reason',
+        ],
         'redact' => [
             'description' => 'Destroy the contents of one entry and leave the rest of it standing',
             'incomplete' => 'A redaction needs both --reason and --actor. Nothing resolves an actor in a console process, and an entry that records who destroyed a record cannot be the one entry with nobody on it.',

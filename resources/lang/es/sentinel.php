@@ -23,6 +23,18 @@ return [
             'anchored' => 'Se anclaron :count rangos.',
             'failed' => 'No se ancló nada: :reason',
         ],
+        'export' => [
+            'description' => 'Entrega el rastro a quien no tiene la base de datos',
+            'unknown_format' => 'El formato [:format] no es uno de los que este comando escribe. Aceptados: :accepted.',
+            'rendered' => 'Renderizados :entries asientos. Digest :digest — el manifiesto que va al lado es contra lo que verifica quien lo recibe.',
+            'written' => 'Escritos :entries asientos en [:path] del disco [:disk], con su manifiesto al lado. Digest :digest.',
+        ],
+        'rekey' => [
+            'description' => 'Recifra un rango del rastro con otra clave',
+            'would' => 'Recifraría lo que encuentre entre :entries asientos. No se escribió nada.',
+            'rekeyed' => 'Recifrados :entries de los :read asientos leídos. Los originales conservan su hash, su eslabón y su secuencia, y siguen verificando mientras su clave vieja siga en el llavero.',
+            'failed' => 'No se recifró nada: :reason',
+        ],
         'redact' => [
             'description' => 'Destruye el contenido de un asiento y deja en pie todo lo demás',
             'incomplete' => 'Una redacción necesita --reason y --actor. En un proceso de consola no hay nadie que resolver como actor, y el asiento que registra quién destruyó un registro no puede ser el único que no lleva a nadie.',

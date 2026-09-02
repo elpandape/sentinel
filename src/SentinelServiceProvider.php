@@ -9,9 +9,11 @@ use ElPandaPe\Sentinel\Buffer\MemoryBuffer;
 use ElPandaPe\Sentinel\Buffer\RedisBuffer;
 use ElPandaPe\Sentinel\Compliance\Requirements;
 use ElPandaPe\Sentinel\Console\CheckpointCommand;
+use ElPandaPe\Sentinel\Console\ExportCommand;
 use ElPandaPe\Sentinel\Console\FlushCommand;
 use ElPandaPe\Sentinel\Console\PruneCommand;
 use ElPandaPe\Sentinel\Console\RedactCommand;
+use ElPandaPe\Sentinel\Console\RekeyCommand;
 use ElPandaPe\Sentinel\Console\VerifyCommand;
 use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Context\ExecutionContext;
@@ -139,7 +141,15 @@ final class SentinelServiceProvider extends ServiceProvider
         $this->loadMigrationsFrom($this->migrations()->unpublished());
 
         if ($this->app->runningInConsole()) {
-            $this->commands([CheckpointCommand::class, FlushCommand::class, PruneCommand::class, RedactCommand::class, VerifyCommand::class]);
+            $this->commands([
+                CheckpointCommand::class,
+                ExportCommand::class,
+                FlushCommand::class,
+                PruneCommand::class,
+                RedactCommand::class,
+                RekeyCommand::class,
+                VerifyCommand::class,
+            ]);
 
             $this->publishes([
                 __DIR__.'/../config/sentinel.php' => $this->app->configPath('sentinel.php'),
