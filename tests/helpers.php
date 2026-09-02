@@ -73,6 +73,7 @@ use Illuminate\Contracts\Filesystem\Factory;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
@@ -1578,4 +1579,20 @@ function redactor(): Redactor
     $redactor = app(Redactor::class);
 
     return $redactor;
+}
+
+/**
+ * The published index migration, loaded against whichever engine the suite is on. It is not loaded
+ * automatically — that is the point of it — so a test that wants the index asks for it here.
+ */
+function jsonIndexMigration(): Migration
+{
+    $files = glob(dirname(__DIR__).'/database/stubs/json-indexes/*.php');
+
+    /** @var Migration $migration */
+    $migration = require is_array($files) && $files !== []
+        ? $files[0]
+        : throw new RuntimeException('The json-indexes stub is missing.');
+
+    return $migration;
 }

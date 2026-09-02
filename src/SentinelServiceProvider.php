@@ -162,6 +162,16 @@ final class SentinelServiceProvider extends ServiceProvider
             $this->publishesMigrations([
                 __DIR__.'/../database/migrations' => $this->app->databasePath('migrations'),
             ], 'sentinel-migrations');
+
+            /*
+             * Published rather than loaded, and that is the whole point of it: the index behind
+             * whereIp() and whereRoute() costs fifteen per cent per write on PostgreSQL and
+             * twenty-one on MySQL, and an installation that never asks those two questions should
+             * not be paying for the answer. The two filters work either way; without it they scan.
+             */
+            $this->publishesMigrations([
+                __DIR__.'/../database/stubs/json-indexes' => $this->app->databasePath('migrations'),
+            ], 'sentinel-json-indexes');
         }
     }
 
