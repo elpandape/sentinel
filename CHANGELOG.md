@@ -2,6 +2,73 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.19.3 — Tombstone and redaction (2026-09-02)
+
+Forced content deletion stops competing with the chain. A redaction leaves the entry where it is,
+with its sequence, its hash and its link untouched, and destroys what it said.
+
+What this package promises, in these words and no others: **Sentinel commits to content, so deleting
+the content breaks the proof of content — and this is what survives.** The entry's existence, its
+position, the link to its neighbours, and the proof that the destruction was declared and not
+clandestine. Not the proof of what it said.
+
+### Added
+
+- **`Redaction\Redactor`**, the only sanctioned write over an entry that is already sealed. It empties
+  the **six** content columns of the canonical payload — `context`, `before`, `after`, `changes`,
+  `metadata` and `criteria` — and not three. `changes` carries the literal old and new values,
+  `context` carries the ip, user agent, url, route and method, `criteria` carries the bindings of a
+  mass operation, and **a relation entry keeps its content only in `changes`**, so the shorter list
+  would have redacted nothing at all.
+- **A second hash over what is left**, in `redacted_hash`, and an honest account of what it proves:
+  that the remains are the ones the redaction left. It proves nothing against someone who can write
+  the row, because no signature covers that column. What separates a declared redaction from an
+  attack is the trail entry, chained and signed like any other — and an attacker does not write one.
+- **`Enums\ContentState`** (`sealed`, `redacted`, `altered`), per entry, read with
+  `Verifier::verifyContent()` and `Audit::verifyContent()`. `redacted_at` decides and the hash
+  corroborates: an entry whose content was already empty redacts to the bytes it already had, so
+  asking the hash first would report that tombstone as sealed.
+- **A walk that no longer stops at a tombstone.** A redacted entry counts and lets the walk continue,
+  which it can because the tombstone keeps the hash the next entry links to. An altered one is still
+  `HashMismatch` and still stops — a redaction must never become a place to hide a tampering behind.
+- **`php artisan sentinel:redact`**, with `--actor` required: nothing resolves an actor in a console
+  process, and the one entry whose purpose is to say who destroyed a record cannot be the one with
+  nobody's name on it.
+- **The redaction key in `toArray()`**, inside the `integrity` block, so a consumer can tell an entry
+  that was redacted from one that was always empty.
+- **The labels and the relation lines of a redacted entry are forgotten too.** They live in their own
+  tables and are as much content as the columns: a label can name a person.
+
+### Fixed
+
+- **`sentinel:verify --projections` no longer fails forever over a redaction.** A redacted relation
+  entry lost its lines with the rest of its content, so comparing them to the projection reported it
+  as divergent for as long as it existed — a permanent failure over an act the package performed.
+- **`Facades\Sentinel` publishes `verifyAnchors()`, `verifyRoots()` and `verifyEverything()`**, which
+  the README documented and PHPStan `max` would not let a consumer call.
+
+### Declared rather than pretended
+
+- **Archiving a range that holds a tombstone is refused**, with a readable message in both languages.
+  The batch writer proves every entry by rehashing it against the hash it carries sealed, and a
+  tombstone reproduces its second hash instead. Lifting this is `v0.19.4`.
+- **Redacting an entry whose range already left the hot table is refused**, naming the batch that
+  holds it. This version cannot reach cold storage.
+- **The anchors and the roots keep reading a redacted range as anchored.** They never open an entry,
+  and making them would cost a third column per row — the cost model they exist to provide.
+- **The second hash does not cover the reason.** `redaction_reason` and `redacted_at` are outside the
+  canonical payload, so the text of a reason can be rewritten without the state changing.
+- **`metadata` is emptied whole**, which destroys facts that are not personal data. Redacting by key
+  would leave an operator deciding which part of the content survives, which is the discretion a
+  tombstone exists not to have.
+- **What redaction does not reach**: replicas, backups and cold batches. The package offers no way to
+  prove that a redaction completed everywhere.
+
+### Upgrade notes
+
+No migration. `payload_version` stays at `1` and no hash is recomputed. `Audit::verifyIntegrity()`
+keeps its signature and answers `false` for a tombstone. See [UPGRADE.md](UPGRADE.md#v0192--v0193).
+
 ## v0.19.2 — Rehydration (2026-09-01)
 
 `v0.19.1` wrote a batch out and proved it could be read. This puts one back: same `sequence`, same

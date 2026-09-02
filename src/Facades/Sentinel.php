@@ -22,6 +22,9 @@ use Illuminate\Support\Facades\Facade;
  * @method static mixed withoutAuditing(\Closure $callback)
  * @method static mixed withContext(array<string, mixed> $context, \Closure $callback)
  * @method static \ElPandaPe\Sentinel\Integrity\VerificationResult verifyIntegrity(string $stream, ?int $from = null, ?int $to = null)
+ * @method static \ElPandaPe\Sentinel\Integrity\StreamVerification verifyAnchors(string $stream)
+ * @method static \ElPandaPe\Sentinel\Integrity\StreamVerification verifyRoots(string $stream)
+ * @method static \ElPandaPe\Sentinel\Integrity\IntegrityReport verifyEverything()
  *
  * @see \ElPandaPe\Sentinel\Sentinel
  */

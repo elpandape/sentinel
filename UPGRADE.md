@@ -9,6 +9,62 @@ before `1.0.0`.
 
 ---
 
+## v0.19.2 → v0.19.3
+
+No migration, no new column, no hash recomputed. The three redaction columns were created back in
+`v0.2.0` and only receive use here.
+
+### `Audit::verifyIntegrity()` answers `false` for a redacted entry
+
+This is the one behaviour change, and it can only reach you once you redact something.
+
+The method keeps its signature and its meaning — *whether this row still reproduces its own hash, and
+only that* — and a tombstone does not reproduce the hash it carries. It answers `false`.
+
+Widening it to `true` would rest the answer on `redacted_hash`, a column no signature covers, and
+would report a row somebody emptied by hand as healthy. Erring towards the alarm is the choice.
+
+What an entry's content actually is, is a separate question with three answers:
+
+```php
+$entry->verifyContent(); // ContentState::Sealed | Redacted | Altered
+```
+
+The same pattern `v0.18.0` used when signatures arrived: `verifySignature()` was added beside the
+bool rather than folded into it.
+
+### `toArray()` gains one key, inside `integrity`
+
+`integrity.redacted` is `null` for an entry nobody redacted, and otherwise carries `at`, `reason` and
+`hash`. Nothing existing moved or changed shape.
+
+If you froze the serialized shape in your own test suite, it needs the new key. And if you asserted
+the **absence** of redaction keys — as this package's own frozen-shape test did — that assertion is
+what this version invalidates.
+
+### `VerificationResult` and `isIntact()` are untouched
+
+A declared redaction is not a break. It does not stop the walk, does not fill `reason`, and does not
+invert `isIntact()`. `sentinel:verify` exits **0** for a stream whose only finding is redactions, and
+says how many it found. A watchdog must not page for an act somebody performed on purpose.
+
+A real tampering still wins over a tombstone standing beside it: it is `HashMismatch`, it stops the
+walk, and it is what the result reports.
+
+### What this version refuses, out loud
+
+- **Archiving a range that holds a tombstone.** `sentinel:prune --action=archive` refuses that range
+  with a readable message rather than writing a batch that cannot be proved. Lifted in `v0.19.4`.
+- **Redacting an entry whose range already left the hot table.** The refusal names the batch that
+  holds it, so you know which object to deal with. Also `v0.19.4`.
+
+### What redaction does not reach
+
+Replicas, backups and cold batches. The package offers no way to prove a redaction completed
+everywhere, and does not pretend otherwise.
+
+---
+
 ## v0.19.1 → v0.19.2
 
 No migration, no new column, no hash recomputed.

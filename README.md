@@ -836,7 +836,7 @@ and keeps verifying. A **new entry** carries the same values under the new key a
 one it stands in for, so the rotation is part of the history rather than something that happened to
 it. Keep the old key on the keyring for as long as the entries it wrote matter.
 
-`php artisan sentinel:rekey` arrives in `v0.19.3`; for now the rotation is a service you call.
+`php artisan sentinel:rekey` arrives in `v0.19.5`; for now the rotation is a service you call.
 
 ### Protecting what no model owns
 
@@ -2011,7 +2011,7 @@ freeze English word order into every translation that came after.
 | `transaction_id`, `request_id`, `trace_id`, `span_id`, `source_audit_id` | `string` \| `null` |
 | `criteria` | `object` \| `null` — the shape of a mass operation |
 | `affected_rows` | `int` \| `null` |
-| `integrity` | `{stream, sequence, algorithm, payload_version, previous_hash, hash, signature_key_id, verified}` |
+| `integrity` | `{stream, sequence, algorithm, payload_version, previous_hash, hash, signature, signature_key_id, verified, redacted}` |
 | `occurred_at`, `created_at` | `string`, ISO-8601 with microseconds |
 
 **Keys are only ever added.** None is renamed, none is removed, and none is quietly reinterpreted:
@@ -2050,8 +2050,9 @@ consumer which fields are protected and which key is current. `signature` is pub
 `integrity` block beside the hash it covers: without it an exported entry is not something a third
 party can verify, which is the whole point of signing over the hash.
 
-`capture_id` is absent because no capture writes one yet, and the redaction block because `v0.19.2`
-defines it. `criteria` and `affected_rows` arrived in `v0.17.0`, which is the version that produces
+`capture_id` is absent because no capture writes one yet. The redaction block is `null` for every
+entry nobody redacted, and carries `at`, `reason` and `hash` for one that was — see
+[Redaction](#redaction). `criteria` and `affected_rows` arrived in `v0.17.0`, which is the version that produces
 them; they are `null` on every entry that is not a mass operation.
 There is **no top-level `relation` key**: a relation entry's lines live inside `changes`, which is
 what the chain seals. `sentinel_audit_relations` is a queryable projection of exactly those lines —
@@ -2546,9 +2547,10 @@ config to get it would leave the smaller slice behind for the schedule too.
 Removed 3000 entries in 3 ranges across 2 streams.
 ```
 
-`--action` has no default and `delete` is the only one this release has. The action that writes a
-range out somewhere before removing it arrives next, and it will be the default — so naming it now
-is what keeps a scheduled command from changing meaning underneath you.
+`--action` defaults to `archive`, because the action that loses nothing is the one an operator should
+get for forgetting a flag. It was deliberately not a default while `delete` was the only action there
+was: a default that meant *remove* then and *write it out first* now would have changed what a
+scheduled command did without the schedule changing.
 
 ### The unit is the anchored window, not the entry
 
@@ -2758,6 +2760,109 @@ version 1. Renumbering is not an option — `version` is inside the canonical pa
 entry stops reproducing its own hash. `whereVersion()` is therefore a filter that may legitimately
 return several entries, and `compare()` can pair two eras of one subject.
 
+## Redaction
+
+Sometimes content has to be destroyed: an erasure request arrives, and no hash chain outranks it.
+
+Sentinel does not pretend the two can both be satisfied, and does not claim they are incompatible
+either. It says what it commits to: **Sentinel commits to content, so deleting the content breaks the
+proof of content — and this is what survives.**
+
+What survives a redaction: the entry's existence, its `sequence`, its `hash`, the `previous_hash` of
+the entry after it, and a new entry saying who destroyed it and why. What does not: the proof of what
+it said.
+
+```php
+use ElPandaPe\Sentinel\Redaction\Redactor;
+use ElPandaPe\Sentinel\Support\Reference;
+
+$tombstone = app(Redactor::class)->redact($entry, 'GDPR erasure request 4711', Reference::to($officer));
+
+$tombstone->sequence;     // where it was, and still is
+$tombstone->redactedHash; // the second hash, over what is left
+$tombstone->trail;        // the entry that records who did this
+```
+
+Or from a terminal, where the actor is required because a console process resolves nobody:
+
+```bash
+php artisan sentinel:redact 01JD3M4N7QK5V8YBXWZ6TFCEHR \
+    --reason="GDPR erasure request 4711" --actor=user:9 --dry-run
+```
+
+### What a tombstone empties
+
+**All six content columns of the canonical payload**: `context`, `before`, `after`, `changes`,
+`metadata` and `criteria` — plus the entry's labels and its relation lines, which live in their own
+tables and are as much content as the columns.
+
+Three of them are not obvious and matter more than the obvious ones. `changes` carries the literal
+old and new values, so an entry whose `before` was emptied and whose `changes` was not is not
+redacted at all. `context` carries the ip, the user agent, the url, the route and the method.
+`criteria` carries the bindings of a mass operation. And **a relation entry keeps its content only in
+`changes`**, so emptying `before`/`after`/`metadata` would redact nothing whatsoever.
+
+`metadata` goes whole, which destroys facts that are not personal data — including the `reason` of a
+transition. Redacting by key would leave an operator deciding which part of the content survives, and
+that discretion is what a tombstone exists not to have.
+
+### The three states, and what the second hash is worth
+
+Verification stops having two answers and starts having three, **per entry**:
+
+```php
+$entry->verifyContent(); // ContentState::Sealed | Redacted | Altered
+$entry->verifyIntegrity(); // still a bool, still "does this row reproduce its own hash"
+```
+
+`redacted_at` decides and `redacted_hash` corroborates, in that order. An entry whose content columns
+were already empty redacts to the bytes it already had, so its two hashes are equal — asked the other
+way round, that tombstone would report as sealed.
+
+**What the second hash proves** is that the remains of a tombstone are the ones the redaction left: it
+catches a later write into a redacted row. **What it does not prove** is anything against someone who
+can write the row. It is outside the canonical payload, outside the signature and outside the fold, so
+whoever can empty `before` can equally write `redacted_at` and a recomputed `redacted_hash`. What
+separates a declared redaction from an attack is the **trail entry** — chained and signed like any
+other — and an attacker simply does not write one.
+
+The reason is outside it too: `redaction_reason` can be rewritten later without the state changing.
+
+### What the verifier does with one
+
+A declared redaction is counted, never announced. It does not stop the walk — it cannot, because the
+tombstone keeps the hash the next entry links to — it does not fill `reason`, and it does not invert
+`isIntact()`. `sentinel:verify` exits **0** for a stream whose only finding is redactions:
+
+```
+| global          | 402 (3 redacted)  | intact | 8 anchored (covering 8000 entries nobody read)  |
+
+Verified 402 entries across 1 streams. The chain is intact, and 3 of them were redacted on purpose:
+their contents are gone and the record of their destruction is not.
+```
+
+A real tampering still wins. It is `HashMismatch`, it stops the walk, and it is what gets reported —
+otherwise a tombstone would be a place to hide one behind.
+
+**The anchors and the roots keep reading a redacted range as `anchored`.** Neither opens an entry:
+`verifyRoots` folds the `hash` column, which a tombstone keeps, and `verifyAnchors` reads no entry at
+all. Making them see a redaction would cost a third column per row, which is the cost model they
+exist to provide. All three depths agree on the thing that matters: none of them calls a tombstone a
+tampering.
+
+### What redaction does not reach
+
+- **A range already archived or purged.** Redacting an entry whose range left the hot table is
+  refused, naming the batch that holds it. Cold storage is out of reach for this version.
+- **Archiving a range that holds a tombstone** is refused too: the batch writer proves every entry by
+  rehashing it against the hash it carries sealed, and a tombstone reproduces its second hash instead.
+- **Replicas, backups and copies you made yourself.** The package offers no way to prove a redaction
+  completed everywhere, and does not pretend to.
+
+Redaction is also not masking. `security.redaction.*` in the config masks values **as they are
+captured**, before an entry is ever sealed; `Redactor` destroys the contents of an entry that was
+sealed long ago. They share a word and nothing else.
+
 ## Artisan commands
 
 | Command | What it does | Exit codes |
@@ -2766,6 +2871,7 @@ return several entries, and `compare()` can pair two eras of one subject.
 | `sentinel:verify` | Walks the chain and reports what it found | `0` intact · `1` broken · `2` could not run |
 | `sentinel:checkpoint` | Anchors every complete window the streams still owe | `0` anchored, or nothing left to anchor · `2` could not run |
 | `sentinel:prune` | Applies the retention policies and reports what went | `0` removed, or nothing to remove · `1` a range no longer folds to its root · `2` could not run |
+| `sentinel:redact` | Destroys the contents of one entry and leaves the rest of it standing | `0` redacted, or already redacted · `1` refused: archived, or no longer reproducing its hash · `2` could not run |
 
 ```bash
 php artisan sentinel:verify
