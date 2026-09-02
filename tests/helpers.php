@@ -1692,3 +1692,19 @@ function dividingDatabase(array $partitions, int $entries = 0): void
 
     app()->instance(DatabaseManager::class, $databases);
 }
+
+/**
+ * Spreads a chain over the months a partitioned stub declared, so a walk of it has to cross
+ * partitions. The clock of the ledger is not part of the canonical payload, so moving it moves
+ * rows between partitions without touching a hash.
+ */
+function spreadOverMonths(int $entries): void
+{
+    $month = CarbonImmutable::now()->startOfMonth();
+
+    foreach (range(1, $entries) as $sequence) {
+        DB::table(auditsTable())
+            ->where('sequence', $sequence)
+            ->update(['created_at' => $month->addMonths(intdiv($sequence - 1, 2))->addDay()->format('Y-m-d H:i:s.u')]);
+    }
+}
