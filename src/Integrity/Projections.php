@@ -70,6 +70,11 @@ final readonly class Projections
     }
 
     /**
+     * A redacted entry is skipped rather than compared. Its lines were destroyed along with the rest
+     * of its content and its projection rows went with them, so comparing the two would report every
+     * redacted relation entry as divergent for as long as it exists — a permanent failure over an act
+     * the package itself performed.
+     *
      * @param  array<string, Audit>  $batch
      */
     private function compare(array $batch): ?Audit
@@ -77,6 +82,10 @@ final readonly class Projections
         $stored = $this->stored(array_keys($batch));
 
         foreach ($batch as $id => $audit) {
+            if ($audit->redacted_at !== null) {
+                continue;
+            }
+
             if ($this->tally($this->projection->rowsFor($audit)) !== ($stored[$id] ?? [])) {
                 return $audit;
             }
