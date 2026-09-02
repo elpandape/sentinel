@@ -54,6 +54,7 @@ final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, En
         private Stream $stream,
         private EntryBuilder $builder,
         private ChangedFieldPredicate $fields,
+        private ContextPredicate $context,
         private RelationProjection $projection,
         private Checkpoints $checkpoints,
         private Config $config,
@@ -183,6 +184,8 @@ final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, En
             ->when($query->tags, fn (Builder $entries, TagCriteria $tags): Builder => $this->narrowByLabel($entries, $tags))
             ->when($query->relations, fn (Builder $entries, RelationCriteria $lines): Builder => $this->narrowByRelation($entries, $lines))
             ->when($query->changedField, fn (Builder $entries, string $pointer): Builder => $this->narrowByField($entries, $pointer))
+            ->when($query->ip, fn (Builder $entries, string $ip): Builder => $this->narrowByContext($entries, Filter::Ip, $ip))
+            ->when($query->route, fn (Builder $entries, string $route): Builder => $this->narrowByContext($entries, Filter::Route, $route))
             ->when($query->versions, static fn (Builder $entries, array $versions): Builder => $entries->whereIn('version', $versions))
             ->orderBy($clock, $direction)
             ->orderBy('id', $direction)
@@ -345,6 +348,26 @@ final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, En
             $connection->getDriverName(),
             $connection->getQueryGrammar()->wrap($this->model->qualifyColumn('changes')),
             $pointer,
+        );
+
+        // The only value interpolated into that SQL is the column name the grammar just escaped.
+        /** @phpstan-ignore argument.type */
+        return $entries->whereRaw($sql, $bindings);
+    }
+
+    /**
+     * @param  Builder<Audit>  $entries
+     * @return Builder<Audit>
+     */
+    private function narrowByContext(Builder $entries, Filter $filter, string $value): Builder
+    {
+        $connection = $this->model->getConnection();
+
+        [$sql, $bindings] = $this->context->for(
+            $connection->getDriverName(),
+            $connection->getQueryGrammar()->wrap($this->model->qualifyColumn('context')),
+            $filter,
+            $value,
         );
 
         // The only value interpolated into that SQL is the column name the grammar just escaped.

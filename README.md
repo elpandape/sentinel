@@ -940,6 +940,8 @@ cannot be narrowed behind your back.
 | `inTransaction()` | `transaction_id` | `(transaction_id)` | none — one transaction is sorted |
 | `withTrace()` | `trace_id` | `(trace_id)` | none — one trace is sorted |
 | `whereTag()` / `whereAnyTag()` | the labels an entry carries | `(tag, audit_id)` on the labels table | none |
+| `whereIp()` | `ip`, inside `context` | the JSON index migration, **if you publish it** | none |
+| `whereRoute()` | `route`, inside `context` | the JSON index migration, **if you publish it** | none |
 | `whereSource()` | `source` | **none — a refiner** | — |
 | `between()` | `created_at` | **none — a refiner** | — |
 | `whereFieldChanged()` | a path inside `changes` | **none — a refiner** | — |
@@ -957,6 +959,37 @@ has no model left to hand over, and its trail is exactly what outlives it:
 Sentinel::audits()->for($invoice)->get();
 Sentinel::audits()->for(Invoice::class, 500)->get();
 ```
+
+### The two that live inside the context
+
+`whereIp()` and `whereRoute()` read `context`, which is a JSON column and not one the schema gives
+them. They match exactly and case-sensitively on all three engines — MySQL's default collation is
+accent- and case-insensitive, so the driver puts a binary recheck behind the comparison there, and
+`whereRoute('invoices.show')` does not answer with an entry recorded from `Invoices.Show` on any
+engine.
+
+Whether they **find** or merely **refine** is your decision, because the index they need is a
+migration you publish rather than one the package runs:
+
+```bash
+php artisan vendor:publish --tag=sentinel-json-indexes
+php artisan migrate
+```
+
+It creates a B-tree index over the expression on PostgreSQL 16 and a `VIRTUAL` generated column with
+an index on MySQL 9. Without it the two filters still answer, correctly, by scanning — so put an
+indexed filter in front of them, the way you would with any other refiner.
+
+The reason it is not shipped as a default is the number. Measured over 200 000 writes on a table with
+the shape this package creates — thirty columns and the twelve indexes it already carries:
+
+| | PostgreSQL 16 | MySQL 9 |
+|---|---|---|
+| The indexes today | 10 303 ms | — |
+| With the JSON index | 11 880 ms (**+15 %**) | **+21 %** |
+
+That is what an installation which never filters by address would be paying for nothing. `route` is
+the name of the route, or its uri where it has no name — whichever the resolver recorded.
 
 ### Refiners
 

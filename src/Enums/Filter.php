@@ -38,6 +38,15 @@ enum Filter: string
     case Type = 'type';
 
     /**
+     * The two that live inside `context` rather than in a column. Their values are deliberately the
+     * key each one reads in there, so a driver translating them into its JSON dialect has the path
+     * without a second table mapping one to the other.
+     */
+    case Ip = 'ip';
+
+    case Route = 'route';
+
+    /**
      * @return list<self>
      */
     public static function answeredBy(Ledger $ledger): array
@@ -88,6 +97,8 @@ enum Filter: string
             self::Related => 'whereRelated',
             self::Operation => 'whereOperation',
             self::Type => 'whereType',
+            self::Ip => 'whereIp',
+            self::Route => 'whereRoute',
         };
     }
 }

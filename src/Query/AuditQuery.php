@@ -68,6 +68,10 @@ final class AuditQuery
 
     public private(set) ?string $type = null;
 
+    public private(set) ?string $ip = null;
+
+    public private(set) ?string $route = null;
+
     /**
      * @var list<int>
      */
@@ -139,6 +143,39 @@ final class AuditQuery
 
         $query = $this->accepting(Filter::Type);
         $query->type = $type;
+
+        return $query;
+    }
+
+    /**
+     * The address the entry was recorded from. It lives inside `context` rather than in a column of
+     * its own, so whether it finds by index or refines depends on the JSON index migration being
+     * published — the README says which, and what publishing it costs per write.
+     */
+    public function whereIp(string $ip): self
+    {
+        if ($ip === '') {
+            throw QueryException::noContextValue(Filter::Ip);
+        }
+
+        $query = $this->accepting(Filter::Ip);
+        $query->ip = $ip;
+
+        return $query;
+    }
+
+    /**
+     * The route the entry was recorded from: its name, or its uri where it has none, which is what
+     * the resolver wrote. Matched exactly and case-sensitively on all three engines.
+     */
+    public function whereRoute(string $route): self
+    {
+        if ($route === '') {
+            throw QueryException::noContextValue(Filter::Route);
+        }
+
+        $query = $this->accepting(Filter::Route);
+        $query->route = $route;
 
         return $query;
     }

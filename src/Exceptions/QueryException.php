@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Exceptions;
 
+use ElPandaPe\Sentinel\Enums\Filter;
 use InvalidArgumentException;
 
 final class QueryException extends InvalidArgumentException
@@ -36,6 +37,11 @@ final class QueryException extends InvalidArgumentException
     public static function noField(): self
     {
         return new self('Narrowing by an empty field name asks nothing of an entry; name the attribute whose history you want.');
+    }
+
+    public static function noContextValue(Filter $filter): self
+    {
+        return new self("{$filter->method()}() needs a value to match: an empty one narrows to entries whose context never recorded a {$filter->value}, which is not what an empty string says.");
     }
 
     public static function noType(): self

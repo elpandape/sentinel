@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Ledger;
 
 use ElPandaPe\Sentinel\Diff\Pointer;
+use ElPandaPe\Sentinel\Enums\Filter;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Models\AuditTag;
 use ElPandaPe\Sentinel\Query\AuditQuery;
@@ -55,7 +56,22 @@ final readonly class ArrayQuery
             && $this->equals($query->source?->value, $audit->source->value)
             && $this->equals($query->tenantId, $audit->tenant_id)
             && $this->equals($query->transactionId, $audit->transaction_id)
-            && $this->equals($query->traceId, $audit->trace_id);
+            && $this->equals($query->traceId, $audit->trace_id)
+            && $this->equals($query->ip, $this->contextValue($audit, Filter::Ip))
+            && $this->equals($query->route, $this->contextValue($audit, Filter::Route));
+    }
+
+    /**
+     * What the entry's context recorded under this filter's key, when it recorded a string there
+     * at all. A context that holds something else under it — the resolver writes null when there
+     * is no route — is an entry that answers no to the filter rather than one that matches loosely.
+     */
+    private function contextValue(Audit $audit, Filter $filter): ?string
+    {
+        $context = $audit->getAttribute('context');
+        $value = is_array($context) ? ($context[$filter->value] ?? null) : null;
+
+        return is_string($value) ? $value : null;
     }
 
     private function touches(Audit $audit, string $pointer): bool

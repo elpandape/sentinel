@@ -121,6 +121,21 @@ it('reaches no index at all for a changed field, which is why it is a refiner', 
         ->and(readsAnIndex($alone))->toBeFalse($alone);
 });
 
+/**
+ * The two that live inside the context are refiners until the JSON index migration is published,
+ * which is what makes that migration opt-in rather than a cost every installation pays.
+ */
+it('reaches no index for a filter inside the context until its migration is published', function (Closure $narrow): void {
+    $alone = planFor($narrow()->take(AuditQuery::DEFAULT_LIMIT));
+    $behind = planFor(Sentinel::audits()->for('invoice', 7)->take(AuditQuery::DEFAULT_LIMIT));
+
+    expect(readsAnIndex($alone))->toBeFalse($alone)
+        ->and(readsAnIndex($behind))->toBeTrue($behind);
+})->with([
+    'address' => [fn (): AuditQuery => Sentinel::audits()->whereIp('203.0.113.7')],
+    'route' => [fn (): AuditQuery => Sentinel::audits()->whereRoute('invoices.show')],
+]);
+
 it('reaches no index at all for a version, which is why it is a refiner', function (): void {
     $plan = planFor(Sentinel::audits()->whereVersion(3)->take(AuditQuery::DEFAULT_LIMIT));
 

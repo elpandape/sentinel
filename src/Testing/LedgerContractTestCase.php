@@ -193,6 +193,8 @@ abstract class LedgerContractTestCase extends TestCase
             'changed field beneath a parent' => [Filter::FieldChanged, static fn (AuditQuery $query): AuditQuery => $query->whereFieldChanged('profile')],
             'version' => [Filter::Version, static fn (AuditQuery $query): AuditQuery => $query->whereVersion(1)],
             'kind of entry' => [Filter::Type, static fn (AuditQuery $query): AuditQuery => $query->whereType('transition')],
+            'address' => [Filter::Ip, static fn (AuditQuery $query): AuditQuery => $query->whereIp('203.0.113.7')],
+            'route' => [Filter::Route, static fn (AuditQuery $query): AuditQuery => $query->whereRoute('invoices.approve')],
         ];
     }
 
@@ -510,6 +512,7 @@ abstract class LedgerContractTestCase extends TestCase
             tenant_id: 'acme',
             transaction_id: '01JTRANSACTION000000000000',
             trace_id: '4bf92f3577b34da6a3ce929d0e0e4736',
+            context: ['ip' => '203.0.113.7', 'route' => 'invoices.approve'],
             changes: [
                 ['path' => '/total', 'op' => 'replace', 'old' => 100, 'new' => 250],
                 ['path' => '/profile/address/city', 'op' => 'replace', 'old' => 'Lima', 'new' => 'Arequipa'],
