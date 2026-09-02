@@ -57,6 +57,7 @@ const FROZEN_INTEGRITY_KEYS = [
     'signature',
     'signature_key_id',
     'verified',
+    'redacted',
 ];
 
 it('publishes exactly the keys it froze', function (): void {
@@ -91,7 +92,8 @@ it('keeps the ciphertext where it is, and everything else the shape does not nam
         ->not->toHaveKey('signature')
         ->not->toHaveKey('capture_id')
         ->not->toHaveKey('redacted_at')
-        ->not->toHaveKey('relation');
+        ->not->toHaveKey('relation')
+        ->and($audit->toArray()['integrity']['redacted'])->toBeNull();
 });
 
 it('publishes the signature inside the block that makes the entry provable', function (): void {

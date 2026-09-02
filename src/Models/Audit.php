@@ -232,6 +232,11 @@ class Audit extends Model
                 'signature' => $this->signature,
                 'signature_key_id' => $this->signature_key_id,
                 'verified' => null,
+                'redacted' => $this->redacted_at === null ? null : [
+                    'at' => $this->redacted_at->format(self::SERIALIZED_AT),
+                    'reason' => $this->redaction_reason,
+                    'hash' => $this->redacted_hash,
+                ],
             ],
             'occurred_at' => $this->occurred_at->format(self::SERIALIZED_AT),
             'created_at' => $this->created_at->format(self::SERIALIZED_AT),

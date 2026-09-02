@@ -71,6 +71,7 @@ it('gathers what makes the entry provable under one key', function (): void {
         'signature' => null,
         'signature_key_id' => null,
         'verified' => null,
+        'redacted' => null,
     ]);
 });
 

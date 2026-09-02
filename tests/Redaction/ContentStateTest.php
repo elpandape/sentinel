@@ -82,3 +82,19 @@ it('calls a tombstone over an already empty entry redacted, not sealed', functio
     expect($reloaded->redacted_hash)->toBe($reloaded->hash)
         ->and($reloaded->verifyContent())->toBe(ContentState::Redacted);
 });
+
+it('tells a redacted entry apart from one that was always empty, in what it publishes', function (): void {
+    $always = ledger()->write(auditData());
+    $emptied = ledger()->write(auditData(['before' => ['a' => 1]]));
+
+    redactor()->redact($emptied, 'erasure request');
+
+    $tombstone = Audit::query()->findOrFail($emptied->id)->toArray();
+
+    expect($always->toArray()['integrity']['redacted'])->toBeNull()
+        ->and($always->toArray()['before'])->toBeNull()
+        ->and($tombstone['before'])->toBeNull()
+        ->and($tombstone['integrity']['redacted']['reason'])->toBe('erasure request')
+        ->and($tombstone['integrity']['redacted']['hash'])->toBeString()
+        ->and($tombstone['integrity']['redacted']['at'])->toBeString();
+});
