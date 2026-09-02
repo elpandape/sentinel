@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 
 use function ElPandaPe\Sentinel\Tests\auditsOf;
 use function ElPandaPe\Sentinel\Tests\auditsTable;
+use function ElPandaPe\Sentinel\Tests\redactor;
 use function ElPandaPe\Sentinel\Tests\reread;
 use function ElPandaPe\Sentinel\Tests\restorableEntry;
 
@@ -189,7 +190,7 @@ it('refuses to reattach from a redacted entry', function (): void {
     $team->members()->attach($ada->getKey());
     $entry = auditsOf($team)->last();
 
-    DB::table(auditsTable())->where('id', $entry->id)->update(['redacted_at' => '2026-08-28 10:00:00.000000']);
+    redactor()->redact($entry, 'erasure request');
 
     expect(reread($entry)->restoreRelationship('members')->refused)->toBe(Omission::EntryRedacted);
 });

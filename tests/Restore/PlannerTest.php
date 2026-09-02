@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 
 use function ElPandaPe\Sentinel\Tests\auditsTable;
 use function ElPandaPe\Sentinel\Tests\planner;
+use function ElPandaPe\Sentinel\Tests\redactor;
 use function ElPandaPe\Sentinel\Tests\reread;
 use function ElPandaPe\Sentinel\Tests\restorableEntry;
 
@@ -42,7 +43,7 @@ it('refuses everything when the entry was redacted', function (): void {
     $record = AuditedSubject::query()->create(['name' => 'Grace']);
     $entry = restorableEntry($record, ['name' => 'Ada']);
 
-    DB::table(auditsTable())->where('id', $entry->id)->update(['redacted_at' => '2026-08-28 10:00:00.000000']);
+    redactor()->redact($entry, 'erasure request');
 
     expect(planner()->for(reread($entry), $record)->refused)->toBe(Omission::EntryRedacted);
 });
