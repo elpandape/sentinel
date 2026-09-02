@@ -172,6 +172,19 @@ final class SentinelServiceProvider extends ServiceProvider
             $this->publishesMigrations([
                 __DIR__.'/../database/stubs/json-indexes' => $this->app->databasePath('migrations'),
             ], 'sentinel-json-indexes');
+
+            /*
+             * Three alternatives to the base migration, and publishing one is how you choose it:
+             * the file lands under the same name the package's own carries, and PackageMigrations
+             * stops loading that one. They are for a new installation. Converting a table that
+             * already holds entries is a maintenance window, and the upgrade notes describe it
+             * rather than the package attempting it.
+             */
+            foreach (['pgsql-range', 'pgsql-tenant', 'mysql-range'] as $division) {
+                $this->publishesMigrations([
+                    __DIR__."/../database/stubs/partitioned/{$division}" => $this->app->databasePath('migrations'),
+                ], "sentinel-partitioned-{$division}");
+            }
         }
     }
 

@@ -1582,6 +1582,48 @@ function redactor(): Redactor
 }
 
 /**
+ * Which of the published stubs divides the trail on the engine this pass is running against.
+ * SQLite has no answer: it does not partition, which is why the tests that need one skip there.
+ */
+function divisionForThisEngine(): ?string
+{
+    return match (DB::connection()->getDriverName()) {
+        'pgsql' => 'pgsql-range',
+        'mysql' => 'mysql-range',
+        default => null,
+    };
+}
+
+/**
+ * The trail, rebuilt under one of the published partitioned stubs. The base migration has already
+ * run by the time a test asks for this, so the table goes and comes back divided — and the
+ * occurrence indexes, which live in a migration of their own that a stub does not replace, are put
+ * back the way a real installation would still have them.
+ */
+function partitionTheTrail(string $division): void
+{
+    Schema::dropIfExists(auditsTable());
+
+    migrationIn("stubs/partitioned/{$division}")->up();
+    migrationIn('migrations', 'add_occurrence_indexes')->up();
+}
+
+/**
+ * One migration file, loaded from wherever the package keeps it.
+ */
+function migrationIn(string $directory, string $matching = ''): Migration
+{
+    $files = glob(dirname(__DIR__)."/database/{$directory}/*{$matching}*.php");
+
+    /** @var Migration $migration */
+    $migration = require is_array($files) && $files !== []
+        ? $files[0]
+        : throw new RuntimeException("No migration matching [{$matching}] in [{$directory}].");
+
+    return $migration;
+}
+
+/**
  * The published index migration, loaded against whichever engine the suite is on. It is not loaded
  * automatically — that is the point of it — so a test that wants the index asks for it here.
  */
