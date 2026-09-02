@@ -24,6 +24,9 @@ longer exists.
   does, which is what makes a key-set assertion against the live schema possible.
 - **A container format check**, before a line is parsed. This is the first file this package opens
   that it did not write.
+- **An operation line that names fewer columns than a header has is refused.** Dropping what is not
+  a column left the opposite hole open, and headers go back in a single insert, where a row with a
+  narrower set of keys fails far from the line that caused it.
 - **A way in to the manifest row that names a batch.** `batchOf()` shipped with no caller and no way
   to get one; the manifest now answers the question rehydration actually asks.
 - **`append()` maintains the per-subject counter.** Three drivers kept one and none moved it when
