@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Enums\ContentState;
 use ElPandaPe\Sentinel\Enums\IntegrityBreak;
+use ElPandaPe\Sentinel\Exceptions\ArchiveException;
 use ElPandaPe\Sentinel\Facades\Sentinel;
 use ElPandaPe\Sentinel\Models\Audit;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
+use function ElPandaPe\Sentinel\Tests\anchor;
+use function ElPandaPe\Sentinel\Tests\archiver;
 use function ElPandaPe\Sentinel\Tests\auditData;
+use function ElPandaPe\Sentinel\Tests\auditRelationsTable;
 use function ElPandaPe\Sentinel\Tests\auditsTable;
 use function ElPandaPe\Sentinel\Tests\ledger;
 use function ElPandaPe\Sentinel\Tests\redactor;
@@ -125,4 +130,41 @@ it('counts the redacted entries beside the read ones in the table', function ():
     redactor()->redact(Audit::query()->where('sequence', 2)->firstOrFail(), 'erasure request');
 
     $this->artisan('sentinel:verify')->expectsOutputToContain('(1 redacted)')->assertSuccessful();
+});
+
+it('stops comparing the projection of an entry whose lines it destroyed', function (): void {
+    $written = ledger()->write(auditData([
+        'changes' => [['relation' => 'members', 'operation' => 'attached', 'related_type' => 'member', 'related_id' => '9']],
+    ]));
+
+    redactor()->redact($written, 'erasure request');
+
+    $this->artisan('sentinel:verify', ['--projections' => true])->assertSuccessful();
+});
+
+it('still reports the projection of an entry nobody redacted', function (): void {
+    ledger()->write(auditData([
+        'changes' => [['relation' => 'members', 'operation' => 'attached', 'related_type' => 'member', 'related_id' => '9']],
+    ]));
+
+    DB::table(auditRelationsTable())->delete();
+
+    $this->artisan('sentinel:verify', ['--projections' => true])->assertExitCode(1);
+});
+
+it('refuses to archive a range holding a tombstone, before writing a byte', function (): void {
+    Storage::fake('cold');
+    sentinelConfig(['ledger.ledgers.archive.disk' => 'cold']);
+
+    foreach (range(1, 8) as $ignored) {
+        ledger()->write(auditData(['before' => ['a' => 1]]));
+    }
+
+    redactor()->redact(Audit::query()->where('sequence', 2)->firstOrFail(), 'erasure request');
+
+    anchor('global', 4);
+
+    expect(fn (): mixed => archiver()->archive('global', 1, 4))
+        ->toThrow(ArchiveException::class, 'cannot archive a range that holds a tombstone')
+        ->and(Storage::disk('cold')->allFiles())->toBeEmpty();
 });
