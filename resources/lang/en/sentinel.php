@@ -23,6 +23,14 @@ return [
             'anchored' => 'Anchored :count ranges.',
             'failed' => 'Nothing was anchored: :reason',
         ],
+        'redact' => [
+            'description' => 'Destroy the contents of one entry and leave the rest of it standing',
+            'incomplete' => 'A redaction needs both --reason and --actor. Nothing resolves an actor in a console process, and an entry that records who destroyed a record cannot be the one entry with nobody on it.',
+            'unreadable_actor' => 'The actor [:actor] is not readable as type:id, so nothing was redacted.',
+            'unknown_entry' => 'No entry with id [:audit], so nothing was redacted.',
+            'would' => 'Would destroy the contents of entry :audit, at sequence :sequence of stream :stream. Its position, its hash and its link would stay.',
+            'redacted' => 'Destroyed the contents of entry :audit, at sequence :sequence of stream :stream. Its position, its hash and its link are untouched, and a new entry records who did it and why.',
+        ],
         'prune' => [
             'description' => 'Apply the retention policies and report what went',
             'columns' => [

@@ -23,6 +23,14 @@ return [
             'anchored' => 'Se anclaron :count rangos.',
             'failed' => 'No se ancló nada: :reason',
         ],
+        'redact' => [
+            'description' => 'Destruye el contenido de un asiento y deja en pie todo lo demás',
+            'incomplete' => 'Una redacción necesita --reason y --actor. En un proceso de consola no hay nadie que resolver como actor, y el asiento que registra quién destruyó un registro no puede ser el único que no lleva a nadie.',
+            'unreadable_actor' => 'El actor [:actor] no se lee como tipo:id, así que no se redactó nada.',
+            'unknown_entry' => 'No hay ningún asiento con id [:audit], así que no se redactó nada.',
+            'would' => 'Destruiría el contenido del asiento :audit, en la secuencia :sequence del stream :stream. Su posición, su hash y su eslabón se quedarían.',
+            'redacted' => 'Destruido el contenido del asiento :audit, en la secuencia :sequence del stream :stream. Su posición, su hash y su eslabón siguen intactos, y un asiento nuevo registra quién lo hizo y por qué.',
+        ],
         'prune' => [
             'description' => 'Aplica las políticas de retención y reporta lo que se fue',
             'columns' => [
