@@ -111,6 +111,11 @@ final class VerifyCommand extends Command
                 'entries' => $report->checked(),
                 'covered' => $report->covered(),
             ]),
+            $report->redacted() > 0 => $this->translated('redacted', [
+                'streams' => count($report->streams),
+                'entries' => $report->checked(),
+                'redacted' => $report->redacted(),
+            ]),
             default => $this->translated('intact', ['streams' => count($report->streams), 'entries' => $report->checked()]),
         });
 
@@ -188,15 +193,24 @@ final class VerifyCommand extends Command
     }
 
     /**
-     * How many entries were read, and how many the walk stepped over because they are no longer
-     * here. The second number only appears where there is one: a zero beside every stream would
-     * make an installation that has never pruned read as though it had.
+     * How many entries were read, how many the walk stepped over because they are no longer here,
+     * and how many of the ones it read were redacted. The last two only appear where there is one:
+     * a zero beside every stream would make an installation that has never pruned nor redacted read
+     * as though it had.
      */
     private function entries(StreamVerification $verification): string
     {
-        return $verification->archived() === 0
-            ? (string) $verification->chain->checked
-            : $verification->chain->checked.' '.$this->translated('retired_entries', ['archived' => $verification->archived()]);
+        $counted = (string) $verification->chain->checked;
+
+        if ($verification->archived() > 0) {
+            $counted .= ' '.$this->translated('retired_entries', ['archived' => $verification->archived()]);
+        }
+
+        if ($verification->redacted() > 0) {
+            $counted .= ' '.$this->translated('redacted_entries', ['redacted' => $verification->redacted()]);
+        }
+
+        return $counted;
     }
 
     /**

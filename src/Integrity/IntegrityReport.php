@@ -92,6 +92,19 @@ final readonly class IntegrityReport
     }
 
     /**
+     * How many entries of the whole trail were redacted on purpose. It is a count and never a break:
+     * the exit code of a verification whose only finding is declared redactions is success, because
+     * a watchdog must not page for an act somebody performed deliberately and left a trail for.
+     */
+    public function redacted(): int
+    {
+        return array_sum(array_map(
+            static fn (StreamVerification $verification): int => $verification->redacted(),
+            $this->streams,
+        ));
+    }
+
+    /**
      * How many entries of the whole trail landed in each ContentState. Read next to signatures():
      * a redaction is a declared act and belongs in a count, not in a break.
      *

@@ -104,3 +104,25 @@ it('adds up the content states of every stream it walked', function (): void {
 
     expect(Sentinel::verifyEverything()->content()[ContentState::Redacted->value] ?? 0)->toBe(2);
 });
+
+it('says how many entries it verified were redacted, and still exits zero', function (): void {
+    foreach (range(1, 4) as $ignored) {
+        ledger()->write(auditData(['before' => ['a' => 1]]));
+    }
+
+    redactor()->redact(Audit::query()->where('sequence', 2)->firstOrFail(), 'erasure request');
+
+    $this->artisan('sentinel:verify')
+        ->expectsOutputToContain('were redacted on purpose')
+        ->assertSuccessful();
+});
+
+it('counts the redacted entries beside the read ones in the table', function (): void {
+    foreach (range(1, 4) as $ignored) {
+        ledger()->write(auditData(['before' => ['a' => 1]]));
+    }
+
+    redactor()->redact(Audit::query()->where('sequence', 2)->firstOrFail(), 'erasure request');
+
+    $this->artisan('sentinel:verify')->expectsOutputToContain('(1 redacted)')->assertSuccessful();
+});
