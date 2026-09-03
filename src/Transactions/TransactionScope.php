@@ -33,6 +33,8 @@ final class TransactionScope
 
     private int $captured = 0;
 
+    private ?string $inherited = null;
+
     /**
      * @var list<string>
      */
@@ -68,11 +70,33 @@ final class TransactionScope
      */
     public function stamp(AuditData $audit): void
     {
-        if (! $this->header instanceof AuditTransaction) {
+        $id = $this->header instanceof AuditTransaction ? $this->header->id : $this->inherited;
+
+        if ($id === null) {
             return;
         }
 
-        $audit->transaction_id = $this->header->id;
+        $audit->transaction_id = $id;
+    }
+
+    /**
+     * The identifier of the operation this call belongs to, for whoever has to carry it somewhere
+     * this scope cannot reach on its own — a job, and the worker that will run it.
+     */
+    public function identifier(): ?string
+    {
+        return $this->header instanceof AuditTransaction ? $this->header->id : $this->inherited;
+    }
+
+    /**
+     * The operation a job was dispatched inside of. A worker opens no scope of its own, so without
+     * this the entries it writes would fall outside the operation that caused them. It is the
+     * identifier and nothing else: the header row belongs to the process that opened it, and this
+     * one neither counts entries into it nor closes it.
+     */
+    public function inherit(?string $id): void
+    {
+        $this->inherited = $id;
     }
 
     public function settled(): void

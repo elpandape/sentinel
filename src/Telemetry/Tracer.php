@@ -17,6 +17,9 @@ use Illuminate\Http\Request;
  * queue and the accessor the application reads — and three implementations of an order is three
  * chances for them to disagree about which trace an entry belongs to.
  *
+ * Inside a worker there is no request to read, and the envelope a job carried takes the header's
+ * place in that same order.
+ *
  * A header that does not parse is treated as absent, not as an error and never as a trace to
  * invent: traceparent is a value the caller chooses and trace_id is indexed.
  */
@@ -29,6 +32,7 @@ final readonly class Tracer
         private Config $config,
         private SpanContextProvider $spans,
         private ExecutionContext $context,
+        private Envelope $envelope,
     ) {}
 
     public function current(): ?TraceContext
@@ -37,7 +41,7 @@ final readonly class Tracer
             return null;
         }
 
-        return $this->spans->current() ?? $this->incoming() ?? $this->root();
+        return $this->spans->current() ?? $this->incoming() ?? $this->envelope->trace() ?? $this->root();
     }
 
     private function incoming(): ?TraceContext

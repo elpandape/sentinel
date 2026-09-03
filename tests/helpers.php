@@ -83,6 +83,9 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
+use Illuminate\Queue\Worker;
+use Illuminate\Queue\WorkerOptions;
+use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -1738,4 +1741,40 @@ function insideSpan(int $flags, ?TraceState $state, Closure $assertions): void
     } finally {
         $scope->detach();
     }
+}
+
+/**
+ * The table Laravel's database queue driver waits in, so a test can queue a job, throw the request
+ * away and then let a real worker pick it up — which is the only arrangement in which the envelope
+ * is what carries the trace rather than the request still being there.
+ */
+function queueTable(): void
+{
+    Schema::dropIfExists('jobs');
+
+    Schema::create('jobs', function (Blueprint $table): void {
+        $table->id();
+        $table->string('queue')->index();
+        $table->longText('payload');
+        $table->unsignedTinyInteger('attempts');
+        $table->unsignedInteger('reserved_at')->nullable();
+        $table->unsignedInteger('available_at');
+        $table->unsignedInteger('created_at');
+    });
+}
+
+/**
+ * Everything the request left behind is gone before the worker starts: a fresh container scope, so
+ * no Runtime holds the request any more, and an empty context, so nothing but the payload the job
+ * was queued with can carry the trace across.
+ */
+function runTheWorker(): void
+{
+    app()->forgetScopedInstances();
+    Context::flush();
+
+    $worker = app('queue.worker');
+    assert($worker instanceof Worker);
+
+    $worker->runNextJob('database', 'default', new WorkerOptions);
 }

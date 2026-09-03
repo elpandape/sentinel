@@ -48,7 +48,9 @@ use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Support\PackageMigrations;
 use ElPandaPe\Sentinel\Support\Policies;
 use ElPandaPe\Sentinel\Support\PolicyRegistry;
+use ElPandaPe\Sentinel\Telemetry\Envelope;
 use ElPandaPe\Sentinel\Telemetry\OpenTelemetry\Sdk;
+use ElPandaPe\Sentinel\Telemetry\Tracer;
 use ElPandaPe\Sentinel\Transactions\TransactionScope;
 use Illuminate\Console\Events\CommandFinished;
 use Illuminate\Console\Events\CommandStarting;
@@ -59,10 +61,12 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Log\Context\Repository as ContextRepository;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Queue\Events\WorkerStopping;
 use Illuminate\Routing\Events\Routing;
+use Illuminate\Support\Facades\Context;
 use Illuminate\Support\ServiceProvider;
 
 final class SentinelServiceProvider extends ServiceProvider
@@ -122,6 +126,9 @@ final class SentinelServiceProvider extends ServiceProvider
         $this->app->scoped(Sentinel::class);
 
         $this->app->bind(SpanContextProvider::class, fn (): SpanContextProvider => Sdk::reading(Sdk::present()));
+
+        // Scoped: the envelope a job arrived with belongs to that job, not to the worker.
+        $this->app->scoped(Envelope::class);
     }
 
     public function boot(): void
@@ -138,6 +145,8 @@ final class SentinelServiceProvider extends ServiceProvider
         $this->openTheMassOperationDoor();
 
         $this->latchRuntimeSignals();
+
+        $this->carryTheTraceAcrossTheQueue();
 
         $this->flushWhatIsWaiting();
 
@@ -192,6 +201,46 @@ final class SentinelServiceProvider extends ServiceProvider
                 ], "sentinel-partitioned-{$division}");
             }
         }
+    }
+
+    /**
+     * The trace and the open operation ride inside Laravel's own context, which the framework
+     * already dehydrates into every payload and hydrates back in the worker. A payload hook of our
+     * own would put a key of ours where another package's hook can overwrite it, on a callback list
+     * the framework never clears between boots.
+     *
+     * Both callbacks read their configuration when they fire rather than when they are registered:
+     * a provider boots once and the settings can be changed after it.
+     */
+    private function carryTheTraceAcrossTheQueue(): void
+    {
+        Context::dehydrating(function (ContextRepository $context): void {
+            $config = $this->app->make(Config::class);
+
+            if (! $config->telemetryEnabled() || ! $config->propagatesTrace()) {
+                return;
+            }
+
+            $sealed = Envelope::seal(
+                $this->app->make(Tracer::class)->current(),
+                $this->app->make(TransactionScope::class)->identifier(),
+            );
+
+            if ($sealed !== []) {
+                $context->addHidden(Envelope::KEY, $sealed);
+            }
+        });
+
+        Context::hydrated(function (ContextRepository $context): void {
+            if (! $this->app->make(Config::class)->telemetryEnabled()) {
+                return;
+            }
+
+            $envelope = $this->app->make(Envelope::class);
+            $envelope->receive($context->getHidden(Envelope::KEY));
+
+            $this->app->make(TransactionScope::class)->inherit($envelope->transactionId());
+        });
     }
 
     /**
