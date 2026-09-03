@@ -32,5 +32,7 @@ it('leaves the statements alone when there is no clause to pin', function (): vo
         '',
     );
 
-    expect($statements[0])->toEndWith(') ');
+    expect($statements[0])->toStartWith('create table')
+        ->and($statements[0])->not->toContain('partition by')
+        ->and($statements[0])->toEndWith(' ');
 });
