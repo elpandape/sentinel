@@ -34,6 +34,7 @@ use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -1135,6 +1136,65 @@ foreach ([
         $total,
         $total * 1000 / ANCHOR_ITERATIONS,
         $total === $unanchored ? '—' : sprintf('%+.1f%%', ($total / $unanchored - 1) * 100),
+        PHP_EOL,
+    );
+}
+
+/**
+ * What resolving a trace costs a write. The reference row is the configuration everyone has out of
+ * the box — telemetry off — and it has to come out at zero: with the switch down no header is read,
+ * no provider is asked and not one key is added to the payload the hash covers.
+ *
+ * The other three rows are the shapes an installation that traces actually runs in: a run nobody
+ * traced, a request that arrived with a traceparent, and a command that opens a trace of its own.
+ */
+const TRACE_ITERATIONS = 1000;
+
+$tracing = static function (bool $enabled, ?string $traceparent, bool $root) use ($app, $run, &$offset): float {
+    $app->make('config')->set('sentinel.telemetry.enabled', $enabled);
+    $app->make('config')->set('sentinel.telemetry.root_context', $root);
+    $app->forgetScopedInstances();
+
+    if ($traceparent !== null) {
+        $request = Request::create('/invoices');
+        $request->headers->set('traceparent', $traceparent);
+        $app->instance('request', $request);
+        $app->make(Runtime::class)->enteredRequest($request);
+    }
+
+    $run(BenchAudited::class, WARMUP, $offset);
+    $offset += WARMUP;
+    $total = $run(BenchAudited::class, TRACE_ITERATIONS, $offset);
+    $offset += TRACE_ITERATIONS;
+
+    return $total;
+};
+
+$untraced = $tracing(false, null, false);
+$tracedWithout = $tracing(true, null, false);
+$tracedHeader = $tracing(true, '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01', false);
+$tracedRoot = $tracing(true, null, true);
+
+$app->make('config')->set('sentinel.telemetry.enabled', false);
+$app->make('config')->set('sentinel.telemetry.root_context', false);
+$app->forgetScopedInstances();
+
+echo PHP_EOL, '| Trace context | Writes | Total (ms) | Per write (µs) | Δ vs telemetry off |', PHP_EOL;
+echo '|---|---|---|---|---|', PHP_EOL;
+
+foreach ([
+    'telemetry off' => $untraced,
+    'on, nothing traced the run' => $tracedWithout,
+    'on, traceparent on the request' => $tracedHeader,
+    'on, root trace opened per run' => $tracedRoot,
+] as $label => $total) {
+    printf(
+        '| %s | %d | %.1f | %.1f | %s |%s',
+        $label,
+        TRACE_ITERATIONS,
+        $total,
+        $total * 1000 / TRACE_ITERATIONS,
+        $total === $untraced ? '—' : sprintf('%+.1f%%', ($total / $untraced - 1) * 100),
         PHP_EOL,
     );
 }
