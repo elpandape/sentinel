@@ -8,7 +8,6 @@ use ElPandaPe\Sentinel\Capture\WriteFailure;
 use ElPandaPe\Sentinel\Contracts\DispatchStrategy;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Models\Audit;
-use ElPandaPe\Sentinel\Support\AuditCollection;
 use Throwable;
 
 /**
@@ -111,11 +110,10 @@ final readonly class SyncStrategy implements DispatchStrategy
      * something already settled gets — because it is the same fact. Handing back the row twice
      * would announce two writes where one happened.
      *
-     * @param  AuditCollection<int, Audit>  $written
      * @param  non-empty-list<AuditData>  $audits
      * @return list<Handover>
      */
-    private function handovers(AuditCollection $written, array $audits): array
+    private function handovers(Settled $written, array $audits): array
     {
         $settled = [];
         $unnamed = [];

@@ -18,7 +18,7 @@ it('settles the whole batch in one chain', function (): void {
     $written = app(Settlement::class)->settleBatch([auditData(), auditData(), auditData()]);
 
     expect($written)->toHaveCount(3)
-        ->and($written->pluck('sequence')->all())->toBe([1, 2, 3])
+        ->and($written->entries->pluck('sequence')->all())->toBe([1, 2, 3])
         ->and(verifier()->verifyStream('global')->isIntact())->toBeTrue();
 });
 
@@ -64,7 +64,7 @@ it('leaves out an entry that already has one, and settles the rest', function ()
     ]);
 
     expect($written)->toHaveCount(1)
-        ->and($written->firstOrFail()->capture_id)->toBe(frozenUlid('FRESH001'))
+        ->and($written->entries->firstOrFail()->capture_id)->toBe(frozenUlid('FRESH001'))
         ->and(Audit::query()->count())->toBe(2);
 });
 
@@ -120,7 +120,7 @@ it('settles an entry that named no capture alongside ones that did', function ()
     ]);
 
     expect($written)->toHaveCount(2)
-        ->and($written->pluck('capture_id')->all())->toBe([frozenUlid('NAMED001'), null]);
+        ->and($written->entries->pluck('capture_id')->all())->toBe([frozenUlid('NAMED001'), null]);
 });
 
 it('says nothing at all for a batch that had already landed whole', function (): void {
@@ -154,4 +154,43 @@ it('settles entries that carry no identifier every time it is handed them', func
     app(Settlement::class)->settleBatch([$audit]);
 
     expect(Audit::query()->count())->toBe(2);
+});
+
+it('says how many it was handed, not only how many it wrote', function (): void {
+    $landed = frozenUlid('HANDED01');
+
+    ledger()->write(auditData(['capture_id' => $landed]));
+
+    $written = app(Settlement::class)->settleBatch([
+        auditData(['capture_id' => $landed]),
+        auditData(['capture_id' => frozenUlid('HANDED02')]),
+    ]);
+
+    expect($written->taken)->toBe(2)
+        ->and($written)->toHaveCount(1)
+        ->and($written->skipped())->toBe(1);
+});
+
+it('counts a batch it did not write at all as skipped whole', function (): void {
+    $landed = frozenUlid('HANDED03');
+
+    ledger()->write(auditData(['capture_id' => $landed]));
+
+    $written = app(Settlement::class)->settleBatch([auditData(['capture_id' => $landed])]);
+
+    expect($written->taken)->toBe(1)
+        ->and($written)->toBeEmpty()
+        ->and($written->skipped())->toBe(1);
+});
+
+it('hands its entries to whoever iterates it, not only to whoever counts', function (): void {
+    $written = app(Settlement::class)->settleBatch([auditData(), auditData()]);
+
+    $walked = [];
+
+    foreach ($written as $entry) {
+        $walked[] = $entry->sequence;
+    }
+
+    expect($walked)->toBe([1, 2]);
 });

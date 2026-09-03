@@ -53,14 +53,18 @@ final readonly class Settlement
      * one entry is about to be written, one entry exists. A batch that loses an entry to a race
      * announces the first without the second, which is exactly what happened.
      *
+     * What comes back says how many were handed over as well as which ones settled. A caller
+     * holding only the entries reads a deduplicated batch as a smaller one, and under `buffered`
+     * that difference is the whole question: what was taken is out of the buffer either way.
+     *
      * @param  list<AuditData>  $audits
      */
-    public function settleBatch(array $audits): AuditCollection
+    public function settleBatch(array $audits): Settled
     {
         $fresh = $this->unsettled($audits);
 
         if ($fresh === []) {
-            return new AuditCollection;
+            return new Settled(new AuditCollection, count($audits));
         }
 
         foreach ($fresh as $audit) {
@@ -73,7 +77,7 @@ final readonly class Settlement
             $this->events->dispatch(new AuditCreated($audit));
         }
 
-        return $written;
+        return new Settled($written, count($audits));
     }
 
     public function settle(AuditData $audit): Audit
