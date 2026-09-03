@@ -64,12 +64,20 @@ final readonly class AuditedQuery
      * this version does, and pretending otherwise would be a mode that quietly did less than it
      * claimed.
      *
+     * Recording is asked about here for the same reason the other two ask about it, and it was not:
+     * this is the one statement that never went through the strategy that does the asking, so a
+     * paused engine — or one switched off entirely — still got an entry out of it.
+     *
      * @param  list<array<string, mixed>>|array<string, mixed>  $values
      * @param  list<string>|string  $uniqueBy
      * @param  list<string>|null  $update
      */
     public function upsert(array $values, array|string $uniqueBy, ?array $update = null): int
     {
+        if (! $this->sentinel->isRecording()) {
+            return $this->query->upsert($values, $uniqueBy, $update);
+        }
+
         $rows = array_is_list($values) ? $values : [$values];
         $first = $rows === [] ? [] : (array) reset($rows);
         $columns = array_values(array_filter(array_keys($first), is_string(...)));

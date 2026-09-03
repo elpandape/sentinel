@@ -366,3 +366,21 @@ it('records an upsert as the summary it always is, whatever mode the query asked
 
     expect(massEntries()[0]->metadata)->toBe(['mass' => ['mode' => 'summary']]);
 });
+
+it('records nothing for an upsert while the engine is paused', function (): void {
+    Sentinel::withoutAuditing(static function (): void {
+        AuditedSubject::query()->auditing()->upsert([['id' => 1, 'name' => 'Ada']], ['id'], ['name']);
+    });
+
+    expect(massEntries())->toBeEmpty()
+        ->and(AuditedSubject::query()->count())->toBe(1);
+});
+
+it('records nothing for an upsert while Sentinel is switched off', function (): void {
+    config()->set('sentinel.enabled', false);
+
+    AuditedSubject::query()->auditing()->upsert([['id' => 1, 'name' => 'Ada']], ['id'], ['name']);
+
+    expect(massEntries())->toBeEmpty()
+        ->and(AuditedSubject::query()->count())->toBe(1);
+});
