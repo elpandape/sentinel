@@ -22,6 +22,7 @@ use ElPandaPe\Sentinel\Context\Runtime;
 use ElPandaPe\Sentinel\Contracts\Buffer;
 use ElPandaPe\Sentinel\Contracts\Canonicalizer;
 use ElPandaPe\Sentinel\Contracts\Ledger;
+use ElPandaPe\Sentinel\Contracts\SpanContextProvider;
 use ElPandaPe\Sentinel\Enums\MassMode;
 use ElPandaPe\Sentinel\Enums\Mode;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
@@ -47,6 +48,7 @@ use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Support\PackageMigrations;
 use ElPandaPe\Sentinel\Support\Policies;
 use ElPandaPe\Sentinel\Support\PolicyRegistry;
+use ElPandaPe\Sentinel\Telemetry\NullSpanContextProvider;
 use ElPandaPe\Sentinel\Transactions\TransactionScope;
 use Illuminate\Console\Events\CommandFinished;
 use Illuminate\Console\Events\CommandStarting;
@@ -118,6 +120,8 @@ final class SentinelServiceProvider extends ServiceProvider
         $this->app->scoped(Runtime::class);
         $this->app->scoped(TransactionScope::class);
         $this->app->scoped(Sentinel::class);
+
+        $this->app->bind(SpanContextProvider::class, NullSpanContextProvider::class);
     }
 
     public function boot(): void
