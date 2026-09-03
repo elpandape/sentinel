@@ -121,6 +121,10 @@ return [
         ],
     ],
 
+    'buffer' => [
+        'flush_failed' => 'The buffer could not be settled: :reason. Of the :taken entries taken, :settled settled, :skipped had already settled elsewhere, and :returned are back in the buffer.',
+    ],
+
     'discarded' => [
         'cancelled' => 'A listener cancelled the :event entry for :type :id before it reached the ledger.',
         'policy' => 'A policy discarded the :event entry for :type :id before it reached the ledger.',

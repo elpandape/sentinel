@@ -121,6 +121,10 @@ return [
         ],
     ],
 
+    'buffer' => [
+        'flush_failed' => 'El buffer no se pudo asentar: :reason. De las :taken entradas tomadas, :settled se asentaron, :skipped ya estaban asentadas en otro sitio y :returned volvieron al buffer.',
+    ],
+
     'discarded' => [
         'cancelled' => 'Un listener canceló el asiento :event de :type :id antes de que llegara al ledger.',
         'policy' => 'Una policy descartó el asiento :event de :type :id antes de que llegara al ledger.',

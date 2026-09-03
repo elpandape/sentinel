@@ -8,7 +8,9 @@ use Carbon\CarbonImmutable;
 use DateTimeImmutable;
 use ElPandaPe\Sentinel\Contracts\Buffer;
 use ElPandaPe\Sentinel\Dispatch\Settlement;
+use ElPandaPe\Sentinel\Events\BufferFlushFailed;
 use ElPandaPe\Sentinel\Support\Config;
+use Illuminate\Contracts\Events\Dispatcher as Events;
 use Throwable;
 
 /**
@@ -19,6 +21,10 @@ use Throwable;
  * A failed batch is put back. Taking is destructive, so without that a ledger briefly unreachable
  * would turn a flush into the loss this mode is careful to bound: what is lost is what a process
  * dies holding, never what a write handed back.
+ *
+ * Put back and announced. Two of the five triggers catch the failure and say nothing at all, and a
+ * third names the entry that arrived rather than the batch that did not land, so the one place that
+ * knows how much was at stake is here.
  */
 final readonly class Flusher
 {
@@ -26,6 +32,7 @@ final readonly class Flusher
         private Buffer $buffer,
         private Settlement $settlement,
         private Config $config,
+        private Events $events,
     ) {}
 
     /**
@@ -37,13 +44,18 @@ final readonly class Flusher
      */
     public function flush(): int
     {
+        $taken = 0;
         $settled = 0;
 
         while (($batch = $this->buffer->take($this->config->bufferSize())) !== []) {
+            $taken += count($batch);
+
             try {
                 $settled += $this->settlement->settleBatch($batch)->count();
             } catch (Throwable $failure) {
                 $this->buffer->putBack($batch);
+
+                $this->events->dispatch(new BufferFlushFailed($taken, $settled, count($batch), $failure));
 
                 throw $failure;
             }
