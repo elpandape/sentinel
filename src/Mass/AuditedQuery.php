@@ -81,6 +81,7 @@ final readonly class AuditedQuery
             AuditEvent::Upserted,
             Writes::none(),
             $this->criteria->ofRows($columns, (array) $uniqueBy, $update ?? $columns, count($rows)),
+            MassMode::Summary,
         ), $affected);
 
         return $affected;
@@ -112,13 +113,16 @@ final readonly class AuditedQuery
             return $run();
         }
 
+        $mode = $this->strategies->mode($this->mode);
+
         $operation = new Operation(
             $this->query,
             $event,
             $writes,
             $this->criteria->of($this->query->toBase(), $writes->opaque),
+            $mode,
         );
 
-        return $this->strategies->for($this->mode)->capture($operation, $run);
+        return $this->strategies->for($mode)->capture($operation, $run);
     }
 }

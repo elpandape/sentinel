@@ -54,6 +54,7 @@ final readonly class MassCapture
             occurred_at: CarbonImmutable::now(),
             subject_type: $model->getMorphClass(),
             changes: $operation->writes->changes === [] ? null : $operation->writes->changes,
+            metadata: ['mass' => ['mode' => $operation->mode->value]],
             criteria: $operation->criteria,
             affected_rows: $rows,
         ), $model);

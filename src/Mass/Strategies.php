@@ -24,9 +24,19 @@ final readonly class Strategies
         private Config $config,
     ) {}
 
+    /**
+     * What the query asked for, or what the configuration says. Asked for separately because the
+     * entry has to record the same answer the strategy was chosen by, and deciding it twice is how
+     * the two would come to disagree.
+     */
+    public function mode(?MassMode $mode): MassMode
+    {
+        return $mode ?? $this->config->massMode();
+    }
+
     public function for(?MassMode $mode): MassStrategy
     {
-        return match ($mode ?? $this->config->massMode()) {
+        return match ($this->mode($mode)) {
             MassMode::Summary => $this->container->make(Summary::class),
             MassMode::Individual => $this->container->make(Individual::class),
             MassMode::Hybrid => $this->container->make(Hybrid::class),

@@ -325,3 +325,44 @@ it('reads a row of a mass operation as the record it was about', function (): vo
 
     expect(presenter()->entry(massEntries()[1]))->toBe('Someone changed AuditedSubject #1');
 });
+
+it('tells a summary apart from a hybrid that degraded into one', function (): void {
+    config()->set('sentinel.mass_operations.threshold', 5);
+    seedSubjects(6);
+
+    AuditedSubject::query()->auditing('summary')->update(['status' => 'archived']);
+    AuditedSubject::query()->auditing('hybrid')->update(['status' => 'retired']);
+
+    $entries = massEntries();
+
+    expect($entries)->toHaveCount(2)
+        ->and($entries[0]->metadata)->toBe(['mass' => ['mode' => 'summary']])
+        ->and($entries[1]->metadata)->toBe(['mass' => ['mode' => 'hybrid']])
+        ->and($entries[0]->affected_rows)->toBe($entries[1]->affected_rows);
+});
+
+it('records the mode a hybrid ran under even when it did describe every row', function (): void {
+    config()->set('sentinel.mass_operations.threshold', 5);
+    seedSubjects(2);
+
+    AuditedSubject::query()->auditing('hybrid')->update(['status' => 'archived']);
+
+    $entries = massEntries();
+
+    expect($entries[0]->metadata)->toBe(['mass' => ['mode' => 'hybrid']]);
+});
+
+it('records the mode the configuration set when the query named none', function (): void {
+    config()->set('sentinel.mass_operations.mode', 'summary');
+    seedSubjects(2);
+
+    AuditedSubject::query()->auditing()->update(['status' => 'archived']);
+
+    expect(massEntries()[0]->metadata)->toBe(['mass' => ['mode' => 'summary']]);
+});
+
+it('records an upsert as the summary it always is, whatever mode the query asked for', function (): void {
+    AuditedSubject::query()->auditing('individual')->upsert([['id' => 1, 'name' => 'Ada']], ['id'], ['name']);
+
+    expect(massEntries()[0]->metadata)->toBe(['mass' => ['mode' => 'summary']]);
+});
