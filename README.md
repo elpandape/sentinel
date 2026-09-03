@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.20.0-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.21.0-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -60,8 +60,9 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.19.4` | Redaction that reaches the archive: a batch is rewritten with the entry emptied, and a range that was archived refuses to be redacted in place only |
 | `v0.19.5` | Compliance mode with teeth: it refuses to boot without signatures and anchors, a redaction has to name who ordered it, every read leaves an entry and a row, plus `sentinel:export` and `sentinel:rekey` |
 | `v0.20.0` | Scale: `whereIp()` and `whereRoute()` with the index that serves them, three partitioned alternatives to the base migration, and `sentinel:partitions` |
+| `v0.21.0` | Distributed tracing: a strict W3C Trace Context parser, the active span of an OpenTelemetry SDK when there is one, the trace carried across the queue, a root trace per console run, and `Sentinel::trace()` |
 
-Everything else is on the roadmap: distributed tracing, and a way in from other packages.
+Everything else is on the roadmap: a way in from other packages.
 
 `v0.4.0` is the version that starts auditing: a model with the trait writes its own chained entries.
 `v0.5.0` is the one that answers what changed, instead of leaving you two states to compare.
@@ -268,7 +269,7 @@ the context is the one of the moment audited. Ten resolvers do it, each replacea
 | `TenantResolver` | `tenant_id` |
 | `RequestResolver` | `request_id`, and `ip`, `user_agent`, `url`, `route`, `method` in `context` |
 | `SessionResolver` | `context.session_id` |
-| `TraceResolver` | `trace_id`, `span_id` from an incoming `traceparent` |
+| `TraceResolver` | `trace_id`, `span_id`, `service_name` — see [Distributed tracing](#distributed-tracing) |
 | `SourceResolver` | `source` |
 | `HostResolver` | `context.hostname`, `context.environment` |
 | `JobResolver` | `context.job`, `queue`, `attempts`, `batch_id` |
@@ -3258,6 +3259,127 @@ it matched. At ten million entries with three hundred distinct routes, `whereRou
 like `whereEvent()` — the index finds thirty thousand rows and the order is what costs. Put a filter
 in front of either, or reach for `whereIp()`, which selects an entity and stays in single-digit
 milliseconds on PostgreSQL at any volume tested.
+
+## Distributed tracing
+
+An entry is a locatable point inside the distributed trace that produced it. Sentinel reads and
+forwards **W3C Trace Context** on its own, with no SDK required, and uses the active span when an
+OpenTelemetry SDK is registered.
+
+`trace_id` and `span_id` are not new: [Context & resolvers](#context--resolvers) has filled them
+from an incoming `traceparent` since `v0.6.0`, and `withTrace()` has queried them since `v0.9.0`.
+What this version adds is a parser that follows the spec rather than the examples, `tracestate`, the
+active span of an SDK, and the trace **crossing the queue** — so one `trace_id` reaches the entry the
+request wrote and the entry a worker wrote for the job it queued.
+
+It is off by default:
+
+```php
+'telemetry' => [
+    'enabled' => true,
+],
+```
+
+| Key | Effect | Default |
+|---|---|---|
+| `telemetry.enabled` | Resolve a trace at all | `false` |
+| `telemetry.service_name` | What this service calls itself inside the trace | `config('app.name')` |
+| `telemetry.trust_incoming_header` | Believe the `traceparent` the caller sent | `true` |
+| `telemetry.propagate_context` | Carry the trace into the jobs this process queues | `true` |
+| `telemetry.store_tracestate` | Keep `tracestate` in `context` | `false` |
+| `telemetry.root_context` | Open a trace when nothing traced the run | `false` |
+
+### Where the trace comes from
+
+One order, and only one: the **active span** of a registered SDK, then the **`traceparent`** the
+caller sent, then a **root trace** this process opens for itself, then nothing.
+
+A header that does not parse is treated as **absent**. Sentinel never writes a `trace_id` it invented
+or truncated, and it applies the spec strictly: version `ff` is refused however well formed the rest
+is, uppercase hex is refused, an all-zero `trace-id` or `parent-id` is refused, and a version above
+the one it knows is **accepted** with its first three fields read and its extra fields ignored.
+
+`tracestate` travels verbatim or not at all — the spec forbids changing it when you have not changed
+`traceparent`, and this package opens no spans — and it is stored only when asked for.
+
+> ⚠️ **`trace_id` is correlation, never identity and never proof.** `traceparent` is a value the
+> caller chooses, so anyone who can reach a public endpoint can file your entries under a trace of
+> their own and inflate the cardinality of an indexed column. At a public edge, turn
+> `trust_incoming_header` off. What proves the record is the [hash chain](#integrity-chain).
+
+### Across the queue
+
+The trace and the open [business transaction](#business-transactions) ride inside Laravel's own
+`Context`, which the framework already dehydrates into every job payload and hydrates back in the
+worker. Sentinel registers no payload hook of its own, so nothing it does can collide with another
+package's.
+
+```php
+Route::post('/invoices/{invoice}/close', function (Invoice $invoice) {
+    CloseInvoice::dispatch($invoice);   // the request carried a traceparent
+});
+```
+
+```php
+// The entry the worker writes shares the trace of the request that queued the job.
+Sentinel::audits()->withTrace($traceId)->get();   // HTTP → service → queue → worker, in order
+```
+
+An absent envelope reads as **no trace**, not as an error: that is every job queued before the
+feature was switched on.
+
+In `queue` and `buffered` mode the trace is resolved **at capture** and travels inside the entry. A
+flush never resolves it again — otherwise the entry would inherit the trace of the worker that
+emptied the buffer instead of the trace of the fact.
+
+### A run nobody traced
+
+A console command or a scheduled task has no incoming header, so every entry it writes would be an
+island. Under `root_context` the run opens one trace and every entry of that run shares it.
+
+```php
+'telemetry' => [
+    'enabled' => true,
+    'root_context' => true,
+],
+```
+
+### Forwarding it on
+
+```php
+$trace = Sentinel::trace();
+
+Http::withHeaders(array_filter([
+    'traceparent' => $trace?->traceparent(),
+    'tracestate' => $trace?->tracestate(),
+]))->post('https://billing.internal/invoices');
+```
+
+Sentinel publishes the context and the application decides what to do with it. Injecting headers into
+someone else's HTTP client is a tracer's job, and this package audits — it is not a tracer, and it
+exports nothing to a collector.
+
+### With an OpenTelemetry SDK
+
+Install `open-telemetry/api` and the active span wins over the incoming header. Sentinel consumes it
+through a contract of its own, so the SDK is never a dependency of the core:
+
+```bash
+composer require open-telemetry/api
+```
+
+```php
+// Anything that binds Contracts\SpanContextProvider replaces where the trace comes from.
+$this->app->bind(SpanContextProvider::class, MyTracer::class);
+```
+
+> ⚠️ **Without an SDK, `span_id` is the caller's span, not a span of yours.** The application opens
+> no spans, so what gets recorded is the `parent-id` of whoever called you. Do not read it as the
+> identity of a local operation.
+
+> ⚠️ **Correlation is not retroactive.** Switching `enabled` on rewrites nothing: entries written
+> before it keep a null `trace_id` forever, because rewriting that column would break the hash that
+> covers it. A gap in the correlation is not a gap in the chain.
 
 ## Artisan commands
 

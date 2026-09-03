@@ -2,6 +2,67 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.21.0 — OpenTelemetry and distributed tracing (2026-09-03)
+
+An entry becomes a locatable point inside the trace that produced it. The package reads and forwards
+W3C Trace Context on its own, uses the active span when an OpenTelemetry SDK is registered, and
+carries the trace across the queue — so one `trace_id` reaches the entry the request wrote and the
+entry a worker wrote for the job it queued. It is off by default and costs nothing while it is.
+
+### Added
+
+- **A `traceparent` parser that follows the spec rather than the examples.** Version `ff` is refused
+  however well formed the rest is, a trailing newline is refused, and a version above the known one
+  is accepted with its first three fields read and its extra fields ignored. The parser shipped
+  since `v0.6.0` got both of those backwards.
+- **`tracestate`, carried opaque.** Forwarded verbatim or not at all — the spec forbids changing it
+  when you have not changed `traceparent` — and stored in `context` only under `store_tracestate`.
+- **`Contracts\SpanContextProvider`**, the single point where the package asks a tracer what it is
+  tracing. `open-telemetry/api` is in `require-dev` and `suggest`, never in `require`: whoever does
+  not trace does not carry the dependency, and a convention test keeps the vendor's namespace inside
+  the one adapter that speaks to it.
+- **The trace crossing the queue**, riding inside Laravel's own `Context` through the documented
+  `dehydrating`/`hydrated` pair rather than a payload hook of the package's own, which would put a
+  key of ours where another package's callback can overwrite it. The envelope carries `traceparent`,
+  `tracestate` and the open business transaction — the one thing `v0.12.0` explicitly parked here.
+- **A root trace per run under `root_context`**, so every entry a console command or a scheduled
+  task writes shares one `trace_id` instead of being an island.
+- **`Sentinel::trace()`**, a read-only accessor over the trace the process is inside of, so the
+  application can forward the same header on a call of its own.
+- **The six `telemetry` keys**, typed in `Support\Config`. The section has existed without a
+  consumer since `v0.1.0`; now a value that is not a switch fails where it is written.
+- **`service_name` in `context`**, beside `hostname` and `environment`. No new column: `§5.1` has
+  been closed since `v0.2.0`.
+
+### Declared
+
+- **`trace_id` is correlation, never identity and never proof**, and the README says so.
+  `traceparent` is a value the caller chooses, so at a public edge `trust_incoming_header` is what
+  you turn off. What proves the record is the hash chain.
+- **Without an SDK, `span_id` is the caller's span**, not a span of yours: the package opens none.
+- **Correlation is not retroactive.** Entries written before the switch went up keep a null
+  `trace_id` forever, because rewriting that column would break the hash covering it. A gap in the
+  correlation is not a gap in the chain.
+- **The envelope does not carry `request_id`.** It is a canonical column meaning *the request this
+  fact happened inside of*, and the entry a worker writes did not happen inside it. Inheriting it
+  would make `withRequest()` return entries that are not its own.
+
+### Measured
+
+- **Telemetry off costs nothing**, which is the row that mattered: across two alternating passes on
+  the same machine, the write path moved less than the spread between two runs of the unchanged
+  baseline. With the switch down the resolver returns on its first line — no header read, no
+  provider asked, no key added to the payload the hash covers.
+- **Telemetry on costs about three to four per cent per write** with a `traceparent` on the request
+  or a root trace opened per run.
+
+### Fixed
+
+- **`sequence` and the chain are untouched**, `payload_version` stays at `1`, and there is no
+  migration: `trace_id`, `span_id`, `context` and the `(trace_id)` index have existed since `v0.2.0`.
+  The frozen dataset gains an entry of the shape this version writes, with its canonical string and
+  hash computed outside the package and matching what the package produces.
+
 ## v0.20.0 — Scale and partitioning (2026-09-03)
 
 The trail gets two ways to stay usable once it is big, and neither of them is switched on for you:
