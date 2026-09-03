@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Facades\Sentinel;
+use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use Illuminate\Support\Facades\DB;
 
@@ -10,6 +11,7 @@ use function ElPandaPe\Sentinel\Tests\auditsTable;
 use function ElPandaPe\Sentinel\Tests\jsonIndexMigration;
 use function ElPandaPe\Sentinel\Tests\planFor;
 use function ElPandaPe\Sentinel\Tests\readsAnIndex;
+use function ElPandaPe\Sentinel\Tests\seedTheFrozenTrail;
 use function ElPandaPe\Sentinel\Tests\seedTheTrail;
 
 beforeEach(function (): void {
@@ -57,6 +59,15 @@ it('leaves the table as it found it when rolled back', function (): void {
 
     expect(DB::getSchemaBuilder()->getColumnListing(auditsTable()))->toBe($columns)
         ->and(Sentinel::audits()->whereIp('203.0.113.7')->get())->toHaveCount(1);
+});
+
+it('leaves the frozen entries of v0.3.0 verifying exactly as they did', function (): void {
+    DB::table(auditsTable())->delete();
+    seedTheFrozenTrail();
+
+    jsonIndexMigration()->up();
+
+    expect(Audit::query()->get()->every(static fn (Audit $audit): bool => $audit->verifyIntegrity()))->toBeTrue();
 });
 
 it('changes no hash it indexes over', function (): void {

@@ -3143,6 +3143,12 @@ Twenty-three times the planning, paid on every write. Keep `--ahead` to a few mo
 few years, and give `--retire` a period, so the number of partitions settles instead of growing with
 the age of the installation.
 
+**If you have `pg_partman`, use it instead of this command.** The stubs use native declarative
+partitioning and nothing in them depends on the extension, so `pg_partman` can take over maintenance
+of the table without any change on this side — point it at `sentinel_audits` and stop scheduling
+`sentinel:partitions`. The command exists because most managed PostgreSQL offerings do not let you
+install the extension, not because it does the job better.
+
 **`--retire` is deliberately timid.** It drops a partition when its month is behind the cutoff **and
 it holds no entries**, which is the state `sentinel:prune --action=archive` leaves it in. A partition
 that still holds entries is kept and the report says why: dropping it would remove a range of the
@@ -3184,6 +3190,19 @@ Two things worth reading twice. **Volume itself costs nothing**: 2.20 ms at ten 
 2.47 ms at one, because a B-tree gains a level and not much else. And **partitioning is what costs**,
 by a lot on PostgreSQL and a little on MySQL — for the reason in the box above, and with 41
 partitions, which is more than a real installation with a retention policy would ever have.
+
+Put against the baseline this package has published since `v0.16.0` — the same machine, the same
+session, `sync` mode over SQLite with a table of a few thousand rows — the headline is that there is
+no headline:
+
+| Per write | |
+|---|---|
+| `sync` over SQLite, small table (the [modes baseline](#what-the-modes-actually-cost)) | 2.07 ms |
+| PostgreSQL 16 on disk, ten million entries, flat | 2.20 ms (**+6 %**) |
+| MySQL 9 on disk, ten million entries, flat | 1.97 ms (**−5 %**) |
+
+A ten-million-entry trail on a real engine costs what a small one on SQLite costs. What a write pays
+is the pipeline, the canonicalisation and the hash — not the size of the table it lands in.
 
 **The JSON index, measured end to end.** Across all eight runs the delta of publishing it lands
 between −5.4 % and +7.2 % — which is to say it is noise. That is not a contradiction of the +15 % and
