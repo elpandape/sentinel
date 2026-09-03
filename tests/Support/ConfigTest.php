@@ -309,3 +309,71 @@ it('refuses to derive a signing secret with no application key to derive it from
 
     sentinelConfig()->derivedSigningSecret();
 })->throws(ConfigurationException::class, 'integrity.signature.keys.default');
+
+it('reads the trace context defaults the published file ships', function (): void {
+    $config = sentinelConfig();
+
+    expect($config->telemetryEnabled())->toBeFalse()
+        ->and($config->trustsIncomingTrace())->toBeTrue()
+        ->and($config->propagatesTrace())->toBeTrue()
+        ->and($config->storesTracestate())->toBeFalse()
+        ->and($config->opensRootTrace())->toBeFalse();
+});
+
+it('keeps those defaults for a configuration published before the keys existed', function (): void {
+    $config = sentinelConfig(['telemetry' => ['enabled' => true]]);
+
+    expect($config->telemetryEnabled())->toBeTrue()
+        ->and($config->trustsIncomingTrace())->toBeTrue()
+        ->and($config->propagatesTrace())->toBeTrue()
+        ->and($config->storesTracestate())->toBeFalse()
+        ->and($config->opensRootTrace())->toBeFalse();
+});
+
+it('takes the trace context switches the configuration names', function (): void {
+    $config = sentinelConfig([
+        'telemetry.enabled' => true,
+        'telemetry.trust_incoming_header' => false,
+        'telemetry.propagate_context' => false,
+        'telemetry.store_tracestate' => true,
+        'telemetry.root_context' => true,
+    ]);
+
+    expect($config->telemetryEnabled())->toBeTrue()
+        ->and($config->trustsIncomingTrace())->toBeFalse()
+        ->and($config->propagatesTrace())->toBeFalse()
+        ->and($config->storesTracestate())->toBeTrue()
+        ->and($config->opensRootTrace())->toBeTrue();
+});
+
+it('refuses a trace context switch that is not a switch', function (string $key, Closure $read): void {
+    expect(fn (): bool => $read(sentinelConfig([$key => 'yes'])))
+        ->toThrow(ConfigurationException::class, $key);
+})->with([
+    ['telemetry.enabled', fn (Config $config): bool => $config->telemetryEnabled()],
+    ['telemetry.trust_incoming_header', fn (Config $config): bool => $config->trustsIncomingTrace()],
+    ['telemetry.propagate_context', fn (Config $config): bool => $config->propagatesTrace()],
+    ['telemetry.store_tracestate', fn (Config $config): bool => $config->storesTracestate()],
+    ['telemetry.root_context', fn (Config $config): bool => $config->opensRootTrace()],
+]);
+
+it('names the service after the application when the configuration names nobody', function (): void {
+    config()->set('app.name', 'billing');
+
+    expect(sentinelConfig(['telemetry.service_name' => null])->serviceName())->toBe('billing');
+});
+
+it('takes the service name the configuration gives it', function (): void {
+    expect(sentinelConfig(['telemetry.service_name' => 'ledger'])->serviceName())->toBe('ledger');
+});
+
+it('names no service when neither the configuration nor the application does', function (): void {
+    config()->set('app.name');
+
+    expect(sentinelConfig(['telemetry.service_name' => null])->serviceName())->toBeNull();
+});
+
+it('refuses a service name that is not a name', function (): void {
+    expect(fn (): ?string => sentinelConfig(['telemetry.service_name' => 42])->serviceName())
+        ->toThrow(ConfigurationException::class, 'telemetry.service_name');
+});

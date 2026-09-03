@@ -807,6 +807,62 @@ final readonly class Config
     }
 
     /**
+     * Whether the package resolves a trace at all. Off means no header is read, no provider is
+     * asked and no envelope is written, so an installation that does not run distributed tracing
+     * pays nothing for the machinery that would serve one.
+     */
+    public function telemetryEnabled(): bool
+    {
+        return $this->flag('telemetry.enabled', false);
+    }
+
+    /**
+     * What this service calls itself inside a trace. It lands in `context` beside hostname and
+     * environment, because the schema has no column for it and §5.1 closed in v0.2.0.
+     */
+    public function serviceName(): ?string
+    {
+        $name = $this->nullableString('telemetry.service_name');
+
+        if ($name !== null) {
+            return $name;
+        }
+
+        $application = $this->repository->get('app.name');
+
+        return is_string($application) ? $application : null;
+    }
+
+    /**
+     * Whether an incoming traceparent is believed. It is a value the caller chooses, so at a public
+     * edge this is what you turn off: a third party can otherwise pick the trace its entries are
+     * filed under, and trace_id is indexed.
+     */
+    public function trustsIncomingTrace(): bool
+    {
+        return $this->flag('telemetry.trust_incoming_header', true);
+    }
+
+    public function propagatesTrace(): bool
+    {
+        return $this->flag('telemetry.propagate_context', true);
+    }
+
+    public function storesTracestate(): bool
+    {
+        return $this->flag('telemetry.store_tracestate', false);
+    }
+
+    /**
+     * Whether a run that nobody traced opens a trace of its own, so every entry a command or a
+     * scheduled task writes shares one trace_id.
+     */
+    public function opensRootTrace(): bool
+    {
+        return $this->flag('telemetry.root_context', false);
+    }
+
+    /**
      * @param  list<string>  $declared
      * @return list<string>
      */
@@ -841,6 +897,22 @@ final readonly class Config
             $value === null => $default,
             is_string($value) && $value !== '' => $value,
             default => throw ConfigurationException::expected("resolvers.{$key}", 'a non-empty string or null', get_debug_type($value)),
+        };
+    }
+
+    /**
+     * A boolean whose default lives here as well as in the published file: the merge is one level
+     * deep, so a config published before the key existed would otherwise win with a section that
+     * does not have it. Anything that is neither a boolean nor absent is a mistake worth a throw.
+     */
+    private function flag(string $key, bool $default): bool
+    {
+        $value = $this->repository->get("sentinel.{$key}");
+
+        return match (true) {
+            $value === null => $default,
+            is_bool($value) => $value,
+            default => throw ConfigurationException::expected($key, 'a boolean or null', get_debug_type($value)),
         };
     }
 

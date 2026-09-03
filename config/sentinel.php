@@ -290,9 +290,19 @@ return [
      */
     'compliance' => false,
 
+    /*
+     * Trace context. Sentinel reads and forwards W3C Trace Context on its own and
+     * never requires an OpenTelemetry SDK; when one is registered, its active span
+     * wins over the incoming header. trust_incoming_header is what you turn off at
+     * a public edge, where traceparent is a value the client chooses.
+     */
     'telemetry' => [
         'enabled' => false,
         'service_name' => env('APP_NAME', 'laravel'),
+        'trust_incoming_header' => true,
+        'propagate_context' => true,
+        'store_tracestate' => false,
+        'root_context' => false,
     ],
 
 ];
