@@ -33,9 +33,9 @@ it('hands back rows that still reproduce the hashes they were frozen with', func
 it('reaches a frozen entry through each filter that describes it', function (Closure $narrow, array $expected): void {
     expect($narrow(Sentinel::audits())->get()->pluck('id')->all())->toBe($expected);
 })->with([
-    'the tenant two entries carried' => [
+    'the tenant three entries carried' => [
         fn (): mixed => Sentinel::audits()->forTenant('acme'),
-        ['01JGOLDEN000000000000000B2', '01JGOLDEN000000000000000F6'],
+        ['01JGOLDEN000000000000000B2', '01JGOLDEN000000000000000F6', '01JGOLDEN000000000000000H8'],
     ],
     'the only severity that was critical' => [
         fn (): mixed => Sentinel::audits()->whereSeverity(Severity::Critical),
@@ -51,11 +51,15 @@ it('reaches a frozen entry through each filter that describes it', function (Clo
     ],
     'the actor the entries that had one share' => [
         fn (): mixed => Sentinel::audits()->by('user', 1),
-        ['01JGOLDEN000000000000000B2', '01JGOLDEN000000000000000F6'],
+        ['01JGOLDEN000000000000000B2', '01JGOLDEN000000000000000F6', '01JGOLDEN000000000000000H8'],
     ],
-    'the trace only one entry was correlated by' => [
+    'the trace that reaches both sides of the queue' => [
         fn (): mixed => Sentinel::audits()->withTrace('4bf92f3577b34da6a3ce929d0e0e4736'),
-        ['01JGOLDEN000000000000000F6'],
+        ['01JGOLDEN000000000000000F6', '01JGOLDEN000000000000000H8'],
+    ],
+    'the operation the worker continued' => [
+        fn (): mixed => Sentinel::audits()->inTransaction('01JTRANSACTION000000000000'),
+        ['01JGOLDEN000000000000000H8'],
     ],
 ]);
 
