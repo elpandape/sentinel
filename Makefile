@@ -24,13 +24,18 @@ update: ## composer update
 redis-up:
 	$(DC) up -d --wait redis
 
+# paratest builds each worker's command line from scratch, so the -d flags of the parent
+# never reach them and the arch pass exhausts the 128M default. This is the only channel
+# paratest offers into a worker's ini.
+WORKER_PHP = --passthru-php="'-d' 'memory_limit=1G'"
+
 test: redis-up ## Run the test suite (make test ARGS="tests/Support/ConfigTest.php")
-	$(PHP) vendor/bin/pest --parallel $(ARGS)
+	$(PHP) vendor/bin/pest --parallel $(WORKER_PHP) $(ARGS)
 
 # Paratest already prints one character per test; the colour around it is what costs.
 # --no-progress would trim further, but it drops the count of tests that passed with it.
 test-quiet: redis-up ## Same suite, output trimmed to its result
-	$(PHP) vendor/bin/pest --parallel --colors=never $(ARGS)
+	$(PHP) vendor/bin/pest --parallel $(WORKER_PHP) --colors=never $(ARGS)
 
 bench: ## Write-path baseline (report, not a gate)
 	$(PHP) php -d memory_limit=1G benchmarks/bench.php
@@ -77,11 +82,15 @@ shell: ## Shell inside the container
 # pest --mutate does not accumulate repeated --path flags: one pass per path.
 MUTATION_PATHS = src/Telemetry src/Support src/Context src/Http src/Diff src/Integrity src/Ledger src/Query src/Snapshot src/Pipeline src/Presentation src/Security src/Capture src/Concerns src/Models src/Transactions src/Transitions src/Restore src/Events src/Dispatch src/Buffer src/Jobs src/Console src/SentinelServiceProvider.php
 
+# Serial on purpose, and not for memory. Each mutant is run by relaunching pest with the
+# parent's arguments, so --parallel is inherited by a subprocess that cannot fork one and
+# dies at startup — and a non-zero exit is scored as a mutant killed. The pass ends up
+# reporting a score it did not measure: 100% where a serial run says 68%.
 mutation: ## Mutation testing over the core, one pass per path
 	@for path in $(MUTATION_PATHS); do \
 		echo "== $$path"; \
 		$(PHP) php -d pcov.directory=/app -d 'pcov.exclude=~/(vendor|tests|\.cache)/~' -d memory_limit=2G \
-			vendor/bin/pest --mutate --parallel --covered-only --path=$$path || exit 1; \
+			vendor/bin/pest --mutate --covered-only --path=$$path || exit 1; \
 	done
 
 dbs-up: redis-up
