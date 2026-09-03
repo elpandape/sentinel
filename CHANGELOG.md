@@ -2,6 +2,53 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.21.1 — Instrumenting the buffer and the mass operations (2026-09-03)
+
+Two places where the package already knew the answer and threw it away before it could be read. A
+flush that fails now says how many entries it was and where they are; a summary entry now says which
+mode settled it. Neither touches the chain: no migration, no new column, `payload_version` stays at
+`1`, and every entry written before this release verifies unchanged.
+
+### Added
+
+- **`Events\BufferFlushFailed`**, announced from the one place all five flush triggers pass through.
+  Two of them — the end of the request and worker shutdown — announced nothing at all before, and a
+  third named the entry that had just arrived, which is by design the one a failed flush cannot cost.
+  It carries what was taken, what settled, what was skipped and what went back into the buffer, plus
+  the cause. The first three are the whole flush; the fourth is the batch that failed, because a
+  batch is put back whole.
+- **The mode a mass operation ran under, on its summary entry**, at `metadata.mass.mode`. A `summary`
+  and a `hybrid` that degraded past its threshold wrote entries that were identical byte for byte,
+  so nothing told a deliberate summary from a description that was lost. The mode is resolved once,
+  in the same place the strategy is chosen by it.
+- **`Dispatch\Settled`**, the return of `Settlement::settleBatch()`. A batch drops what already had
+  an entry and what it names twice before writing, and until now the caller could not tell that from
+  a batch that simply arrived smaller — which under `buffered` is the whole question, since what was
+  taken is out of the buffer either way. It stays countable and iterable, which is what its two
+  callers each need.
+
+### Fixed
+
+- **An `upsert()` recorded while the engine was off.** It is the one mass statement that never went
+  through the strategy that asks whether recording is on, so `withoutAuditing()` and
+  `sentinel.enabled => false` both wrote an entry anyway.
+- **`make mutation` reported a score it had never measured.** Every mutant is run by relaunching the
+  runner with the parent's arguments, so `--parallel` was inherited by a subprocess that cannot fork
+  one and died at startup — and an exit code other than zero is scored as a mutant killed. The pass
+  claimed full marks on paths where a serial run finds a third of the mutants alive. The target is
+  serial now, which is also what the nightly workflow has always done.
+- **`make test` could not run in the container at all.** Each parallel worker's command line is built
+  from scratch, so the runner's memory limit never reached them and the arch pass exhausted the
+  compiled default.
+
+### Notes
+
+- The lifecycle goes from ten classes to eleven. `BufferFlushFailed` is the first event only one mode
+  can produce, which reverses a line `v0.15.0` published; it is accepted because it does not name an
+  entry or a chain coordinate, as the other ten do — it names a batch that never became either.
+- `AuditWriteFailed` keeps its contract on the size and interval triggers, naming the entry that
+  arrived. Under `buffered` the event to act on is `BufferFlushFailed`.
+
 ## v0.21.0 — OpenTelemetry and distributed tracing (2026-09-03)
 
 An entry becomes a locatable point inside the trace that produced it. The package reads and forwards

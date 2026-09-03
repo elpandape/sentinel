@@ -573,8 +573,9 @@ php artisan sentinel:flush     # and the fifth, on demand
 **The chain cannot tell you what the buffer lost.** An entry that never reached the ledger consumed
 no sequence, so it leaves no gap: `verifyIntegrity()` walks a shorter chain and reports it intact,
 correctly. The chain proves that what settled was not tampered with, never that everything that
-happened settled. If you need to detect loss, count what you handed over against what landed — the
-exit code and the count from `sentinel:flush` are there for that. If you cannot accept that, use
+happened settled. If you need to detect loss, listen for `BufferFlushFailed`, which says how many
+entries were taken and how many went back, or count what you handed over against what landed — the
+exit code and the count from `sentinel:flush` are there for that too. If you cannot accept that, use
 `sync` or `queue`.
 
 ### `created_at` stops being the order things happened in
@@ -644,7 +645,7 @@ behind a video transcode is an audit that arrives long after the fact it describ
 
 ## Events
 
-Ten classes, and between them the whole life of an entry. Listen to react to what Sentinel does
+Eleven classes, and between them the whole life of an entry. Listen to react to what Sentinel does
 without reaching inside it.
 
 | Event | When | Carries | Cancellable |
@@ -659,6 +660,7 @@ without reaching inside it.
 | `AuditRestored` | After the commit that made it true | The entry, the record, the closed result | ❌ |
 | `IntegrityVerificationFailed` | A stream or range failed verification | The stream, the reason, the sequence, the id | ❌ |
 | `LedgerDestinationFailed` | A fanout destination refused a sealed entry | The destination, the coordinate, the exception | ❌ |
+| `BufferFlushFailed` | A flush could not settle a batch, under `buffered` | How many were taken, settled, skipped and put back, and the cause | ❌ |
 
 ```php
 Event::listen(AuditCreated::class, function (AuditCreated $event): void {
@@ -675,6 +677,14 @@ that is a worker. `Audited` is announced where the capture happened, and carries
 the two are the same place; a `null` there means "settled elsewhere", never "not settled". A write
 that did not complete announces `AuditWriteFailed` instead, and the two never both go out for one
 capture.
+
+**Under `buffered`, read `BufferFlushFailed` and not `AuditWriteFailed`.** A failed flush announces
+the first from the one place all five triggers pass through, so it goes out for every one of them —
+including the end of the request and worker shutdown, which announced nothing at all before. On the
+size and interval triggers `AuditWriteFailed` still goes out as well, naming the entry that had just
+arrived; that entry is by design the one a failed flush cannot cost, because it was put back before
+the flush was attempted. Its contract has been that since `v0.16.1` and is not changing, so the
+event to act on is the one that names the batch.
 
 ### Cancelling is only legal before the entry has identity
 
@@ -1418,6 +1428,13 @@ Without an argument it takes `mass_operations.mode` from the config, which ships
 | `summary` | One entry: the criteria, the columns written, `affected_rows` | None | Constant |
 | `individual` | The summary **and** one entry per row, each with its real `before` | One: the rows, before the statement |  Linear in rows |
 | `hybrid` | The summary always; the per-row entries while the set fits under `threshold` | One, bounded to `threshold + 1` | Constant above the threshold |
+
+**The summary entry records the mode that settled it**, under `metadata.mass.mode`. Without it a
+`summary` and a `hybrid` that degraded past its threshold write the same entry byte for byte — same
+type, same `affected_rows`, same criteria — and nothing tells a deliberate summary from a
+description that was lost. An `upsert()` records itself as `summary` under any mode, because that is
+the only shape it writes. Entries written before `v0.21.1` carry no mode and verify exactly as they
+did: the distinction holds from adoption forward, not backwards.
 
 Measured on the write-path benchmark, over a set of five hundred rows on SQLite:
 
