@@ -17,9 +17,9 @@ keep it divided. Both are migrations the package publishes and never runs.
   refiners into filters that find. A B-tree over the expression on PostgreSQL 16; a `VIRTUAL`
   generated column with an index on MySQL 9, added instantly and invisible to `select *`.
 - **Three partitioned alternatives to the base migration**, published one at a time and replacing
-  it: PostgreSQL by month, PostgreSQL by tenant, MySQL 9 by day. Each creates a catch-all partition,
-  because an insert that matches no range fails and that failure lands in the application's write
-  path.
+  it: PostgreSQL by month, PostgreSQL by tenant, MySQL 9 by month over `TO_DAYS`. Each creates a
+  catch-all partition, because an insert that matches no range fails and that failure lands in the
+  application's write path.
 - **`php artisan sentinel:partitions`**, which creates the months in front of a divided table and
   retires the empty ones behind it. Idempotent, scheduled-friendly, and it exits `0` on a table that
   is not partitioned at all.
