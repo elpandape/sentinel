@@ -2,6 +2,71 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.20.0 — Scale and partitioning (unreleased)
+
+The trail gets two ways to stay usable once it is big, and neither of them is switched on for you:
+an index for the two filters that read JSON, and a table divided into partitions with a command to
+keep it divided. Both are migrations the package publishes and never runs.
+
+### Added
+
+- **`whereIp()` and `whereRoute()`**, closing the decision `v0.9.0` left open in its §5. The data
+  was never missing — the request resolver has recorded both since `v0.6.0` — only a surface, and
+  the reason to wait was that nobody knew what asking for them cost.
+- **`php artisan vendor:publish --tag=sentinel-json-indexes`**, the index that turns those two from
+  refiners into filters that find. A B-tree over the expression on PostgreSQL 16; a `VIRTUAL`
+  generated column with an index on MySQL 9, added instantly and invisible to `select *`.
+- **Three partitioned alternatives to the base migration**, published one at a time and replacing
+  it: PostgreSQL by month, PostgreSQL by tenant, MySQL 9 by day. Each creates a catch-all partition,
+  because an insert that matches no range fails and that failure lands in the application's write
+  path.
+- **`php artisan sentinel:partitions`**, which creates the months in front of a divided table and
+  retires the empty ones behind it. Idempotent, scheduled-friendly, and it exits `0` on a table that
+  is not partitioned at all.
+- **`Support\AuditSchema`**, holding the forty columns of the audit table in one place, so the base
+  migration and the three stubs cannot drift into four tables wearing the same name.
+
+### Declared
+
+- **What partitioning by date costs, in the README rather than in a footnote.** Both engines require
+  every unique key of a partitioned table to carry the partitioning column, so `(stream, sequence)`
+  and `capture_id` gain `created_at` and stop being enforced across partitions. What still holds the
+  chain is the ledger's own sequence assignment and `sentinel:verify` — and there is a test that
+  plants a duplicate the engine now accepts and watches the verification catch it.
+- **The tenant division keeps that guarantee**, through per-partition unique indexes rather than
+  through the primary key. A primary key carrying `tenant_id` would make it `NOT NULL` and stop a
+  command or a worker from recording anything; a placeholder is worse, because `tenant_id` is inside
+  the canonical payload and the entry would fail its own verification.
+- **No GIN index, with the numbers for why.** Over `context` it costs eight points more per write
+  than the expression index and four times the space to serve the published plan worse. Over
+  `changes` it is not used at all.
+
+### Measured
+
+Eight runs on one machine — an i7-12700KF with 15 GB, both engines on disk — at a million entries and
+at ten million, flat and partitioned. `make bench-volume` reproduces them.
+
+- **Volume itself costs almost nothing on the write path**: 2.20 ms per entry at ten million against
+  2.47 ms at one, on PostgreSQL 16.
+- **Partitioning is what costs**, and on PostgreSQL it costs a lot: 8.34 ms per entry over 41
+  partitions. Every write reads the tail of its stream, and that read is a `Merge Append` across all
+  of them — 13.4 ms of planning against 0.58 ms over a single partition. Keep the number of
+  partitions bounded.
+- **Retiring a range is where partitioning pays for itself.** The same 260 000 entries: 59 s as a
+  `DELETE` on MySQL 9 at ten million, 71 ms as a `DROP PARTITION`.
+- **Publishing the JSON index is invisible end to end** — between −5.4 % and +7.2 % across all eight
+  runs. The +15 % and +21 % are what it costs the engine on the `INSERT`; a Sentinel write is
+  dominated by the pipeline and the hash, not by the insert. Both numbers are in the README, with the
+  distinction spelled out.
+- **`sentinel:verify` over ten million entries is minutes, not hours**: about 35 µs per entry.
+
+### Upgrade notes
+
+Nothing is required. An installation that publishes neither migration keeps the schema it has, and
+the two new filters work on it by scanning. `UPGRADE.md` has the procedure for moving an existing
+table to a partitioned one, including the way back — the package does not attempt it, because
+converting a table that already holds entries is a maintenance window and not a package's decision.
+
 ## v0.19.5 — Compliance mode, export and rekey (2026-09-02)
 
 `compliance` stops being a configuration key with no behaviour. **Sentinel still certifies nothing**:

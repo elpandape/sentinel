@@ -9,6 +9,88 @@ before `1.0.0`.
 
 ---
 
+## v0.19.5 → v0.20.0
+
+Nothing here is required. Both of the things this release adds are migrations the package publishes
+and never runs: an existing installation that publishes neither keeps the schema it has, and the two
+new filters work on it — by scanning.
+
+### The JSON index, if you filter by address or route
+
+```bash
+php artisan vendor:publish --tag=sentinel-json-indexes
+php artisan migrate
+```
+
+Additive and reversible. It costs about fifteen per cent per write on PostgreSQL 16 and twenty-one on
+MySQL 9, which is why it is not shipped as a default — see *Scaling* in the README for the numbers it
+was measured with. Rolling it back is `migrate:rollback`; nothing it creates is referenced by anything
+else.
+
+### Moving an existing table to a partitioned one
+
+The package does not do this for you. Turning a table that already holds entries into a partitioned
+one is a maintenance window with a real chance of losing rows, and it is not a decision a package
+should make on your behalf. The stubs are for a **new** installation.
+
+If you want to convert anyway, this is the procedure. It is written for PostgreSQL 16, where a
+plain table can be attached as a partition of a new one; the MySQL path is the same shape without
+that shortcut, so it copies instead.
+
+**Before anything, prove what you have.**
+
+```bash
+php artisan sentinel:verify
+```
+
+Do not start from a chain that does not verify. Whatever is wrong will still be wrong afterwards and
+you will have a conversion to blame it on.
+
+**1. Publish the stub, but do not migrate.** Take the file it writes and read it: it creates the
+partitioned table under the name yours already has, which is not what you want yet.
+
+**2. Create the partitioned table beside the old one, under a temporary name.** Copy the stub's
+`up()` and change the table it names. Give it the same primary key and the same two unique keys the
+stub declares — under a division by date those carry `created_at`, and the README explains what that
+changes.
+
+**3. Attach the existing table as a partition, or copy into it.**
+
+```sql
+-- PostgreSQL: the old table becomes one partition of the new one. The constraint is what lets
+-- ATTACH skip a full validation scan; without it PostgreSQL reads every row before accepting.
+alter table sentinel_audits add constraint sentinel_audits_range
+    check (created_at >= '2020-01-01' and created_at < '2026-09-01') not valid;
+alter table sentinel_audits validate constraint sentinel_audits_range;
+alter table sentinel_audits_new attach partition sentinel_audits
+    for values from ('2020-01-01') to ('2026-09-01');
+```
+
+On MySQL there is no attach: create the partitioned table and
+`insert into sentinel_audits_new select * from sentinel_audits`, in ranges if it is large.
+
+**4. Swap the names, in a window where nothing is writing.**
+
+```sql
+alter table sentinel_audits rename to sentinel_audits_old;   -- if it was not attached
+alter table sentinel_audits_new rename to sentinel_audits;
+```
+
+**5. Prove it again, and only then let go.**
+
+```bash
+php artisan sentinel:verify
+php artisan sentinel:partitions --ahead=6
+```
+
+The copy is byte-identical in every hashed column and the `id` values do not change, so the rows in
+`sentinel_archives`, `sentinel_access_log` and `sentinel_checkpoints` that point at entries still
+point at them. Keep the old table until the verification has passed and you have slept on it.
+
+**The way back** is the same procedure inverted: create a plain table with the base migration's
+shape, copy the partitions into it, verify, swap. Nothing in a partitioned trail is stored
+differently — only in a different place — so nothing has to be converted on the way out.
+
 ## v0.19.4 → v0.19.5
 
 One new table. Nothing else changes shape.

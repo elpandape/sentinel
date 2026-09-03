@@ -44,7 +44,7 @@ return [
             'redacted' => 'Destruido el contenido del asiento :audit, en la secuencia :sequence del stream :stream. Su posición, su hash y su eslabón siguen intactos, y un asiento nuevo registra quién lo hizo y por qué.',
         ],
         'partitions' => [
-            'description' => 'Mantener un rastro particionado con meses por delante y sin vacíos por detrás',
+            'description' => 'Mantiene un rastro particionado con meses por delante y sin las particiones vacías de atrás',
             'columns' => [
                 'partition' => 'Partición',
                 'action' => 'Acción',

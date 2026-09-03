@@ -37,7 +37,7 @@ it('reads its description out of the translations', function (): void {
     app()->setLocale('es');
 
     expect(app(PartitionsCommand::class)->getDescription())
-        ->toBe('Mantener un rastro particionado con meses por delante y sin vacíos por detrás');
+        ->toBe('Mantiene un rastro particionado con meses por delante y sin las particiones vacías de atrás');
 });
 
 it('creates the months ahead and creates nothing on a second run', function (): void {

@@ -44,7 +44,7 @@ return [
             'redacted' => 'Destroyed the contents of entry :audit, at sequence :sequence of stream :stream. Its position, its hash and its link are untouched, and a new entry records who did it and why.',
         ],
         'partitions' => [
-            'description' => 'Keep a partitioned trail supplied with months ahead and clear of empty ones behind',
+            'description' => 'Keeps a partitioned trail supplied with months ahead and clear of the empty ones behind',
             'columns' => [
                 'partition' => 'Partition',
                 'action' => 'Action',

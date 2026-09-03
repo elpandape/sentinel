@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.18.1-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.20.0-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -20,7 +20,7 @@ the state was before, what it is now — and whether the record itself can be pr
 
 ```json
 "repositories": [{ "type": "vcs", "url": "https://github.com/elpandape/sentinel" }],
-"require": { "elpandape/sentinel": "v0.18.0" }
+"require": { "elpandape/sentinel": "v0.20.0" }
 ```
 
 ```bash
@@ -56,8 +56,12 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.19.0` | Retention by logical type, `sentinel:prune` with a dry run, and a verification that tells a range you retired from an entry that went missing |
 | `v0.19.1` | Cold archiving: NDJSON batches on any `Storage` disk, read back and rehashed before a row is removed, and `--action=archive` as the default |
 | `v0.19.2` | Rehydration: a batch goes back into the table exactly as it left, headers included, and `append()` keeps the counter it was silently leaving behind |
+| `v0.19.3` | Tombstones: an entry whose contents are destroyed while its position, its hash and its link stay, a third content state, and `sentinel:redact` |
+| `v0.19.4` | Redaction that reaches the archive: a batch is rewritten with the entry emptied, and a range that was archived refuses to be redacted in place only |
+| `v0.19.5` | Compliance mode with teeth: it refuses to boot without signatures and anchors, a redaction has to name who ordered it, every read leaves an entry and a row, plus `sentinel:export` and `sentinel:rekey` |
+| `v0.20.0` | Scale: `whereIp()` and `whereRoute()` with the index that serves them, three partitioned alternatives to the base migration, and `sentinel:partitions` |
 
-Everything else is on the roadmap: tombstones and compliance, partitioning and distributed tracing.
+Everything else is on the roadmap: distributed tracing, and a way in from other packages.
 
 `v0.4.0` is the version that starts auditing: a model with the trait writes its own chained entries.
 `v0.5.0` is the one that answers what changed, instead of leaving you two states to compare.
@@ -87,7 +91,11 @@ mass delete and an upsert can be audited by asking for it on the query, and a qu
 ask goes on costing nothing. `v0.18.0` is the one that makes the trail provable to someone who does
 not trust the database it lives in. `v0.18.1` is the one that stops proving it from costing a read
 of everything — and is careful to say which of its three walks proves what, because an anchor
-covering a range is not the same claim as having read it.
+covering a range is not the same claim as having read it. `v0.19.0` through `v0.19.5` are the ones
+that stop the trail from growing without a ceiling and make what leaves it provable on the way out.
+`v0.20.0` is the one that stops the answer to "will this still work at ten million entries" from
+being a shrug: the two filters that had no index get one, the table can be divided, and what each of
+those costs is a number in this file rather than a promise.
 
 ## Quick start
 
@@ -990,6 +998,13 @@ the shape this package creates — thirty columns and the twelve indexes it alre
 
 That is what an installation which never filters by address would be paying for nothing. `route` is
 the name of the route, or its uri where it has no name — whichever the resolver recorded.
+
+**`whereRoute()` names a category, and at volume that shows.** An application has a few hundred
+routes and millions of entries, so the filter reaches its index and then sorts everything it matched
+— measured at 5.1 seconds over ten million entries on MySQL 9, against 32 milliseconds for
+`whereIp()` on the same table. It is the same shape as [`whereEvent()`](#order-and-how-much-comes-back)
+and it wants the same treatment: put an indexed filter in front of it. `whereIp()` selects an entity
+rather than a category and does not have the problem.
 
 ### Refiners
 
@@ -2979,6 +2994,252 @@ keyring.
 Which is the opposite of a redaction, and why no path of this command calls that one: a tombstone
 destroys content, a rekey preserves it under a different lock.
 
+## Scaling
+
+A trail only grows. Nothing in this package deletes an entry to make room, so at some point the
+question stops being how fast a write is and becomes what the table costs to keep. There are two
+answers here and they are independent: an index for the two filters that read JSON, and a table
+divided into partitions.
+
+Neither is on by default and neither is a migration the package runs for you.
+
+### The JSON index
+
+`whereIp()` and `whereRoute()` read inside `context`. Publishing this makes them find by index
+instead of scanning:
+
+```bash
+php artisan vendor:publish --tag=sentinel-json-indexes
+php artisan migrate
+```
+
+PostgreSQL 16 gets a B-tree over the expression; MySQL 9 gets a `VIRTUAL` generated column with an
+index on it, added instantly and invisible to `select *`. What it costs is in
+[the filters](#the-two-that-live-inside-the-context), measured rather than estimated.
+
+There is no GIN index here and that was a decision with a number behind it. Over `context` it costs
+eight points more per write than the expression index and four times the space, to serve the one
+plan this API publishes worse — 1.18 ms against 0.067 ms. Over `changes` it is not used at all:
+`whereFieldChanged()` walks the array in a correlated `exists`, and the plan with a GIN present is
+still a sequential scan.
+
+### Partitioning
+
+Three alternatives to the base migration, published one at a time. **They replace it**: the file
+lands under the same name the package's own carries, and Sentinel stops loading its own.
+
+```bash
+php artisan vendor:publish --tag=sentinel-partitioned-pgsql-range    # PostgreSQL, by month
+php artisan vendor:publish --tag=sentinel-partitioned-pgsql-tenant   # PostgreSQL, by tenant
+php artisan vendor:publish --tag=sentinel-partitioned-mysql-range    # MySQL 9, by month
+php artisan migrate
+```
+
+They are for a **new installation**, before the first entry. Converting a table that already holds
+entries is a maintenance window with real risk, so the package does not attempt it — `UPGRADE.md`
+describes the procedure, including the way back.
+
+| Stub | Divides by | Engine | What it is for |
+|---|---|---|---|
+| `pgsql-range` | `created_at`, one partition per month | PostgreSQL 16 | Retiring old ranges as a catalogue operation |
+| `pgsql-tenant` | `LIST (tenant_id)` | PostgreSQL 16 | Multi-tenant, and the only one that keeps the chain's guarantee |
+| `mysql-range` | `RANGE (TO_DAYS(created_at))`, one partition per month | MySQL 9 | Retiring old ranges, with a caveat below |
+
+**What you give up, said plainly.** Both engines require every unique key of a partitioned table to
+carry the partitioning column. Under a division by date that means `(stream, sequence)` and
+`capture_id` gain `created_at` and stop being enforced **across** partitions: the engine will accept
+a duplicate sequence planted in another month. What still holds the chain is the ledger's own
+sequence assignment and `sentinel:verify`, which fails on exactly that — there is a test that plants
+one and watches the verification catch it. The safety net is narrower here than on a flat table.
+That is the price, and it is not hidden.
+
+**The tenant division does not give it up.** With `stream = tenant` — the multi-tenant default — every
+entry of a stream lives in one partition, and the unique indexes are created **on each partition**
+rather than on the parent, which makes them exactly the guarantee the flat table had. This is the
+stub to reach for if losing it is not acceptable. It also means every partition you add by hand
+needs its two indexes:
+
+```sql
+create table sentinel_audits_acme partition of sentinel_audits for values in ('acme');
+create unique index sentinel_audits_acme_ss on sentinel_audits_acme (stream, sequence);
+create unique index sentinel_audits_acme_capture on sentinel_audits_acme (capture_id);
+```
+
+`tenant_id` stays nullable, and there is a partition for the entries that have none. It has to stay
+nullable: a primary key carrying `tenant_id` would make it `NOT NULL` and stop a command or a queue
+worker from recording anything, and filling it with a placeholder is worse — `tenant_id` is inside
+the canonical payload, so an empty string where the hash was sealed over `null` makes the entry fail
+its own verification.
+
+**MySQL cannot offer the same.** Its partitions are not tables, so there is no per-partition index to
+fall back on. `ERROR 1503` rejects any unique key without the partitioning column and that is the end
+of it.
+
+### Keeping partitions supplied
+
+```bash
+php artisan sentinel:partitions                              # this month and the next three
+php artisan sentinel:partitions --ahead=6
+php artisan sentinel:partitions --retire="18 months"
+php artisan sentinel:partitions --table=access_log
+php artisan sentinel:partitions --dry-run
+```
+
+Put it on the scheduler. It is idempotent — what should exist comes from the clock, what does exist
+comes from the catalogue, and only the difference is issued — and an undivided table exits `0`
+saying there was nothing to maintain.
+
+`--table=access_log` maintains `sentinel_access_log`, the table [compliance mode](#compliance-mode)
+writes a row to on every read and the one that grows with reads rather than with writes. There is no
+published stub that divides it — its shape is small enough to declare by hand, and the mechanics are
+the same as the audit table's:
+
+```sql
+-- PostgreSQL. Do this before the table has anything worth keeping: it drops what is there.
+drop table sentinel_access_log;
+
+create table sentinel_access_log (
+    id char(26) not null, audit_id char(26) not null,
+    actor_type varchar(255), actor_id varchar(64), tenant_id varchar(64),
+    query jsonb not null, results integer not null, context jsonb not null,
+    created_at timestamp(6) not null,
+    primary key (id, created_at)
+) partition by range (created_at);
+
+create table sentinel_access_log_default partition of sentinel_access_log default;
+create index on sentinel_access_log (actor_type, actor_id, created_at);
+create index on sentinel_access_log (audit_id);
+```
+
+Once it is divided, the command maintains it exactly as it maintains the trail. Nothing in that
+table is hashed or chained — it is a projection, and the entry it points at is what makes a read
+provable — so dividing it costs none of what dividing the trail costs.
+
+```php
+Schedule::command('sentinel:partitions --ahead=6')->monthly();
+```
+
+**A forgotten run does not break a write.** The date stubs create a `DEFAULT` partition (PostgreSQL)
+and a `MAXVALUE` one (MySQL) precisely so that an entry whose clock matches no declared month lands
+somewhere instead of failing. What it degrades to is one fat partition, never a failed insert.
+
+It has its own cost on PostgreSQL, worth knowing before relying on it: attaching a new range to a
+table whose `DEFAULT` partition already holds rows makes PostgreSQL scan that partition first, to
+prove none of them belong in the range being added. Run the command on a schedule and it never
+happens.
+
+**Do not create more partitions than you need.** This is the sharpest edge of the whole feature and
+it is not obvious, because the cost lands on planning rather than on execution. Every write reads the
+tail of its stream — the chain covers the sequence and the previous hash, so no insert can compute
+its own link — and that read is a `Merge Append` across every partition, because nothing in
+`where stream = ?` tells the planner which one holds the highest sequence:
+
+| Reading the tail of a stream | Planning | Execution |
+|---|---|---|
+| Over a table of 41 partitions | **13.4 ms** | 1.0 ms |
+| Over one partition | 0.58 ms | 0.05 ms |
+
+Twenty-three times the planning, paid on every write. Keep `--ahead` to a few months rather than a
+few years, and give `--retire` a period, so the number of partitions settles instead of growing with
+the age of the installation.
+
+**`--retire` is deliberately timid.** It drops a partition when its month is behind the cutoff **and
+it holds no entries**, which is the state `sentinel:prune --action=archive` leaves it in. A partition
+that still holds entries is kept and the report says why: dropping it would remove a range of the
+trail as a catalogue operation, without archiving it and without recording that it went. `--force`
+lifts that — except under [compliance mode](#compliance-mode), where the refusal is unconditional.
+
+```
++---------------------------+---------+------------------------------------------+
+| Partition                 | Action  | Note                                     |
++---------------------------+---------+------------------------------------------+
+| sentinel_audits_p2027_01  | Created | —                                        |
+| sentinel_audits_p2025_06  | Retired | —                                        |
+| sentinel_audits_p2025_07  | Kept    | Still holds entries, and compliance mode |
+|                           |         | does not let a range leave without a     |
+|                           |         | copy of it existing first.               |
++---------------------------+---------+------------------------------------------+
+```
+
+The order that actually works is: `sentinel:prune --action=archive` writes the range out and removes
+its rows, then `sentinel:partitions --retire` drops the empty shell. The first is what makes the
+range provable; the second is what makes the space go back.
+
+### What it costs at volume
+
+Eight runs: a million entries and ten million, on PostgreSQL 16.15 and MySQL 9.7.2, each flat and
+partitioned. All of it on one machine — an i7-12700KF, 20 threads, 15 GB, both engines on disk with
+`fsync` off — reproducible with `make bench-volume`. A number without the machine it came from is not
+a number, and none of these are gates: they are a report.
+
+**The write path.** Two thousand entries written through the package — pipeline, context,
+canonicalisation, hash and insert — onto a table that already holds the stated volume:
+
+| Per entry | PostgreSQL 1M | PostgreSQL 10M | MySQL 1M | MySQL 10M |
+|---|---|---|---|---|
+| Flat | 2.47 ms | 2.20 ms | 1.93 ms | 1.97 ms |
+| Partitioned | 3.13 ms | **8.34 ms** | 2.08 ms | 3.06 ms |
+
+Two things worth reading twice. **Volume itself costs nothing**: 2.20 ms at ten million against
+2.47 ms at one, because a B-tree gains a level and not much else. And **partitioning is what costs**,
+by a lot on PostgreSQL and a little on MySQL — for the reason in the box above, and with 41
+partitions, which is more than a real installation with a retention policy would ever have.
+
+**The JSON index, measured end to end.** Across all eight runs the delta of publishing it lands
+between −5.4 % and +7.2 % — which is to say it is noise. That is not a contradiction of the +15 % and
++21 % [quoted earlier](#the-two-that-live-inside-the-context): those are what the index costs the
+*engine* on the `INSERT`, and this is what it costs a *Sentinel write*, where the pipeline, the
+canonicalisation and the hash dominate and the insert is a fraction. Both numbers are true. Use the
+first to reason about a bulk load or the `buffered` mode, and the second to decide whether to publish
+it at all.
+
+**Retiring a range.** The same ~260 000 entries removed, as a `DELETE` on the flat table and as a
+`DROP PARTITION` on the divided one. This is the argument for partitioning, and it is not a small
+one:
+
+| ~260 000 entries | PostgreSQL 1M | PostgreSQL 10M | MySQL 1M | MySQL 10M |
+|---|---|---|---|---|
+| `DELETE` | 424 ms | 1 997 ms | 16 698 ms | **59 029 ms** |
+| `DROP PARTITION` | 1 031 ms | **24 ms** | **22 ms** | 71 ms |
+
+At a million entries on PostgreSQL the `DELETE` is the faster of the two on the clock — and it leaves
+260 000 dead tuples for `VACUUM` to reclaim afterwards, which that number does not include and the
+drop does not create. Everywhere else the catalogue operation wins by two or three orders of
+magnitude. On MySQL at ten million it is the difference between a minute and a blink.
+
+**Walking the chain.** `LedgerStream` over the whole stream, which is what `sentinel:verify` does:
+
+| | 1M | 10M |
+|---|---|---|
+| PostgreSQL, flat | 35.3 s | 351.5 s |
+| PostgreSQL, partitioned | 37.9 s | 427.0 s |
+| MySQL, flat | 37.8 s | 392.4 s |
+| MySQL, partitioned | 38.5 s | 444.9 s |
+
+Linear, about 35 µs per entry, and partitioning adds roughly a fifth. A full verification of ten
+million entries is minutes rather than hours — which is the number to have in hand when deciding
+between `--depth=entries` and the [shallower walks](#artisan-commands).
+
+**Reading it back.** Every published filter, over ten million entries, taking fifty:
+
+| Filter | PostgreSQL flat | PostgreSQL part. | MySQL flat | MySQL part. |
+|---|---|---|---|---|
+| `for()` | 19.6 ms | 31.6 ms | 182.9 ms | 228.3 ms |
+| `by()` | 9.1 ms | 76.6 ms | 153.8 ms | 213.9 ms |
+| `whereSeverity()` | 10.3 ms | 18.7 ms | 22.0 ms | 19.4 ms |
+| `forTenant()` | 5.1 ms | 7.6 ms | 19.4 ms | 9.0 ms |
+| `whereType()` | 29.7 ms | 32.8 ms | 13.5 ms | 6.8 ms |
+| `whereIp()` | 4.2 ms | 19.7 ms | 31.6 ms | 31.6 ms |
+| `whereRoute()` | 113.4 ms | 88.2 ms | **5 118 ms** | 183.5 ms |
+| `whereEvent()` | 301.7 ms | 57.7 ms | **32 589 ms** | 2 460 ms |
+
+The two outliers are the same outlier, and the README already named it for `whereEvent()`: a filter
+that selects a **category** rather than an entity reaches its index and then has to sort everything
+it matched. At ten million entries with three hundred distinct routes, `whereRoute()` behaves exactly
+like `whereEvent()` — the index finds thirty thousand rows and the order is what costs. Put a filter
+in front of either, or reach for `whereIp()`, which selects an entity and stays in single-digit
+milliseconds on PostgreSQL at any volume tested.
+
 ## Artisan commands
 
 | Command | What it does | Exit codes |
@@ -2990,6 +3251,7 @@ destroys content, a rekey preserves it under a different lock.
 | `sentinel:redact` | Destroys the contents of one entry and leaves the rest of it standing | `0` redacted, or already redacted · `1` refused: archived, or no longer reproducing its hash · `2` could not run |
 | `sentinel:export` | Hands the trail to somebody who does not have the database | `0` exported · `2` a format it does not write |
 | `sentinel:rekey` | Re-encrypts a range of the trail under another key | `0` re-encrypted, or nothing to re-encrypt · `2` could not run |
+| `sentinel:partitions` | Keeps a partitioned trail supplied with months ahead and clear of the empty ones behind | `0` maintained, or nothing to maintain · `1` refused to retire a partition still holding entries · `2` could not run |
 
 ```bash
 php artisan sentinel:verify
