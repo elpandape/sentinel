@@ -2,7 +2,7 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
-## v0.20.0 — Scale and partitioning (2026-09-02)
+## v0.20.0 — Scale and partitioning (2026-09-03)
 
 The trail gets two ways to stay usable once it is big, and neither of them is switched on for you:
 an index for the two filters that read JSON, and a table divided into partitions with a command to
