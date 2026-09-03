@@ -63,6 +63,7 @@ use ElPandaPe\Sentinel\Security\Rekeyer;
 use ElPandaPe\Sentinel\Snapshot\SnapshotBuilder;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Config;
+use ElPandaPe\Sentinel\Telemetry\TraceParent;
 use ElPandaPe\Sentinel\Tests\Fixtures\AuditedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\EncryptedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\EventLog;
@@ -1707,4 +1708,9 @@ function spreadOverMonths(int $entries): void
             ->where('sequence', $sequence)
             ->update(['created_at' => $month->addMonths(intdiv($sequence - 1, 2))->addDay()->format('Y-m-d H:i:s.u')]);
     }
+}
+
+function traceParent(string $header = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'): TraceParent
+{
+    return TraceParent::parse($header) ?? throw new RuntimeException("Not a traceparent: {$header}");
 }
