@@ -43,6 +43,7 @@
     "require-dev": {
         "larastan/larastan": "^3.9",
         "laravel/pint": "^1.14",
+        "open-telemetry/api": "^1.10",
         "orchestra/testbench": "^11.0",
         "pestphp/pest": "^5.0",
         "pestphp/pest-plugin-phpstan": "^5.0",
@@ -54,7 +55,8 @@
     "suggest": {
         "orchestra/testbench": "^11.0 to run Testing\\LedgerContractTestCase against your own ledger driver: it boots a Laravel application.",
         "phpunit/phpunit": "^13.0 to run Testing\\LedgerContractTestCase, which is a PHPUnit test case.",
-        "ext-zlib": "* to write archived batches with ledger.ledgers.archive.codec set to gzip. A codec of null writes plain NDJSON and needs nothing."
+        "ext-zlib": "* to write archived batches with ledger.ledgers.archive.codec set to gzip. A codec of null writes plain NDJSON and needs nothing.",
+        "open-telemetry/api": "^1.10 to fill trace_id and span_id from the active OpenTelemetry span instead of the incoming traceparent header. Without it the package still reads and propagates W3C Trace Context on its own."
     },
     "autoload": {
         "psr-4": {

@@ -89,6 +89,9 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Mockery;
 use Mockery\MockInterface;
+use OpenTelemetry\API\Trace\Span;
+use OpenTelemetry\API\Trace\SpanContext;
+use OpenTelemetry\API\Trace\TraceState;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
@@ -1713,4 +1716,26 @@ function spreadOverMonths(int $entries): void
 function traceParent(string $header = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'): TraceParent
 {
     return TraceParent::parse($header) ?? throw new RuntimeException("Not a traceparent: {$header}");
+}
+
+/**
+ * The assertions run with a span active, which is the only state in which the SDK adapter has
+ * anything to read. The API alone can carry a span context without a tracer behind it.
+ *
+ * @param  Closure(): void  $assertions
+ */
+function insideSpan(int $flags, ?TraceState $state, Closure $assertions): void
+{
+    $scope = Span::wrap(SpanContext::create(
+        '4bf92f3577b34da6a3ce929d0e0e4736',
+        '00f067aa0ba902b7',
+        $flags,
+        $state,
+    ))->activate();
+
+    try {
+        $assertions();
+    } finally {
+        $scope->detach();
+    }
 }

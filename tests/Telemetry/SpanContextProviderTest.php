@@ -4,14 +4,26 @@ declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Contracts\SpanContextProvider;
 use ElPandaPe\Sentinel\Telemetry\NullSpanContextProvider;
+use ElPandaPe\Sentinel\Telemetry\OpenTelemetry\Sdk;
+use ElPandaPe\Sentinel\Telemetry\OpenTelemetry\SdkSpanContextProvider;
 use ElPandaPe\Sentinel\Telemetry\TraceContext;
 use ElPandaPe\Sentinel\Tests\Fixtures\ActiveSpan;
 
 use function ElPandaPe\Sentinel\Tests\traceParent;
 
-it('holds the null provider until something registers a tracer', function (): void {
-    expect(app(SpanContextProvider::class))->toBeInstanceOf(NullSpanContextProvider::class)
-        ->and(app(SpanContextProvider::class)->current())->toBeNull();
+it('reads the SDK when the SDK is installed, and nothing when it is not', function (): void {
+    expect(Sdk::reading(true))->toBeInstanceOf(SdkSpanContextProvider::class)
+        ->and(Sdk::reading(false))->toBeInstanceOf(NullSpanContextProvider::class);
+});
+
+it('binds the reader the installation calls for', function (): void {
+    expect(Sdk::present())->toBeTrue()
+        ->and(app(SpanContextProvider::class))->toBeInstanceOf(SdkSpanContextProvider::class);
+});
+
+it('answers with nothing when nobody is tracing', function (): void {
+    expect(new NullSpanContextProvider()->current())->toBeNull()
+        ->and(new SdkSpanContextProvider()->current())->toBeNull();
 });
 
 it('answers with the span a tracer is inside', function (): void {

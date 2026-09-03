@@ -39,3 +39,12 @@ it('keeps the two language files filling the same holes', function (): void {
 it('ships a default ledger that outlives the request that wrote to it', function (): void {
     expect(config('sentinel.ledger.default'))->toBe('database');
 });
+
+it('keeps the OpenTelemetry SDK inside the one namespace that adapts it', function (): void {
+    $adapter = DIRECTORY_SEPARATOR.implode(DIRECTORY_SEPARATOR, ['src', 'Telemetry', 'OpenTelemetry']).DIRECTORY_SEPARATOR;
+
+    expect(array_values(array_filter(
+        phpFilesOffending('#(?<!Telemetry\\\\)\bOpenTelemetry\\\\#', dirname(__DIR__).'/src'),
+        fn (string $file): bool => ! str_contains($file, $adapter),
+    )))->toBeEmpty();
+});

@@ -48,7 +48,7 @@ use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Support\PackageMigrations;
 use ElPandaPe\Sentinel\Support\Policies;
 use ElPandaPe\Sentinel\Support\PolicyRegistry;
-use ElPandaPe\Sentinel\Telemetry\NullSpanContextProvider;
+use ElPandaPe\Sentinel\Telemetry\OpenTelemetry\Sdk;
 use ElPandaPe\Sentinel\Transactions\TransactionScope;
 use Illuminate\Console\Events\CommandFinished;
 use Illuminate\Console\Events\CommandStarting;
@@ -121,7 +121,7 @@ final class SentinelServiceProvider extends ServiceProvider
         $this->app->scoped(TransactionScope::class);
         $this->app->scoped(Sentinel::class);
 
-        $this->app->bind(SpanContextProvider::class, NullSpanContextProvider::class);
+        $this->app->bind(SpanContextProvider::class, fn (): SpanContextProvider => Sdk::reading(Sdk::present()));
     }
 
     public function boot(): void
