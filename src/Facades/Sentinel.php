@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static \ElPandaPe\Sentinel\Transitions\TransitionBuilder transition(\Illuminate\Database\Eloquent\Model $subject, bool|float|int|string|\UnitEnum|null $from, bool|float|int|string|\UnitEnum|null $to)
  * @method static \ElPandaPe\Sentinel\Support\Config config()
  * @method static \ElPandaPe\Sentinel\Context\ExecutionContext context()
+ * @method static \ElPandaPe\Sentinel\Telemetry\TraceContext|null trace()
  * @method static void filter(\Closure $policy)
  * @method static bool isRecording()
  * @method static void pause()

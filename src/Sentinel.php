@@ -17,6 +17,8 @@ use ElPandaPe\Sentinel\Integrity\Verifier;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Support\Policies;
+use ElPandaPe\Sentinel\Telemetry\TraceContext;
+use ElPandaPe\Sentinel\Telemetry\Tracer;
 use ElPandaPe\Sentinel\Transactions\TransactionScope;
 use ElPandaPe\Sentinel\Transitions\TransitionBuilder;
 use ElPandaPe\Sentinel\Transitions\TransitionQuery;
@@ -35,6 +37,7 @@ final class Sentinel
         private readonly Ledger $ledger,
         private readonly TransactionScope $transactions,
         private readonly Recorder $recorder,
+        private readonly Tracer $tracer,
     ) {}
 
     /**
@@ -169,6 +172,18 @@ final class Sentinel
     public function context(): ExecutionContext
     {
         return $this->context;
+    }
+
+    /**
+     * The trace this process is inside of, for an application that wants to forward it on a call
+     * of its own. It reads; it never mutates the context, and it opens no span: injecting headers
+     * into someone else's HTTP client is a tracer's job and this package is not a tracer.
+     *
+     * Null means no trace, which is what telemetry switched off always answers.
+     */
+    public function trace(): ?TraceContext
+    {
+        return $this->tracer->current();
     }
 
     public function isRecording(): bool
