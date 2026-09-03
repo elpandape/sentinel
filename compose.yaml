@@ -68,3 +68,56 @@ services:
       timeout: 3s
       retries: 30
       start_period: 5s
+
+  # The volume benchmark writes ten million entries, which is about nine gigabytes with its indexes
+  # and does not fit in the tmpfs the test databases run on — the first attempt died at 103 seconds
+  # with "No space left on device". These two are the same engines on real disk, up only for
+  # `make bench-volume`, so `make test-dbs` keeps the memory data directory that gives it its time.
+  postgres-bench:
+    image: postgres:16
+    profiles: ["bench"]
+    command:
+      - postgres
+      - -c
+      - fsync=off
+      - -c
+      - synchronous_commit=off
+      - -c
+      - full_page_writes=off
+      - -c
+      - max_wal_size=8GB
+    volumes:
+      - postgres-bench:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: sentinel
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+
+  mysql-bench:
+    image: mysql:9
+    profiles: ["bench"]
+    command:
+      - --skip-log-bin
+      - --innodb-flush-log-at-trx-commit=0
+      - --innodb-doublewrite=OFF
+      - --innodb-buffer-pool-size=2G
+    volumes:
+      - mysql-bench:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: secret
+      MYSQL_DATABASE: sentinel
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --protocol=TCP -psecret"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+volumes:
+  postgres-bench:
+  mysql-bench:

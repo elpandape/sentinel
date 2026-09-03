@@ -7,7 +7,7 @@ DC = docker compose
 EPHEMERAL = /app/vendor/orchestra/testbench-core/laravel/storage/framework/testing
 PHP = $(DC) run --rm -v $(EPHEMERAL) php
 
-.PHONY: build install update test test-quiet bench coverage types stan lint lint-fix rector rector-fix mutation validate ci shell redis-up dbs-up test-mysql test-pgsql test-dbs
+.PHONY: build install update test test-quiet bench bench-up bench-volume coverage types stan lint lint-fix rector rector-fix mutation validate ci shell redis-up dbs-up test-mysql test-pgsql test-dbs
 
 build: ## Build the dev image
 	$(DC) build php
@@ -34,6 +34,15 @@ test-quiet: redis-up ## Same suite, output trimmed to its result
 
 bench: ## Write-path baseline (report, not a gate)
 	$(PHP) php -d memory_limit=1G benchmarks/bench.php
+
+bench-up:
+	$(DC) --profile bench up -d --wait postgres-bench mysql-bench
+
+# Not a gate and not part of any suite: it writes millions of rows and needs a data directory on
+# real disk, which is what the two bench services exist for. ENGINE=pgsql|mysql, ROWS, SHAPE=flat|
+# partitioned. `make test-dbs` never touches these containers.
+bench-volume: bench-up ## Cost of the trail at volume (make bench-volume ENGINE=mysql ROWS=10000000 SHAPE=partitioned)
+	$(PHP) sh -c "ENGINE=$${ENGINE:-pgsql} ROWS=$${ROWS:-1000000} SHAPE=$${SHAPE:-flat} WRITES=$${WRITES:-2000} php -d memory_limit=2G benchmarks/volume.php"
 
 coverage: redis-up ## Tests + 100% coverage gate
 	$(PHP) php -d memory_limit=1G -d pcov.directory=/app -d 'pcov.exclude=~/(vendor|tests|\.cache)/~' vendor/bin/pest --ci --coverage --min=100
