@@ -36,16 +36,22 @@ final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, En
     private const int MAX_ATTEMPTS = 3;
 
     /**
-     * How many placeholders one statement may carry. PostgreSQL and the MySQL prepared protocol
-     * both stop at this number, which a batch reaches sooner than it looks: an entry is thirty-odd
-     * columns, so under two thousand of them is already the ceiling.
+     * How many placeholders one statement may carry, for the narrowest of the three engines rather
+     * than for the widest. PostgreSQL and the MySQL prepared protocol stop at 65 535; SQLite has
+     * compiled SQLITE_MAX_VARIABLE_NUMBER at 32 766 since 3.32, and the package supports it from
+     * 3.38. One number for three engines is one number too few, and the one that was here was the
+     * wrong one twice over — a batch that fits PostgreSQL is over SQLite's ceiling from around nine
+     * hundred entries on.
      *
-     * Nothing enforced it until now because the only caller batching at all was the flush, and that
-     * one is bounded by the buffer size. A mass operation is not, and a batch over the limit failed
-     * as one statement — losing every entry in it, and losing them quietly when the write was
-     * deferred to a commit, where nothing is left to refuse.
+     * That is a real batch: an entry is thirty-odd columns, so the crossing sits well inside what a
+     * mass operation writes. And on the default write path the loss is silent — the business UPDATE
+     * has already committed by the time the deferred write runs, so the failure is announced and
+     * logged rather than raised.
+     *
+     * Nothing enforced any ceiling until v0.16.0 because the only caller batching at all was the
+     * flush, and that one is bounded by the buffer size. A mass operation is not.
      */
-    private const int MAX_PLACEHOLDERS = 65535;
+    private const int MAX_PLACEHOLDERS = 32766;
 
     public function __construct(
         private Audit $model,
@@ -117,11 +123,17 @@ final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, En
      */
     public function settled(array $captureIds): array
     {
-        /** @var list<string> $found */
-        $found = $this->model->newQuery()
-            ->whereIn('capture_id', $captureIds)
-            ->pluck('capture_id')
-            ->all();
+        $found = [];
+
+        foreach (array_chunk($captureIds, $this->perStatement(1)) as $slice) {
+            /** @var list<string> $seen */
+            $seen = $this->model->newQuery()
+                ->whereIn('capture_id', $slice)
+                ->pluck('capture_id')
+                ->all();
+
+            $found = [...$found, ...$seen];
+        }
 
         return $found;
     }
@@ -280,9 +292,20 @@ final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, En
             return;
         }
 
-        foreach (array_chunk($rows, max(1, intdiv(self::MAX_PLACEHOLDERS, max(1, count($rows[0]))))) as $slice) {
+        foreach (array_chunk($rows, $this->perStatement(count($rows[0]))) as $slice) {
             $insert($slice);
         }
+    }
+
+    /**
+     * How many of a thing fit in one statement, given how many placeholders each of them spends.
+     * One for an identifier in a `whereIn`, one per column for a row being inserted.
+     *
+     * @return int<1, max>
+     */
+    private function perStatement(int $placeholdersEach): int
+    {
+        return max(1, intdiv(self::MAX_PLACEHOLDERS, max(1, $placeholdersEach)));
     }
 
     /**

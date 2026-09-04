@@ -101,6 +101,11 @@ final readonly class Rehydrator
      * every capture in the table would answer the same question and grow with the table rather than
      * with the batch, which is the one thing a restore of a whole anchor window must not do.
      *
+     * It is not divided across statements the way the ledger divides its own. This list is one
+     * placeholder per entry of one archived batch, bounded by `archive.batch` — a thousand out of
+     * the box, thirty-two times under the ceiling. Raising that setting past 32 766 is what would
+     * reach it, and nothing in the package does.
+     *
      * @param  list<Audit>  $entries
      * @return array{hashes: array<int, string>, captures: list<string>}
      */

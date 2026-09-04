@@ -1968,3 +1968,48 @@ function runTheWorker(): void
 
     $worker->runNextJob('database', 'default', new WorkerOptions);
 }
+
+/**
+ * How many statements the ledger spends inserting a batch of a known size. The ceiling divides by
+ * the number of columns a row carries, so what this counts is the division and not the write.
+ */
+function statementsWriting(int $entries): int
+{
+    $seen = 0;
+    $table = auditsTable();
+
+    DB::listen(static function (QueryExecuted $query) use (&$seen, $table): void {
+        if (str_starts_with($query->sql, 'insert into "'.$table.'"')) {
+            $seen++;
+        }
+    });
+
+    app(DatabaseLedger::class)->writeMany(array_map(
+        static fn (int $n): AuditData => auditData(['subject_type' => 'App\\Models\\Invoice', 'subject_id' => (string) $n]),
+        range(1, $entries),
+    ));
+
+    return $seen;
+}
+
+/**
+ * How many statements one call to settled() spends asking about a set of captures.
+ */
+function statementsAsking(int $captures): int
+{
+    $seen = 0;
+    $table = auditsTable();
+
+    DB::listen(static function (QueryExecuted $query) use (&$seen, $table): void {
+        if (str_contains($query->sql, 'from "'.$table.'"') && str_contains($query->sql, 'capture_id')) {
+            $seen++;
+        }
+    });
+
+    $ledger = app(DatabaseLedger::class);
+
+    expect($ledger->settled(array_map(static fn (int $n): string => (string) Str::ulid(), range(1, $captures))))
+        ->toBeEmpty();
+
+    return $seen;
+}
