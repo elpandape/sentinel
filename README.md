@@ -304,6 +304,10 @@ framework itself emits, and the table is read top to bottom:
 | `console` | A console process with no command: a REPL, a boot script |
 | `system` | No signal applies |
 
+One value is not on that table and never will be: `import` is written by
+[`sentinel:import`](#migrating-from-another-package) and by nothing else. An entry carrying it did
+not happen inside your application — another package recorded it and this one copied it in.
+
 The `http`/`api` boundary is a route pattern by default, `api/*`, and takes a closure instead:
 
 ```php
@@ -1028,7 +1032,7 @@ rather than a category and does not have the problem.
 ### Refiners
 
 Four filters are **refiners**: they narrow a result, they do not find one. `whereSource()` reads a
-column with eight possible values and no index of its own; `between()` reads `created_at`, which
+column with nine possible values and no index of its own; `between()` reads `created_at`, which
 lives in the tail of the composite indexes and not at the head of any; `whereFieldChanged()` reads
 inside a JSON column, which no index this package ships covers; and `whereVersion()` reads a counter
 that is not indexed either. On MySQL and PostgreSQL any of them, alone, walks the whole table. Put

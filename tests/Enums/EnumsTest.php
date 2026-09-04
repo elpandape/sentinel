@@ -17,7 +17,7 @@ it('exposes the audit events the engine records', function (): void {
 
 it('exposes every execution source', function (): void {
     expect(Source::from('scheduler'))->toBe(Source::Scheduler)
-        ->and(Source::cases())->toHaveCount(8);
+        ->and(Source::cases())->toHaveCount(9);
 });
 
 it('exposes every write mode', function (): void {
