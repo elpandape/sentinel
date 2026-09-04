@@ -2,6 +2,79 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.22.0 — The command surface, closed (2026-09-03)
+
+The last thing an operator touches before the API freezes. Ten artisan commands stop being ten
+pieces that each grew in their own version and become one surface: the same three exit codes meaning
+the same three things, the same way of reading an option, the same way of saying something, and a
+section in `php artisan about` that says how the package is configured. Two commands were missing
+and are here. The i18n gate was audited end to end and came back clean but for one line. Nothing
+touches the chain: no migration, no new column, `payload_version` stays at `1`, and every entry
+written before this release verifies unchanged.
+
+### Added
+
+- **`sentinel:install`**, which publishes the configuration if it is not already there and leaves it
+  exactly as it is if it is — edits included — then says which of the seven tables are still missing
+  and what to run. Running it twice is what it is for. It does not publish the migrations: the
+  provider loads the package's own until an application takes a file over, and taking eight files
+  over is a decision that outlives one command, so it is named with its tag alongside the index
+  behind two of the filters and the three partitioned alternatives.
+- **`sentinel:show`**, which reads one entry, or a subject's life, out loud. It answers neither
+  question itself: the narrowing is the Query API and the wording is the presenter, so what an
+  operator reads in a terminal is the sentence an application renders in a page, in the same
+  language.
+- **A Sentinel section in `php artisan about`** — version, mode, ledger driver, payload version,
+  compliance mode and telemetry. No key, no key identifier and no signer: the output of `about` is
+  pasted into issues and captured by deploy logs.
+- **`StreamVerification::$anchorSignatures` and `IntegrityReport::anchorSignatures()`**, so a shallow
+  walk says whether the entries it read are attested separately from whether the anchors standing in
+  for the ones nobody read are.
+- **An arch test that fails on any string a command wrote itself**, so the next one is caught by CI
+  and not by a reading.
+
+### Fixed
+
+- **A flush that cannot read the buffer, or cannot give a batch back, now announces.** `take()` was
+  outside the `try`, so a store that could not be reached at all ended a flush in silence; and
+  `putBack()` was the first statement of the `catch`, so a buffer that refused the batch swallowed
+  the event that was the only thing that would ever have said the batch was lost.
+- **A shallow verification added its two signature tallies instead of letting one overwrite the
+  other.** The merge was an array spread, which overwrites on a repeated key: three unsigned anchors
+  and five unsigned tail entries were reported as five.
+- **A shallow verification counts redactions again.** The same method dropped the tail's content
+  tally entirely, so `redacted()` answered zero however many tombstones the tail held.
+- **A refusal and a run that could not happen are different exits.** The redaction reported every
+  throwable as a refusal, so an unreachable database told an operator their entry was archived; the
+  export caught nothing at all, so a disk it could not reach left through the framework with a stack
+  trace.
+- **A numeric option that is not a number is treated as absent, not as zero.** `sentinel:verify
+  --from=yesterday` walked from sequence zero and reported on a range nobody asked for.
+- **A refused redaction is said in the language of the caller**, in a translated frame like every
+  other command's, instead of printing the exception's own English.
+
+### Changed
+
+- **One exit-code vocabulary across the ten commands**, documented per command in the README.
+- **One way for a command to read an option and one way for it to say something.** Five copies of
+  the option reader, seven of the translation helper, three of the stream enumerator under two
+  names, two of the narrowing — one of each now, and the copies had drifted in ways that showed.
+- **`integrity.enabled` is gone.** Chaining has been unconditional since the chain existed, so the
+  key governed nothing while reading as if it governed everything.
+- **The mutation lists say the same thing.** The Makefile walked twenty-three paths and the nightly
+  nineteen while the workflow claimed they mirrored each other; they are the same thirty now, and
+  six namespaces that were in neither are in both.
+- **The tarball carries what a consumer reads** — the readme, the upgrade guide, the changelog and
+  the licence — and leaves what a contributor reads on the repository.
+
+### Upgrade notes
+
+Two commands exit `2` where they exited `1`, a numeric option that is not numeric is now no option
+at all, a shallow verification splits one signature tally into two, and `integrity.enabled` should
+be deleted from a published configuration. None of it is required to keep working; all of it matters
+if a cron ramifies on an exit code or a tool reads a verification report. See
+[UPGRADE.md](UPGRADE.md).
+
 ## v0.21.1 — Instrumenting the buffer and the mass operations (2026-09-03)
 
 Two places where the package already knew the answer and threw it away before it could be read. A

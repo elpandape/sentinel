@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.21.0-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.22.0-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -20,12 +20,18 @@ the state was before, what it is now — and whether the record itself can be pr
 
 ```json
 "repositories": [{ "type": "vcs", "url": "https://github.com/elpandape/sentinel" }],
-"require": { "elpandape/sentinel": "v0.20.0" }
+"require": { "elpandape/sentinel": "v0.22.0" }
 ```
 
 ```bash
-php artisan vendor:publish --tag=sentinel-config
+php artisan sentinel:install
+php artisan migrate
 ```
+
+`sentinel:install` publishes the configuration if it is not already there, leaves it untouched if it
+is, and tells you which tables are still missing. Run it again whenever you want to know where an
+installation stands — that is what it is for. If you would rather publish by hand,
+`vendor:publish --tag=sentinel-config` does the same one thing.
 
 ## What's available
 
@@ -61,6 +67,8 @@ php artisan vendor:publish --tag=sentinel-config
 | `v0.19.5` | Compliance mode with teeth: it refuses to boot without signatures and anchors, a redaction has to name who ordered it, every read leaves an entry and a row, plus `sentinel:export` and `sentinel:rekey` |
 | `v0.20.0` | Scale: `whereIp()` and `whereRoute()` with the index that serves them, three partitioned alternatives to the base migration, and `sentinel:partitions` |
 | `v0.21.0` | Distributed tracing: a strict W3C Trace Context parser, the active span of an OpenTelemetry SDK when there is one, the trace carried across the queue, a root trace per console run, and `Sentinel::trace()` |
+| `v0.21.1` | A flush that fails says how many entries it was and where they are, and a summary entry says which mode settled it |
+| `v0.22.0` | The command surface closed: `sentinel:install`, `sentinel:show`, one exit-code vocabulary across the ten, and a Sentinel section in `php artisan about` |
 
 Everything else is on the roadmap: a way in from other packages.
 
@@ -3400,14 +3408,28 @@ $this->app->bind(SpanContextProvider::class, MyTracer::class);
 
 | Command | What it does | Exit codes |
 |---|---|---|
+| `sentinel:install` | Publishes the configuration and says what an installation is still missing | `0` published, or already there · `2` the schema could not be read |
+| `sentinel:show` | Reads one entry, or a subject's life, out loud | `0` read out, or nothing recorded · `2` no such entry, an unreadable subject, or both asked at once |
 | `sentinel:flush` | Settles everything the buffer is holding | `0` settled · `1` the flush failed · `2` not in `buffered` mode |
 | `sentinel:verify` | Walks the chain and reports what it found | `0` intact · `1` broken · `2` could not run |
 | `sentinel:checkpoint` | Anchors every complete window the streams still owe | `0` anchored, or nothing left to anchor · `2` could not run |
 | `sentinel:prune` | Applies the retention policies and reports what went | `0` removed, or nothing to remove · `1` a range no longer folds to its root · `2` could not run |
 | `sentinel:redact` | Destroys the contents of one entry and leaves the rest of it standing | `0` redacted, or already redacted · `1` refused: archived, or no longer reproducing its hash · `2` could not run |
-| `sentinel:export` | Hands the trail to somebody who does not have the database | `0` exported · `2` a format it does not write |
+| `sentinel:export` | Hands the trail to somebody who does not have the database | `0` exported · `2` a format it does not write, or a disk it could not reach |
 | `sentinel:rekey` | Re-encrypts a range of the trail under another key | `0` re-encrypted, or nothing to re-encrypt · `2` could not run |
 | `sentinel:partitions` | Keeps a partitioned trail supplied with months ahead and clear of the empty ones behind | `0` maintained, or nothing to maintain · `1` refused to retire a partition still holding entries · `2` could not run |
+
+**Ten commands, three codes, one meaning each.** `0` is the ordinary outcome, and it includes having
+found nothing to do. `1` is a bad finding from a run that happened. `2` is a run that could not
+happen. A dry run suppresses the acting and not the checking, so `sentinel:prune --dry-run` and
+`sentinel:partitions --dry-run` still exit `1` when they meet something they would refuse.
+
+```bash
+php artisan sentinel:install
+php artisan sentinel:show 01JB9Z8Q0000000000000000AB
+php artisan sentinel:show --subject="App\Models\Invoice:77"
+php artisan about
+```
 
 ```bash
 php artisan sentinel:verify
