@@ -30,7 +30,7 @@ it('prints nothing a command wrote itself, the option help aside — that is bui
 it('keeps the workbench out of the tarball and the package inside it', function (): void {
     expect(exportIgnored())
         ->toContain('tests', 'docker', '.github', 'Makefile', 'CONTRIBUTING.md', 'SECURITY.md')
-        ->not->toContain('src', 'src/Testing', 'resources', 'resources/lang', 'README.md', 'UPGRADE.md', 'CHANGELOG.md', 'LICENSE.md');
+        ->not->toContain('src', 'src/Testing', 'resources', 'resources/lang', 'stubs', 'README.md', 'UPGRADE.md', 'CHANGELOG.md', 'LICENSE.md', 'MIGRATE_FROM_OWEN_IT.md', 'MIGRATE_FROM_ALTEK.md');
 });
 
 it('keeps the two language files carrying the same keys', function (): void {

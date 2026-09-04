@@ -9,6 +9,9 @@
 # Everything under src/ and resources/ ships without exception. src/Testing/ is production code by
 # design: it is the contract suite a third-party ledger driver runs against. resources/lang/ is
 # what the package prints.
+#
+# So do the migration guides and stubs/. A guide is written for the reader coming from another
+# package, and the Rector stub it tells them to copy has to be there in vendor/ when they do.
 
 /.github export-ignore
 /docker export-ignore
