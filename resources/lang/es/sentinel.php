@@ -5,6 +5,27 @@ declare(strict_types=1);
 return [
 
     'commands' => [
+        'import' => [
+            'description' => 'Trae un rastro desde otro paquete de auditoría',
+            'unknown_origin' => 'No hay ningún [:origin] del que importar. Aceptados: :accepted.',
+            'failed' => 'No se importó nada: :reason',
+            'columns' => [
+                'outcome' => 'Resultado',
+                'rows' => 'Filas',
+            ],
+            'outcomes' => [
+                'read' => 'Leídas del origen',
+                'written' => 'Escritas como asientos',
+                'repeated' => 'Ya importadas',
+                'discarded' => 'Rechazadas por el pipeline',
+                'unreadable' => 'No se pudieron leer',
+            ],
+            'unreadable_rows' => ':rows no se pudieron leer porque :reason',
+            'imported' => 'Importados :written asientos de :read filas del origen. La cadena empieza aquí: lo que el otro paquete registró antes no tiene eslabón, porque nunca lo tuvo.',
+            'would' => 'Importaría :written asientos de :read filas del origen. No se escribió nada.',
+            'resume' => 'La última fila leída del origen fue la :row. Pasa --after=:row para seguir desde ahí.',
+            'incomplete' => ':unreadable filas no se pudieron leer y :discarded las rechazó el pipeline, así que no están en el rastro.',
+        ],
         'install' => [
             'description' => 'Publica la configuración e informa de lo que le falta a una instalación',
             'published' => 'Publicada la configuración en config/sentinel.php.',

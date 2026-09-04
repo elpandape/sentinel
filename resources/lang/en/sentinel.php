@@ -5,6 +5,27 @@ declare(strict_types=1);
 return [
 
     'commands' => [
+        'import' => [
+            'description' => 'Bring a trail in from another audit package',
+            'unknown_origin' => 'There is no [:origin] to import from. Accepted: :accepted.',
+            'failed' => 'Nothing was imported: :reason',
+            'columns' => [
+                'outcome' => 'Outcome',
+                'rows' => 'Rows',
+            ],
+            'outcomes' => [
+                'read' => 'Read from the source',
+                'written' => 'Written as entries',
+                'repeated' => 'Already imported',
+                'discarded' => 'Refused by the pipeline',
+                'unreadable' => 'Could not be read',
+            ],
+            'unreadable_rows' => ':rows could not be read because :reason',
+            'imported' => 'Imported :written entries from :read source rows. The chain starts here: what the other package recorded before this has no link, because it never had one.',
+            'would' => 'Would import :written entries from :read source rows. Nothing was written.',
+            'resume' => 'The last source row read was :row. Pass --after=:row to carry on from there.',
+            'incomplete' => ':unreadable rows could not be read and :discarded were refused by the pipeline, so they are not in the trail.',
+        ],
         'install' => [
             'description' => 'Publish the configuration and report what an installation is still missing',
             'published' => 'Published the configuration to config/sentinel.php.',

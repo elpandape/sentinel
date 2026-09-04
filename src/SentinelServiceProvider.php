@@ -12,6 +12,7 @@ use ElPandaPe\Sentinel\Console\About;
 use ElPandaPe\Sentinel\Console\CheckpointCommand;
 use ElPandaPe\Sentinel\Console\ExportCommand;
 use ElPandaPe\Sentinel\Console\FlushCommand;
+use ElPandaPe\Sentinel\Console\ImportCommand;
 use ElPandaPe\Sentinel\Console\InstallCommand;
 use ElPandaPe\Sentinel\Console\PartitionsCommand;
 use ElPandaPe\Sentinel\Console\PruneCommand;
@@ -165,6 +166,7 @@ final class SentinelServiceProvider extends ServiceProvider
                 CheckpointCommand::class,
                 ExportCommand::class,
                 FlushCommand::class,
+                ImportCommand::class,
                 InstallCommand::class,
                 PartitionsCommand::class,
                 PruneCommand::class,
