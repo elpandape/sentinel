@@ -8,6 +8,7 @@ use ElPandaPe\Sentinel\Buffer\Flusher;
 use ElPandaPe\Sentinel\Buffer\MemoryBuffer;
 use ElPandaPe\Sentinel\Buffer\RedisBuffer;
 use ElPandaPe\Sentinel\Compliance\Requirements;
+use ElPandaPe\Sentinel\Console\About;
 use ElPandaPe\Sentinel\Console\CheckpointCommand;
 use ElPandaPe\Sentinel\Console\ExportCommand;
 use ElPandaPe\Sentinel\Console\FlushCommand;
@@ -63,6 +64,7 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Console\AboutCommand;
 use Illuminate\Log\Context\Repository as ContextRepository;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
@@ -76,6 +78,8 @@ final class SentinelServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/sentinel.php', 'sentinel');
+
+        AboutCommand::add(About::SECTION, About::class);
 
         $this->app->singleton(Config::class, static fn (Application $app): Config => new Config(
             $app->make(Repository::class),

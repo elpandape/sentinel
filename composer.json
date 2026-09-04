@@ -29,6 +29,7 @@
     ],
     "require": {
         "php": "^8.4",
+        "composer-runtime-api": "^2.2",
         "ext-mbstring": "*",
         "ext-openssl": "*",
         "illuminate/console": "^13.0",
