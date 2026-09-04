@@ -120,6 +120,7 @@ return [
                 'invalid' => 'FIRMA INVÁLIDA',
                 'unknown_key' => 'clave desconocida',
             ],
+            'anchor_signatures' => ':tally en las anclas',
             'anchor_states' => [
                 'anchored' => 'ancladas',
                 'archived' => 'retiradas',

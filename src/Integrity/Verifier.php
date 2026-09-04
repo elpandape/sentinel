@@ -222,6 +222,12 @@ final readonly class Verifier
     /**
      * One pass over the anchors of a stream: contiguity from the first entry onwards, the signature
      * of every anchor, optionally the root folded again, and then the tail nobody has anchored yet.
+     *
+     * The anchors' signatures and the tail's are reported apart. They used to be spread into one
+     * array, which lost as well as blurred: string keys overwrite on collision, so a state both
+     * sides had landed in came out as the tail's count alone. What the tail found about redactions
+     * is carried too — the walk is the same walk, and a shallow pass that answered zero to a
+     * question the deep one answers is a shallow pass that lies quietly.
      */
     private function overAnchors(string $name, bool $refold): StreamVerification
     {
@@ -235,6 +241,7 @@ final readonly class Verifier
                 $walk->signatures,
                 $walk->signature,
                 [CheckpointState::Absent->value => 1],
+                content: $walk->content,
             );
         }
 
@@ -249,10 +256,11 @@ final readonly class Verifier
             if ($anchor->from !== $expected) {
                 return new StreamVerification(
                     $this->announce($name, $anchored + $retired, IntegrityBreak::CheckpointMismatch, $anchor->from, $anchor->rootHash),
-                    $signatures,
+                    [],
                     $forged,
                     $this->ranges($anchored, $retired),
                     $expected - 1,
+                    anchorSignatures: $signatures,
                 );
             }
 
@@ -269,10 +277,11 @@ final readonly class Verifier
                 if (! $this->retired($name, $anchor, $root)) {
                     return new StreamVerification(
                         $this->located($name, $anchor, $anchored + $retired),
-                        $signatures,
+                        [],
                         $forged,
                         $this->ranges($anchored, $retired),
                         $expected - 1,
+                        anchorSignatures: $signatures,
                     );
                 }
 
@@ -289,10 +298,12 @@ final readonly class Verifier
 
         return new StreamVerification(
             $tail->chain,
-            [...$signatures, ...$tail->signatures],
+            $tail->signatures,
             $forged ?? $tail->signature,
             $this->ranges($anchored, $retired),
             $expected - 1,
+            $tail->content,
+            $signatures,
         );
     }
 

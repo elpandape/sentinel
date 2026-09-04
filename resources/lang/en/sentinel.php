@@ -120,6 +120,7 @@ return [
                 'invalid' => 'INVALID',
                 'unknown_key' => 'unknown key',
             ],
+            'anchor_signatures' => ':tally on the anchors',
             'anchor_states' => [
                 'anchored' => 'anchored',
                 'archived' => 'retired',

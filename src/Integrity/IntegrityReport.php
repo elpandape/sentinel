@@ -92,6 +92,21 @@ final readonly class IntegrityReport
     }
 
     /**
+     * How many anchors of the whole trail landed in each SignatureState. Read next to signatures()
+     * and never added to it: one says whether what was read is attested, the other whether what
+     * stood in for what nobody read is.
+     *
+     * @return array<string, int>
+     */
+    public function anchorSignatures(): array
+    {
+        return $this->tally(array_map(
+            static fn (StreamVerification $verification): array => $verification->anchorSignatures,
+            $this->streams,
+        ));
+    }
+
+    /**
      * How many entries of the whole trail were redacted on purpose. It is a count and never a break:
      * the exit code of a verification whose only finding is declared redactions is success, because
      * a watchdog must not page for an act somebody performed deliberately and left a trail for.

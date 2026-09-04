@@ -11,6 +11,30 @@ before `1.0.0`.
 
 ## v0.21.1 → v0.22.0
 
+### `sentinel:verify --depth=anchors` and `--depth=roots` report two signature tallies
+
+A shallow walk verifies the anchors and then reads the tail nobody has anchored yet, and it was
+putting both sets of signature states into one array. Two things were wrong with that. The report
+said "2 unsigned" with no way to tell whether the two were anchors or entries. And the merge was a
+spread, which overwrites on a repeated key rather than adding: a stream with three unsigned anchors
+and five unsigned tail entries reported five, not eight.
+
+`StreamVerification` gains `anchorSignatures` and `IntegrityReport` gains `anchorSignatures()`.
+`signatures` now means what was read, on every path — on the two that return early inside the anchor
+loop it used to hold the anchors' tally, and that tally has moved to the new property. Both are
+printed in the same column, the anchors' half only when there is one.
+
+**If you read `StreamVerification->signatures` or `IntegrityReport::signatures()` after a shallow
+walk**, you were reading a mixture and are now reading the entries alone. Add the new one to get
+back the rest — and the sum you get will be right this time.
+
+### A shallow walk counts redactions again
+
+The same method dropped the tail's `content` tally on the floor, so `redacted()` answered zero after
+`--depth=anchors` or `--depth=roots` however many tombstones the tail held — while its own docblock
+promised the answer the entry walk would have given. It is carried through now. Nothing else about a
+redaction changed: it is still a count and never a break.
+
 ### A numeric option that is not a number is now no option at all
 
 `sentinel:verify` read `--from` and `--to` by casting whatever arrived, so `--from=yesterday` was

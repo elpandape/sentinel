@@ -19,6 +19,12 @@ use ElPandaPe\Sentinel\Enums\ContentState;
  *
  * An invalid signature is the one signature state that is a defect, so it arrives here in the same
  * shape a broken link does: the same reason vocabulary, the same point of rupture.
+ *
+ * Anchors are signed too, and their tally is kept apart from the entries'. The two answer different
+ * questions — whether the entries somebody read are attested, and whether the anchors standing in
+ * for the ones nobody read are — and an operator reading "two unsigned" needs to know which. One
+ * tally for both also cost the truth of the number: merged, the states they shared overwrote each
+ * other instead of adding up.
  */
 final readonly class StreamVerification
 {
@@ -27,6 +33,7 @@ final readonly class StreamVerification
      * @param  array<string, int>  $anchors  how many ranges landed in each CheckpointState
      * @param  int  $covered  entries an anchor answered for, which is to say entries nobody read
      * @param  array<string, int>  $content  how many entries landed in each ContentState
+     * @param  array<string, int>  $anchorSignatures  how many anchors landed in each SignatureState
      */
     public function __construct(
         public VerificationResult $chain,
@@ -35,6 +42,7 @@ final readonly class StreamVerification
         public array $anchors = [],
         public int $covered = 0,
         public array $content = [],
+        public array $anchorSignatures = [],
     ) {}
 
     /**

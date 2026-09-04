@@ -175,7 +175,7 @@ final class VerifyCommand extends Command
                 $this->entries($verification),
                 $this->translated($verification->isIntact() ? 'sound' : 'broken'),
                 $this->anchors($verification),
-                $this->tally($verification->signatures),
+                $this->signatures($verification),
             ], $report->streams),
         );
     }
@@ -219,6 +219,21 @@ final class VerifyCommand extends Command
         return $counted === []
             ? '—'
             : implode(', ', $counted).' ('.$this->translated('covering', ['covered' => $verification->covered]).')';
+    }
+
+    /**
+     * What was read, and then what stood in for what was not. The anchors' tally only appears where
+     * there is one, because a walk that read every entry has no anchors to attest and a second
+     * dash beside every stream would read as a signing that failed rather than as one that was
+     * never asked for.
+     */
+    private function signatures(StreamVerification $verification): string
+    {
+        $entries = $this->tally($verification->signatures);
+
+        return $verification->anchorSignatures === []
+            ? $entries
+            : $entries.', '.$this->translated('anchor_signatures', ['tally' => $this->tally($verification->anchorSignatures)]);
     }
 
     /**

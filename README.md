@@ -3433,14 +3433,19 @@ Audit 01J… carries a signature that its own key does not verify, at sequence 2
 no `--to` — a range is what the deep one answers — and they report what they did **not** read:
 
 ```
-+-----------------+---------+--------+--------------------------------------------------+
-| Stream          | Entries | Chain  | Anchors                                          |
-+-----------------+---------+--------+--------------------------------------------------+
-| global          | 208     | intact | 41 anchored (covering 41000 entries nobody read)  |
-+-----------------+---------+--------+--------------------------------------------------+
++--------+---------+--------+--------------------------------+------------------------------------+
+| Stream | Entries | Chain  | Anchors                        | Signatures                         |
++--------+---------+--------+--------------------------------+------------------------------------+
+| global | 208     | intact | 41 anchored (covering 41000    | 208 signed, 41 signed on the       |
+|        |         |        | entries nobody read)           | anchors                            |
++--------+---------+--------+--------------------------------+------------------------------------+
 Read 208 entries and took 41000 on the word of their anchors, across 1 streams. Nothing came back
 wrong, which is not the same as every entry having been read.
 ```
+
+The two signature tallies are kept apart, and that is the point of printing both: one says whether
+the entries somebody read are attested, the other whether the anchors standing in for the 41000
+nobody read are. "Two unsigned" is not an answer until you know which.
 
 **Three exit codes and not two.** A broken chain and a command that could not run are different
 facts, and a watchdog that cannot tell them apart will eventually treat one as the other. A range

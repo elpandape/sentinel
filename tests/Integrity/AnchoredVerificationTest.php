@@ -9,6 +9,7 @@ use ElPandaPe\Sentinel\Facades\Sentinel;
 use ElPandaPe\Sentinel\Integrity\IntegrityReport;
 use ElPandaPe\Sentinel\Integrity\StreamVerification;
 use ElPandaPe\Sentinel\Integrity\VerificationResult;
+use ElPandaPe\Sentinel\Support\Reference;
 use ElPandaPe\Sentinel\Tests\Fixtures\ReferenceChain;
 use ElPandaPe\Sentinel\Tests\Fixtures\SigningKeys;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 use function ElPandaPe\Sentinel\Tests\anchor;
 use function ElPandaPe\Sentinel\Tests\auditsTable;
 use function ElPandaPe\Sentinel\Tests\checkpointsTable;
+use function ElPandaPe\Sentinel\Tests\redactor;
 use function ElPandaPe\Sentinel\Tests\seedTheLongChain;
 use function ElPandaPe\Sentinel\Tests\seedTheReferenceChain;
 use function ElPandaPe\Sentinel\Tests\signingWith;
@@ -129,7 +131,7 @@ it('tallies what every anchor signature says', function (): void {
     signingWith('v1', SigningKeys::SECRET);
     anchor(ReferenceChain::STREAM, 4);
 
-    expect(verifier()->verifyAnchors(ReferenceChain::STREAM)->signatures)
+    expect(verifier()->verifyAnchors(ReferenceChain::STREAM)->anchorSignatures)
         ->toBe([SignatureState::Signed->value => 2]);
 });
 
@@ -143,7 +145,7 @@ it('reports an anchor signed with a key nobody holds as unresolvable, never as f
 
     $verification = verifier()->verifyAnchors(ReferenceChain::STREAM);
 
-    expect($verification->signatures)->toBe([SignatureState::UnknownKey->value => 2])
+    expect($verification->anchorSignatures)->toBe([SignatureState::UnknownKey->value => 2])
         ->and($verification->isIntact())->toBeTrue();
 });
 
@@ -192,6 +194,8 @@ it('adds up what every stream read and what every stream took on an anchors word
     expect($report->covered())->toBe(10)
         ->and($report->checked())->toBe(0)
         ->and($report->anchors())->toBe([CheckpointState::Anchored->value => 3])
+        ->and($report->anchorSignatures())->toBe([SignatureState::Unsigned->value => 3])
+        ->and($report->signatures())->toBeEmpty()
         ->and($report->isIntact())->toBeTrue();
 });
 
@@ -210,6 +214,25 @@ it('reports an anchor nobody signed as unsigned, which is not a defect', functio
 
     $verification = verifier()->verifyAnchors(ReferenceChain::STREAM);
 
-    expect($verification->signatures)->toBe([SignatureState::Unsigned->value => 2])
+    expect($verification->anchorSignatures)->toBe([SignatureState::Unsigned->value => 2])
         ->and($verification->isIntact())->toBeTrue();
+});
+
+it('keeps the anchors and the tail apart when they landed in the same state', function (): void {
+    anchor(ReferenceChain::STREAM, 3);
+
+    $verification = verifier()->verifyAnchors(ReferenceChain::STREAM);
+
+    expect($verification->anchorSignatures)->toBe([SignatureState::Unsigned->value => 2])
+        ->and($verification->signatures)->toBe([SignatureState::Unsigned->value => 2])
+        ->and($verification->covered)->toBe(6)
+        ->and($verification->chain->checked)->toBe(2);
+});
+
+it('counts a redaction in the tail, which a walk that read it would have counted', function (): void {
+    anchor(ReferenceChain::STREAM, 3);
+
+    redactor()->redact(Sentinel::audits()->take(8)->get()->last(), 'erasure request', new Reference('member', '77'));
+
+    expect(verifier()->verifyAnchors(ReferenceChain::STREAM)->redacted())->toBe(1);
 });
