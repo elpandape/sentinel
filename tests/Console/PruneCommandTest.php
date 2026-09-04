@@ -101,3 +101,12 @@ it('removes the same range in the number of statements it is told to', function 
 
     expect(DB::table(auditsTable())->count())->toBe(8);
 });
+
+it('reports a range that stopped folding even when it was only asked what would happen', function (): void {
+    DB::table(auditsTable())->where('sequence', 6)->update(['hash' => str_repeat('0', 64)]);
+
+    $this->artisan('sentinel:prune', ['--action' => 'delete', '--stream' => 'global', '--dry-run' => true])
+        ->assertExitCode(Command::FAILURE);
+
+    expect(DB::table(auditsTable())->count())->toBe(12);
+});

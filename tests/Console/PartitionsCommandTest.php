@@ -139,3 +139,20 @@ it('counts what it would have done without touching anything', function (): void
         ->expectsOutputToContain('Would create 2')
         ->assertExitCode(Command::SUCCESS);
 });
+
+it('reports a partition it would refuse to retire even when it was only asked what would happen', function (): void {
+    partitionTheTrail(divisionForThisEngine() ?? '');
+    seedChain(3);
+
+    sentinelConfig(['compliance' => true]);
+    CarbonImmutable::setTestNow('2027-06-15 09:00:00');
+
+    $this->artisan('sentinel:partitions', ['--ahead' => '0', '--retire' => '3 months', '--force' => true, '--dry-run' => true])
+        ->expectsOutputToContain('Refused to retire')
+        ->assertExitCode(Command::FAILURE);
+
+    expect(DB::table(auditsTable())->count())->toBe(3);
+})->skip(
+    fn (): bool => divisionForThisEngine() === null,
+    'SQLite does not partition, so there is nothing for the command to maintain.',
+);
