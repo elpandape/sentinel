@@ -6,6 +6,7 @@ use ElPandaPe\Sentinel\Compliance\AccessLog;
 use ElPandaPe\Sentinel\Facades\Sentinel;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Models\AuditAccess;
+use ElPandaPe\Sentinel\Query\AuditQuery;
 use Illuminate\Support\Facades\DB;
 
 use function ElPandaPe\Sentinel\Tests\auditData;
@@ -129,4 +130,67 @@ it('projects a read that happened inside a transaction, once it settles', functi
 
     expect(AuditAccess::query()->count())->toBe(1)
         ->and(AuditAccess::query()->firstOrFail()->audit())->not->toBeNull();
+});
+
+it('leaves one entry and one row for a paginated read', function (): void {
+    foreach (range(1, 5) as $n) {
+        ledger()->write(auditData(['subject_type' => 'App\\Models\\Invoice', 'subject_id' => (string) $n]));
+    }
+
+    sentinelConfig(['compliance' => true]);
+
+    Sentinel::audits()->paginate(2, 2);
+
+    expect(Audit::query()->where('audit_type', AccessLog::AUDIT_TYPE)->count())->toBe(1)
+        ->and(AuditAccess::query()->count())->toBe(1);
+});
+
+it('records the page it handed back and not the row it probed with', function (): void {
+    foreach (range(1, 5) as $n) {
+        ledger()->write(auditData(['subject_type' => 'App\\Models\\Invoice', 'subject_id' => (string) $n]));
+    }
+
+    sentinelConfig(['compliance' => true]);
+
+    $page = Sentinel::audits()->paginate(2, 2);
+
+    expect(AuditAccess::query()->firstOrFail()->results)->toBe($page->count())
+        ->and($page->count())->toBe(2);
+});
+
+it('records the bound and the offset of the page, which no other read reaches', function (): void {
+    foreach (range(1, 5) as $n) {
+        ledger()->write(auditData(['subject_type' => 'App\\Models\\Invoice', 'subject_id' => (string) $n]));
+    }
+
+    sentinelConfig(['compliance' => true]);
+
+    Sentinel::audits()->paginate(2, 3);
+
+    expect(AuditAccess::query()->firstOrFail()->query)
+        ->toMatchArray(['limit' => 2, 'offset' => 4]);
+});
+
+it('records the bound an uncapped read was answered under', function (): void {
+    ledger()->write(auditData());
+
+    sentinelConfig(['compliance' => true]);
+
+    Sentinel::audits()->get();
+
+    expect(AuditAccess::query()->firstOrFail()->query)->toMatchArray(['limit' => AuditQuery::DEFAULT_LIMIT]);
+});
+
+it('keeps the chain verifying with the access entries of a paginated read inside it', function (): void {
+    foreach (range(1, 5) as $n) {
+        ledger()->write(auditData(['subject_type' => 'App\\Models\\Invoice', 'subject_id' => (string) $n]));
+    }
+
+    sentinelConfig(['compliance' => true]);
+
+    Sentinel::audits()->paginate(2, 1);
+    Sentinel::audits()->paginate(2, 2);
+
+    expect(Audit::query()->where('audit_type', AccessLog::AUDIT_TYPE)->count())->toBe(2)
+        ->and(Sentinel::verifyIntegrity('global')->isIntact())->toBeTrue();
 });

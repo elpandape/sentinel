@@ -374,14 +374,19 @@ final class AuditQuery
             return $this->read($this->ledger->query($this));
         }
 
-        $query = clone $this;
-        $query->limit = self::DEFAULT_LIMIT + 1;
+        $probe = clone $this;
+        $probe->limit = self::DEFAULT_LIMIT + 1;
 
-        $entries = $this->ledger->query($query);
+        $entries = $this->ledger->query($probe);
 
-        return $entries->count() > self::DEFAULT_LIMIT
-            ? throw QueryException::unbounded(self::DEFAULT_LIMIT)
-            : $this->read($entries);
+        if ($entries->count() > self::DEFAULT_LIMIT) {
+            throw QueryException::unbounded(self::DEFAULT_LIMIT);
+        }
+
+        $asked = clone $this;
+        $asked->limit = self::DEFAULT_LIMIT;
+
+        return $this->read($entries, $asked);
     }
 
     /**
@@ -403,6 +408,11 @@ final class AuditQuery
      * One page, one call to the ledger. It asks for one entry more than the page holds and
      * hands back the page without it, which answers whether there is another page for the
      * price of a row instead of the price of a count over everything the filter matches.
+     *
+     * What compliance mode records is the page, not the probe: the extra row is how the driver
+     * answers a question, and an access entry is evidence of what somebody was handed. So the
+     * query described carries `perPage` and the offset, and the count recorded is the length of
+     * the page that went back.
      */
     public function paginate(int $perPage, int $page = 1): AuditPage
     {
@@ -410,14 +420,17 @@ final class AuditQuery
             throw QueryException::unreachablePage($perPage, $page);
         }
 
-        $query = clone $this;
-        $query->limit = $perPage + 1;
-        $query->offset = ($page - 1) * $perPage;
+        $probe = clone $this;
+        $probe->limit = $perPage + 1;
+        $probe->offset = ($page - 1) * $perPage;
 
-        $entries = $this->ledger->query($query);
+        $entries = $this->ledger->query($probe);
+
+        $asked = clone $probe;
+        $asked->limit = $perPage;
 
         return new AuditPage(
-            $entries->take($perPage)->values(),
+            $this->read($entries->take($perPage)->values(), $asked),
             $page,
             $perPage,
             $entries->count() > $perPage,
@@ -447,13 +460,17 @@ final class AuditQuery
      * What compliance mode records about a read: an entry that proves it happened, and a row that
      * makes it searchable. A refused read is not recorded, because nothing was handed over — the
      * unbounded read above throws before this is reached, deliberately.
+     *
+     * The query described is not always this one. A paginated read and an uncapped one both ask
+     * the ledger for one row more than they will hand back, so what gets recorded is a clone
+     * carrying the bound the caller actually got.
      */
-    private function read(AuditCollection $entries): AuditCollection
+    private function read(AuditCollection $entries, ?self $asked = null): AuditCollection
     {
         /** @var AccessLog $log */
         $log = app(AccessLog::class);
 
-        $log->read($this, $entries);
+        $log->read($asked ?? $this, $entries);
 
         return $entries;
     }
