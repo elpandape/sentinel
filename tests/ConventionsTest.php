@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use ElPandaPe\Sentinel\Enums\AuditEvent;
+
 use function ElPandaPe\Sentinel\Tests\exportIgnored;
 use function ElPandaPe\Sentinel\Tests\outputLiterals;
 use function ElPandaPe\Sentinel\Tests\phpFilesOffending;
@@ -39,6 +41,16 @@ it('keeps the two language files carrying the same keys', function (): void {
 
     expect(translationKeys($es))->toBe(translationKeys($en))
         ->and(translationKeys($en))->not->toBeEmpty();
+});
+
+it('names every audit event in both catalogues', function (): void {
+    $en = require dirname(__DIR__).'/resources/lang/en/sentinel.php';
+    $es = require dirname(__DIR__).'/resources/lang/es/sentinel.php';
+
+    $events = array_column(AuditEvent::cases(), 'value');
+
+    expect(array_diff($events, array_keys($en['events'])))->toBeEmpty()
+        ->and(array_diff($events, array_keys($es['events'])))->toBeEmpty();
 });
 
 it('keeps the two language files filling the same holes', function (): void {

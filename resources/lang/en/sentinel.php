@@ -213,6 +213,8 @@ return [
         'transition' => 'moved',
         'restore' => 'restored the state of',
         'rekeyed' => 're-keyed',
+        'read' => 'read',
+        'redacted' => 'redacted an entry about',
         'custom' => 'recorded',
         'login' => 'signed in',
         'logout' => 'signed out',

@@ -22,6 +22,29 @@ it('reads an entry as who did what to what', function (): void {
     expect(presenter()->entry($audit))->toBe('User #100 changed Invoice #500');
 });
 
+it('names the read and the redaction in Spanish instead of falling back to the column', function (): void {
+    app()->setLocale('es');
+
+    $read = app(DatabaseLedger::class)->write(auditData([
+        'audit_type' => 'access',
+        'event' => 'read',
+        'actor_type' => 'App\\Models\\User',
+        'actor_id' => '100',
+    ]));
+
+    $redacted = app(DatabaseLedger::class)->write(auditData([
+        'audit_type' => 'security',
+        'event' => 'redacted',
+        'actor_type' => 'App\\Models\\User',
+        'actor_id' => '100',
+        'subject_type' => 'App\\Models\\Invoice',
+        'subject_id' => '500',
+    ]));
+
+    expect(presenter()->entry($read))->toBe('User #100 leyó algo')
+        ->and(presenter()->entry($redacted))->toBe('User #100 redactó un asiento sobre Invoice #500');
+});
+
 it('reads an impersonated entry as who acted on whose behalf', function (): void {
     $audit = app(DatabaseLedger::class)->write(auditData([
         'event' => 'updated',

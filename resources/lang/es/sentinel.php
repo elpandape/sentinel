@@ -213,6 +213,8 @@ return [
         'transition' => 'movió',
         'restore' => 'restauró el estado de',
         'rekeyed' => 'recifró',
+        'read' => 'leyó',
+        'redacted' => 'redactó un asiento sobre',
         'custom' => 'registró',
         'login' => 'inició sesión',
         'logout' => 'cerró sesión',
