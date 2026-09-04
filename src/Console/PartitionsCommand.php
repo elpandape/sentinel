@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Console;
 
 use Carbon\CarbonImmutable;
+use ElPandaPe\Sentinel\Console\Concerns\Translates;
 use ElPandaPe\Sentinel\Partitions\Maintainer;
 use ElPandaPe\Sentinel\Partitions\Maintenance;
 use ElPandaPe\Sentinel\Retention\Duration;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Console\Command;
 use Illuminate\Database\DatabaseManager;
-use Override;
 use Throwable;
 
 /**
@@ -32,6 +32,13 @@ use Throwable;
  */
 final class PartitionsCommand extends Command
 {
+    use Translates;
+
+    /**
+     * @var list<string>
+     */
+    public const array TABLES = ['audits', 'access_log'];
+
     /**
      * The option help stays in English, unlike everything the command prints. Options are built in
      * the constructor, before the package has loaded its translations, so a translated one would
@@ -44,18 +51,12 @@ final class PartitionsCommand extends Command
         {--force : Retire a partition that still holds entries. Refused under compliance mode whatever this says}
         {--dry-run : Report what a run would do, and do nothing}';
 
-    #[Override]
-    public function getDescription(): string
-    {
-        return $this->translated('description');
-    }
-
     public function handle(Maintainer $maintainer, DatabaseManager $databases, Config $config): int
     {
         $name = $this->text('table') ?? 'audits';
 
-        if (! in_array($name, ['audits', 'access_log'], true)) {
-            $this->warn($this->translated('unknown_table', ['table' => $name, 'accepted' => 'audits, access_log']));
+        if (! in_array($name, self::TABLES, true)) {
+            $this->warn($this->translated('unknown_table', ['table' => $name, 'accepted' => implode(', ', self::TABLES)]));
 
             return self::INVALID;
         }
@@ -160,10 +161,4 @@ final class PartitionsCommand extends Command
     /**
      * @param  array<string, int|string>  $replace
      */
-    private function translated(string $key, array $replace = []): string
-    {
-        $line = __('sentinel::sentinel.commands.partitions.'.$key, $replace);
-
-        return is_string($line) ? $line : $key;
-    }
 }

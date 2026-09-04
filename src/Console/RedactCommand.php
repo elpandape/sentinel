@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Console;
 
+use ElPandaPe\Sentinel\Console\Concerns\Translates;
 use ElPandaPe\Sentinel\Exceptions\ComplianceException;
 use ElPandaPe\Sentinel\Exceptions\RedactionException;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Redaction\Redactor;
 use ElPandaPe\Sentinel\Support\Reference;
 use Illuminate\Console\Command;
-use Override;
 use Throwable;
 
 /**
@@ -32,6 +32,8 @@ use Throwable;
  */
 final class RedactCommand extends Command
 {
+    use Translates;
+
     /**
      * The option help stays in English, unlike everything the command prints: options are built in
      * the constructor, before the package has loaded its translations.
@@ -41,12 +43,6 @@ final class RedactCommand extends Command
         {--reason= : Why it is being destroyed, kept on the entry and on the trail}
         {--actor= : Who ordered it, as type:id — required, because a console process resolves nobody}
         {--dry-run : Say what would be destroyed, and destroy nothing}';
-
-    #[Override]
-    public function getDescription(): string
-    {
-        return $this->translated('description');
-    }
 
     public function handle(Redactor $redactor, Audit $audits): int
     {
@@ -137,10 +133,4 @@ final class RedactCommand extends Command
     /**
      * @param  array<string, int|string>  $replace
      */
-    private function translated(string $key, array $replace = []): string
-    {
-        $line = __('sentinel::sentinel.commands.redact.'.$key, $replace);
-
-        return is_string($line) ? $line : $key;
-    }
 }

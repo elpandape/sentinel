@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Console;
 
 use ElPandaPe\Sentinel\Buffer\Flusher;
+use ElPandaPe\Sentinel\Console\Concerns\Translates;
 use ElPandaPe\Sentinel\Enums\Mode;
 use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Console\Command;
-use Override;
 use Throwable;
 
 /**
@@ -25,15 +25,9 @@ use Throwable;
  */
 final class FlushCommand extends Command
 {
+    use Translates;
+
     protected $signature = 'sentinel:flush';
-
-    #[Override]
-    public function getDescription(): string
-    {
-        $line = trans('sentinel::sentinel.commands.flush.description');
-
-        return is_string($line) ? $line : '';
-    }
 
     /**
      * A flush that did not settle exits failure rather than invalid, which is the opposite of what
@@ -45,7 +39,7 @@ final class FlushCommand extends Command
     public function handle(Config $config, Flusher $flusher): int
     {
         if ($config->mode() !== Mode::Buffered) {
-            $this->warn((string) trans('sentinel::sentinel.commands.flush.not_buffered', ['mode' => $config->mode()->value]));
+            $this->warn($this->translated('not_buffered', ['mode' => $config->mode()->value]));
 
             return self::INVALID;
         }
@@ -53,12 +47,12 @@ final class FlushCommand extends Command
         try {
             $settled = $flusher->flush();
         } catch (Throwable $failure) {
-            $this->error((string) trans('sentinel::sentinel.commands.flush.failed', ['reason' => $failure->getMessage()]));
+            $this->error($this->translated('failed', ['reason' => $failure->getMessage()]));
 
             return self::FAILURE;
         }
 
-        $this->info((string) trans('sentinel::sentinel.commands.flush.settled', ['count' => $settled]));
+        $this->info($this->translated('settled', ['count' => $settled]));
 
         return self::SUCCESS;
     }

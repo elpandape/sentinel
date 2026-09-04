@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Console;
 
 use Carbon\CarbonImmutable;
+use ElPandaPe\Sentinel\Console\Concerns\Translates;
 use ElPandaPe\Sentinel\Contracts\EnumeratesStreams;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Enums\PruneAction;
@@ -14,7 +15,6 @@ use ElPandaPe\Sentinel\Retention\Pruner;
 use ElPandaPe\Sentinel\Retention\PruneReport;
 use ElPandaPe\Sentinel\Retention\Pruning;
 use Illuminate\Console\Command;
-use Override;
 use Throwable;
 
 /**
@@ -32,6 +32,8 @@ use Throwable;
  */
 final class PruneCommand extends Command
 {
+    use Translates;
+
     /**
      * The option help stays in English, unlike everything the command prints: options are built in
      * the constructor, before the package has loaded its translations.
@@ -41,12 +43,6 @@ final class PruneCommand extends Command
         {--stream= : Prune this stream instead of every one}
         {--batch= : How many entries one statement removes; defaults to the configured size}
         {--dry-run : Report what a run would remove, and remove nothing}';
-
-    #[Override]
-    public function getDescription(): string
-    {
-        return $this->translated('description');
-    }
 
     public function handle(Pruner $pruner, Ledger $ledger): int
     {
@@ -164,10 +160,4 @@ final class PruneCommand extends Command
     /**
      * @param  array<string, int|string>  $replace
      */
-    private function translated(string $key, array $replace = []): string
-    {
-        $line = trans('sentinel::sentinel.commands.prune.'.$key, $replace);
-
-        return is_string($line) ? $line : '';
-    }
 }

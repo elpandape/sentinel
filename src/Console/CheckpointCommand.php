@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Console;
 
+use ElPandaPe\Sentinel\Console\Concerns\Translates;
 use ElPandaPe\Sentinel\Contracts\EnumeratesStreams;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Exceptions\QueryException;
 use ElPandaPe\Sentinel\Integrity\Checkpoint;
 use ElPandaPe\Sentinel\Integrity\Checkpoints;
 use Illuminate\Console\Command;
-use Override;
 use Throwable;
 
 /**
@@ -26,18 +26,14 @@ use Throwable;
  */
 final class CheckpointCommand extends Command
 {
+    use Translates;
+
     /**
      * The option help stays in English, unlike everything the command prints: options are built in
      * the constructor, before the package has loaded its translations.
      */
     protected $signature = 'sentinel:checkpoint
         {--stream= : Anchor this stream instead of every one}';
-
-    #[Override]
-    public function getDescription(): string
-    {
-        return $this->translated('description');
-    }
 
     public function handle(Checkpoints $checkpoints, Ledger $ledger): int
     {
@@ -102,10 +98,4 @@ final class CheckpointCommand extends Command
     /**
      * @param  array<string, int|string>  $replace
      */
-    private function translated(string $key, array $replace = []): string
-    {
-        $line = trans('sentinel::sentinel.commands.checkpoint.'.$key, $replace);
-
-        return is_string($line) ? $line : '';
-    }
 }

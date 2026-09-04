@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Console;
 
+use ElPandaPe\Sentinel\Console\Concerns\Translates;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use ElPandaPe\Sentinel\Security\Rekeyer;
 use Illuminate\Console\Command;
-use Override;
 use Throwable;
 
 /**
@@ -24,6 +24,8 @@ use Throwable;
  */
 final class RekeyCommand extends Command
 {
+    use Translates;
+
     /**
      * The option help stays in English, unlike everything the command prints: options are built in
      * the constructor, before the package has loaded its translations.
@@ -34,12 +36,6 @@ final class RekeyCommand extends Command
         {--type= : Only this audit type}
         {--limit=500 : How many entries at most}
         {--dry-run : Say how many would be re-encrypted, and re-encrypt none}';
-
-    #[Override]
-    public function getDescription(): string
-    {
-        return $this->translated('description');
-    }
 
     public function handle(Rekeyer $rekeyer, AuditQuery $query): int
     {
@@ -108,10 +104,4 @@ final class RekeyCommand extends Command
     /**
      * @param  array<string, int|string>  $replace
      */
-    private function translated(string $key, array $replace = []): string
-    {
-        $line = __('sentinel::sentinel.commands.rekey.'.$key, $replace);
-
-        return is_string($line) ? $line : $key;
-    }
 }

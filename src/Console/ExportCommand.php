@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Console;
 
 use ElPandaPe\Sentinel\Compliance\Export;
+use ElPandaPe\Sentinel\Console\Concerns\Translates;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Filesystem\Factory;
-use Override;
 use Throwable;
 
 /**
@@ -23,6 +23,8 @@ use Throwable;
  */
 final class ExportCommand extends Command
 {
+    use Translates;
+
     /**
      * The option help stays in English, unlike everything the command prints: options are built in
      * the constructor, before the package has loaded its translations.
@@ -34,12 +36,6 @@ final class ExportCommand extends Command
         {--tenant= : Only this tenant}
         {--type= : Only this audit type}
         {--limit=500 : How many entries at most}';
-
-    #[Override]
-    public function getDescription(): string
-    {
-        return $this->translated('description');
-    }
 
     public function handle(Export $export, AuditQuery $query, Factory $disks): int
     {
@@ -122,10 +118,4 @@ final class ExportCommand extends Command
     /**
      * @param  array<string, int|string>  $replace
      */
-    private function translated(string $key, array $replace = []): string
-    {
-        $line = __('sentinel::sentinel.commands.export.'.$key, $replace);
-
-        return is_string($line) ? $line : $key;
-    }
 }

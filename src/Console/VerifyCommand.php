@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Console;
 
+use ElPandaPe\Sentinel\Console\Concerns\Translates;
 use ElPandaPe\Sentinel\Contracts\EnumeratesStreams;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Enums\CheckpointState;
@@ -15,7 +16,6 @@ use ElPandaPe\Sentinel\Integrity\StreamVerification;
 use ElPandaPe\Sentinel\Integrity\VerificationResult;
 use ElPandaPe\Sentinel\Integrity\Verifier;
 use Illuminate\Console\Command;
-use Override;
 use Throwable;
 
 /**
@@ -30,6 +30,8 @@ use Throwable;
  */
 final class VerifyCommand extends Command
 {
+    use Translates;
+
     private const string ENTRIES = 'entries';
 
     private const string ANCHORS = 'anchors';
@@ -47,12 +49,6 @@ final class VerifyCommand extends Command
         {--to= : Last sequence to verify; needs a stream and the entries depth}
         {--depth=entries : entries reads and rehashes every one; roots folds each range again; anchors reads only the anchors}
         {--projections : Also check that the relation index still matches the entries}';
-
-    #[Override]
-    public function getDescription(): string
-    {
-        return $this->translated('description');
-    }
 
     public function handle(Verifier $verifier, Projections $projections, Ledger $ledger): int
     {
@@ -266,10 +262,4 @@ final class VerifyCommand extends Command
     /**
      * @param  array<string, int|string>  $replace
      */
-    private function translated(string $key, array $replace = []): string
-    {
-        $line = trans('sentinel::sentinel.commands.verify.'.$key, $replace);
-
-        return is_string($line) ? $line : '';
-    }
 }

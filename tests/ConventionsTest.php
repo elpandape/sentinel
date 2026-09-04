@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use function ElPandaPe\Sentinel\Tests\outputLiterals;
 use function ElPandaPe\Sentinel\Tests\phpFilesOffending;
 use function ElPandaPe\Sentinel\Tests\placeholders;
 use function ElPandaPe\Sentinel\Tests\translationKeys;
@@ -19,6 +20,10 @@ it('leaves no doc block stranded above another', function (): void {
 
 it('cites no tool-generated identifier in a comment', function (): void {
     expect(phpFilesOffending('#(?:(?<!:)//|^\s*\*)[^\n]*\b[0-9a-f]{12,}\b#m'))->toBeEmpty();
+});
+
+it('prints nothing a command wrote itself, the option help aside — that is built before the translations load', function (): void {
+    expect(outputLiterals())->toBeEmpty();
 });
 
 it('keeps the two language files carrying the same keys', function (): void {

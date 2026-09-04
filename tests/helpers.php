@@ -163,6 +163,49 @@ function phpFilesOffending(string $pattern, ?string $directory = null): array
 }
 
 /**
+ * Every place a command prints a string it wrote itself instead of one the translations hold.
+ *
+ * Only what reaches a reader counts: the arguments to the printing methods, and the header row of
+ * a table, which is a label. Three things inside those are not text and are struck out before
+ * looking — the translation key, which is a coordinate; the keys of a replacement array, which
+ * name placeholders; and the glue an implode joins with, which is punctuation. Everything else
+ * that is quoted there is a string somebody wrote in English by hand.
+ *
+ * The cells under a header are data, and the option help in a signature is built in the
+ * constructor before the translations are loaded, so neither is looked at.
+ *
+ * @return list<string>
+ */
+function outputLiterals(): array
+{
+    $offenders = [];
+
+    foreach (phpFiles(dirname(__DIR__).'/src/Console') as $file) {
+        $headers = false;
+
+        foreach (file($file, FILE_IGNORE_NEW_LINES) ?: [] as $number => $line) {
+            $prints = preg_match('#->(?:info|warn|error|line|comment|question|alert)\\(#', $line) === 1;
+
+            $written = (string) preg_replace([
+                "#translated\\('[^']*'#",
+                "#'[^']*'\\s*=>#",
+                "#implode\\('[^']*',#",
+            ], '', $line);
+
+            if (($prints || $headers) && preg_match('#[\'"]#', $written) === 1) {
+                $offenders[] = basename($file).':'.($number + 1);
+            }
+
+            $headers = $headers
+                ? ! str_contains($line, '],')
+                : preg_match('#\\$this->table\\($#', $line) === 1;
+        }
+    }
+
+    return $offenders;
+}
+
+/**
  * @return list<string>
  */
 function phpFiles(?string $directory = null): array
