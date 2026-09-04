@@ -47,6 +47,12 @@ enum Filter: string
     case Route = 'route';
 
     /**
+     * The one that is not a criterion but a place in the walk. A driver that cannot order by the
+     * identifier cannot honour it, so it is declared like the rest rather than assumed.
+     */
+    case After = 'after';
+
+    /**
      * @return list<self>
      */
     public static function answeredBy(Ledger $ledger): array
@@ -99,6 +105,7 @@ enum Filter: string
             self::Type => 'whereType',
             self::Ip => 'whereIp',
             self::Route => 'whereRoute',
+            self::After => 'after',
         };
     }
 }

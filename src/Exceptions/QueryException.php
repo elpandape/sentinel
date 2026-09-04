@@ -57,6 +57,11 @@ final class QueryException extends InvalidArgumentException
         );
     }
 
+    public static function noCursor(): self
+    {
+        return new self('Resuming after nothing is resuming from the start; pass the identifier the last pass reported, or leave the cursor off.');
+    }
+
     public static function unreachableLimit(int $limit): self
     {
         return new self("A read of {$limit} entries is not a read: ask for at least one.");

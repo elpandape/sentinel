@@ -199,6 +199,42 @@ abstract class LedgerContractTestCase extends TestCase
     }
 
     /**
+     * The cursor is a place in the walk rather than a property of an entry, so it cannot travel in
+     * the table of filters above: what it narrows by is the identifier of an entry the test has to
+     * write first. A driver that orders by anything but the identifier answers this wrong rather
+     * than not at all, which is why it is worth a case of its own.
+     */
+    public function test_it_resumes_a_walk_after_the_entry_it_was_given(): void
+    {
+        $ledger = $this->ledger();
+        $first = $ledger->write($this->auditData());
+        $second = $ledger->write($this->auditData());
+        $this->settle($ledger);
+
+        if (! $this->translates($ledger, Filter::After)) {
+            $this->expectException(LedgerException::class);
+        }
+
+        $found = $ledger->query($this->asking()->after($first->id));
+
+        $this->assertSame($this->retains() ? [$second->id] : [], $found->pluck('id')->all());
+    }
+
+    public function test_it_answers_nothing_after_the_last_entry_it_holds(): void
+    {
+        $ledger = $this->ledger();
+        $ledger->write($this->auditData());
+        $last = $ledger->write($this->auditData());
+        $this->settle($ledger);
+
+        if (! $this->translates($ledger, Filter::After)) {
+            $this->expectException(LedgerException::class);
+        }
+
+        $this->assertSame([], $ledger->query($this->asking()->after($last->id))->pluck('id')->all());
+    }
+
+    /**
      * A driver that keeps its own counter has to move it when it takes an entry it did not number,
      * or the next write of that subject hands out a number the appended entry already holds —
      * permanently, and with nothing to notice it by. A driver that derives the number from what it

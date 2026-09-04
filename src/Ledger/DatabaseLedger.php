@@ -199,6 +199,7 @@ final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, En
             ->when($query->ip, fn (Builder $entries, string $ip): Builder => $this->narrowByContext($entries, Filter::Ip, $ip))
             ->when($query->route, fn (Builder $entries, string $route): Builder => $this->narrowByContext($entries, Filter::Route, $route))
             ->when($query->versions, static fn (Builder $entries, array $versions): Builder => $entries->whereIn('version', $versions))
+            ->when($query->after, static fn (Builder $entries, string $after): Builder => $entries->where('id', '>', $after))
             ->orderBy($clock, $direction)
             ->orderBy('id', $direction)
             ->when($query->offset, static fn (Builder $entries, int $offset): Builder => $entries->offset($offset))

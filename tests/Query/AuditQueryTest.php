@@ -148,12 +148,22 @@ it('refuses a filter the ledger cannot translate, as the filter is added', funct
         ->and($query->for(AuditedSubject::class, 7)->subject?->id)->toBe('7');
 });
 
+it('carries the cursor a walk resumes from', function (): void {
+    expect(auditQuery()->after('01JXXXXXXXXXXXXXXXXXXXXXXX')->after)->toBe('01JXXXXXXXXXXXXXXXXXXXXXXX')
+        ->and(auditQuery()->after)->toBeNull();
+});
+
+it('refuses a cursor that resumes from nothing', function (): void {
+    expect(fn (): AuditQuery => auditQuery()->after(''))
+        ->toThrow(QueryException::class, 'Resuming after nothing');
+});
+
 it('names the method that reaches each filter', function (): void {
     expect(array_map(static fn (Filter $filter): string => $filter->method(), Filter::cases()))
         ->toBe([
             'for', 'by', 'whereEvent', 'whereSeverity', 'whereSource', 'forTenant', 'inTransaction',
             'withTrace', 'between', 'whereTag', 'whereFieldChanged', 'whereVersion', 'whereRelation',
-            'whereRelated', 'whereOperation', 'whereType', 'whereIp', 'whereRoute',
+            'whereRelated', 'whereOperation', 'whereType', 'whereIp', 'whereRoute', 'after',
         ]);
 });
 

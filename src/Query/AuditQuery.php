@@ -86,6 +86,11 @@ final class AuditQuery
     public private(set) ?int $offset = null;
 
     /**
+     * Where a walk left off. Not a filter over what an entry is, but over where it sits.
+     */
+    public private(set) ?string $after = null;
+
+    /**
      * @var list<Filter>
      */
     private array $supported;
@@ -387,6 +392,27 @@ final class AuditQuery
         $asked->limit = self::DEFAULT_LIMIT;
 
         return $this->read($entries, $asked);
+    }
+
+    /**
+     * Everything written after this entry, by identifier and not by clock. It is what makes a walk
+     * resumable: an operator hands back the last identifier a pass reported and the next one starts
+     * behind it, instead of reading the same prefix again.
+     *
+     * The identifier is the axis on purpose. It is total, it is the tail of every composite index
+     * the table carries, and a ULID sorts by the instant it was minted — where two entries sharing
+     * a clock reading do not order against each other at all.
+     */
+    public function after(string $id): self
+    {
+        if ($id === '') {
+            throw QueryException::noCursor();
+        }
+
+        $query = $this->accepting(Filter::After);
+        $query->after = $id;
+
+        return $query;
     }
 
     /**

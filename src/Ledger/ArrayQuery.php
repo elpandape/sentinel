@@ -50,6 +50,7 @@ final readonly class ArrayQuery
             && ($query->relations?->matches($this->linesOf($audit)) ?? true)
             && ($query->changedField === null || $this->touches($audit, $query->changedField))
             && ($query->versions === [] || in_array($audit->version, $query->versions, true))
+            && ($query->after === null || $audit->id > $query->after)
             && $this->equals($query->type, $audit->audit_type)
             && $this->equals($query->event, $audit->event)
             && $this->equals($query->severity?->value, $audit->severity->value)

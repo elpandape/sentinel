@@ -120,6 +120,7 @@ final class AccessLog
             'audit_type' => $query->type,
             'changed_field' => $query->changedField,
             'versions' => $query->versions === [] ? null : $query->versions,
+            'after' => $query->after,
             'limit' => $query->limit,
             'offset' => $query->offset,
         ], static fn (mixed $value): bool => $value !== null);
