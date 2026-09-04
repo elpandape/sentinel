@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Buffer\Flusher;
+use ElPandaPe\Sentinel\Buffer\MemoryBuffer;
 use ElPandaPe\Sentinel\Contracts\Buffer;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Events\BufferFlushFailed;
@@ -10,6 +11,8 @@ use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
 use ElPandaPe\Sentinel\Tests\Fixtures\AuditedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\FailingLedger;
 use ElPandaPe\Sentinel\Tests\Fixtures\LateFailingLedger;
+use ElPandaPe\Sentinel\Tests\Fixtures\OneWayBuffer;
+use ElPandaPe\Sentinel\Tests\Fixtures\UnreadableBuffer;
 use Illuminate\Queue\Events\WorkerStopping;
 use Illuminate\Support\Facades\Event;
 
@@ -147,4 +150,64 @@ it('renders what it carries in the language the application is using', function 
     app()->setLocale('es');
 
     expect($event->message())->toContain('El buffer no se pudo asentar');
+});
+
+it('says a flush failed when the buffer could not even be read', function (): void {
+    app()->instance(Buffer::class, new UnreadableBuffer(new MemoryBuffer));
+
+    $announced = [];
+    Event::listen(BufferFlushFailed::class, static function (BufferFlushFailed $event) use (&$announced): void {
+        $announced[] = $event;
+    });
+
+    expect(static fn (): int => app(Flusher::class)->flush())->toThrow(UnreadableBuffer::REASON)
+        ->and($announced)->toHaveCount(1)
+        ->and($announced[0]->taken)->toBe(0)
+        ->and($announced[0]->settled)->toBe(0)
+        ->and($announced[0]->returned)->toBe(0)
+        ->and($announced[0]->skipped())->toBe(0);
+});
+
+it('leaves nothing in limbo when the buffer stops answering partway through', function (): void {
+    config()->set('sentinel.buffer.size', 1);
+
+    $buffer = new UnreadableBuffer(new MemoryBuffer, 2);
+    app()->instance(Buffer::class, $buffer);
+
+    foreach (['READ1', 'READ2'] as $suffix) {
+        $buffer->push(auditData(['capture_id' => frozenUlid($suffix)]));
+    }
+
+    $announced = [];
+    Event::listen(BufferFlushFailed::class, static function (BufferFlushFailed $event) use (&$announced): void {
+        $announced[] = $event;
+    });
+
+    expect(static fn (): int => app(Flusher::class)->flush())->toThrow(UnreadableBuffer::REASON)
+        ->and($announced)->toHaveCount(1)
+        ->and($announced[0]->taken)->toBe(2)
+        ->and($announced[0]->settled)->toBe(2)
+        ->and($announced[0]->returned)->toBe(0)
+        ->and($announced[0]->skipped())->toBe(0);
+});
+
+it('counts a batch the buffer refuses to take back as lost, and still blames the ledger', function (): void {
+    $buffer = new OneWayBuffer(new MemoryBuffer);
+    app()->instance(Buffer::class, $buffer);
+    app()->instance(Ledger::class, new FailingLedger);
+
+    $buffer->push(auditData());
+
+    $announced = [];
+    Event::listen(BufferFlushFailed::class, static function (BufferFlushFailed $event) use (&$announced): void {
+        $announced[] = $event;
+    });
+
+    expect(static fn (): int => app(Flusher::class)->flush())->toThrow(FailingLedger::REASON)
+        ->and($announced)->toHaveCount(1)
+        ->and($announced[0]->taken)->toBe(1)
+        ->and($announced[0]->settled)->toBe(0)
+        ->and($announced[0]->returned)->toBe(0)
+        ->and($announced[0]->skipped())->toBe(1)
+        ->and($announced[0]->reason->getMessage())->toBe(FailingLedger::REASON);
 });
