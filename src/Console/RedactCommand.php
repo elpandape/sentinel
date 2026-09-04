@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Console;
 
+use ElPandaPe\Sentinel\Console\Concerns\ReadsOptions;
 use ElPandaPe\Sentinel\Console\Concerns\Translates;
 use ElPandaPe\Sentinel\Exceptions\ComplianceException;
 use ElPandaPe\Sentinel\Exceptions\RedactionException;
@@ -32,6 +33,7 @@ use Throwable;
  */
 final class RedactCommand extends Command
 {
+    use ReadsOptions;
     use Translates;
 
     /**
@@ -107,30 +109,4 @@ final class RedactCommand extends Command
 
         return self::SUCCESS;
     }
-
-    /**
-     * The actor as `type:id`. The type is taken as written rather than resolved to a class: a morph
-     * map is what decides what a type means here, and the command is not entitled to guess past it.
-     */
-    private function reference(string $actor): ?Reference
-    {
-        $split = strrpos($actor, ':');
-
-        if (in_array($split, [false, 0, strlen($actor) - 1], true)) {
-            return null;
-        }
-
-        return new Reference(substr($actor, 0, $split), substr($actor, $split + 1));
-    }
-
-    private function text(string $option): ?string
-    {
-        $value = $this->option($option);
-
-        return is_string($value) && $value !== '' ? $value : null;
-    }
-
-    /**
-     * @param  array<string, int|string>  $replace
-     */
 }

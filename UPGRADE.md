@@ -11,6 +11,16 @@ before `1.0.0`.
 
 ## v0.21.1 → v0.22.0
 
+### A numeric option that is not a number is now no option at all
+
+`sentinel:verify` read `--from` and `--to` by casting whatever arrived, so `--from=yesterday` was
+sequence `0` and the command answered a question nobody had asked. `sentinel:partitions` asked
+whether the text was a number first, and the two readers had been diverging for four minors.
+
+Asking is the rule that survives. A numeric option whose value is not numeric is now treated as
+absent, which for both of those means "no bound" rather than "bound at zero". Nothing that passed
+a number is affected.
+
 ### Two commands now exit `2` where they exited `1`
 
 The three exit codes have meant the same thing since `sentinel:verify` introduced them: `0` is the

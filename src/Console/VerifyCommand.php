@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Console;
 
+use ElPandaPe\Sentinel\Console\Concerns\ReadsOptions;
 use ElPandaPe\Sentinel\Console\Concerns\Translates;
-use ElPandaPe\Sentinel\Contracts\EnumeratesStreams;
+use ElPandaPe\Sentinel\Console\Concerns\WalksStreams;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Enums\CheckpointState;
 use ElPandaPe\Sentinel\Enums\SignatureState;
-use ElPandaPe\Sentinel\Exceptions\QueryException;
 use ElPandaPe\Sentinel\Integrity\IntegrityReport;
 use ElPandaPe\Sentinel\Integrity\Projections;
 use ElPandaPe\Sentinel\Integrity\StreamVerification;
@@ -30,7 +30,9 @@ use Throwable;
  */
 final class VerifyCommand extends Command
 {
+    use ReadsOptions;
     use Translates;
+    use WalksStreams;
 
     private const string ENTRIES = 'entries';
 
@@ -131,7 +133,7 @@ final class VerifyCommand extends Command
                 : new IntegrityReport([$verifier->verify($stream, $from, $to)]);
         }
 
-        $streams = $stream !== null ? [$stream] : $this->named($ledger);
+        $streams = $stream !== null ? [$stream] : $this->streams($ledger);
 
         return new IntegrityReport(array_map(
             fn (string $name): StreamVerification => $depth === self::ANCHORS
@@ -139,16 +141,6 @@ final class VerifyCommand extends Command
                 : $verifier->verifyRoots($name),
             $streams,
         ));
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function named(Ledger $ledger): array
-    {
-        return $ledger instanceof EnumeratesStreams
-            ? $ledger->streams()
-            : throw QueryException::cannotEnumerateStreams($ledger::class);
     }
 
     /**
@@ -243,20 +235,6 @@ final class VerifyCommand extends Command
         }
 
         return $counted === [] ? '—' : implode(', ', $counted);
-    }
-
-    private function text(string $option): ?string
-    {
-        $value = $this->option($option);
-
-        return is_string($value) && $value !== '' ? $value : null;
-    }
-
-    private function number(string $option): ?int
-    {
-        $value = $this->option($option);
-
-        return is_string($value) && $value !== '' ? (int) $value : null;
     }
 
     /**

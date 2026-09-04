@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Console;
 
 use Carbon\CarbonImmutable;
+use ElPandaPe\Sentinel\Console\Concerns\ReadsOptions;
 use ElPandaPe\Sentinel\Console\Concerns\Translates;
-use ElPandaPe\Sentinel\Contracts\EnumeratesStreams;
+use ElPandaPe\Sentinel\Console\Concerns\WalksStreams;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Enums\PruneAction;
-use ElPandaPe\Sentinel\Exceptions\QueryException;
 use ElPandaPe\Sentinel\Integrity\VerificationResult;
 use ElPandaPe\Sentinel\Retention\Pruner;
 use ElPandaPe\Sentinel\Retention\PruneReport;
@@ -32,7 +32,9 @@ use Throwable;
  */
 final class PruneCommand extends Command
 {
+    use ReadsOptions;
     use Translates;
+    use WalksStreams;
 
     /**
      * The option help stays in English, unlike everything the command prints: options are built in
@@ -88,23 +90,13 @@ final class PruneCommand extends Command
         $stream = $this->option('stream');
         $batch = $this->option('batch');
         $slice = is_string($batch) && $batch !== '' ? (int) $batch : null;
-        $streams = is_string($stream) && $stream !== '' ? [$stream] : $this->named($ledger);
+        $streams = is_string($stream) && $stream !== '' ? [$stream] : $this->streams($ledger);
         $now = CarbonImmutable::now();
 
         return new PruneReport(array_map(
             static fn (string $name): Pruning => $pruner->prune($pruner->plan($name, $now), $action, $dryRun, $slice),
             $streams,
         ));
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function named(Ledger $ledger): array
-    {
-        return $ledger instanceof EnumeratesStreams
-            ? $ledger->streams()
-            : throw QueryException::cannotEnumerateStreams($ledger::class);
     }
 
     private function render(PruneReport $report): void

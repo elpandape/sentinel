@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Console;
 
+use ElPandaPe\Sentinel\Console\Concerns\ReadsOptions;
 use ElPandaPe\Sentinel\Console\Concerns\Translates;
-use ElPandaPe\Sentinel\Contracts\EnumeratesStreams;
+use ElPandaPe\Sentinel\Console\Concerns\WalksStreams;
 use ElPandaPe\Sentinel\Contracts\Ledger;
-use ElPandaPe\Sentinel\Exceptions\QueryException;
 use ElPandaPe\Sentinel\Integrity\Checkpoint;
 use ElPandaPe\Sentinel\Integrity\Checkpoints;
 use Illuminate\Console\Command;
@@ -26,7 +26,9 @@ use Throwable;
  */
 final class CheckpointCommand extends Command
 {
+    use ReadsOptions;
     use Translates;
+    use WalksStreams;
 
     /**
      * The option help stays in English, unlike everything the command prints: options are built in
@@ -40,7 +42,7 @@ final class CheckpointCommand extends Command
         $stream = $this->option('stream');
 
         try {
-            $streams = is_string($stream) && $stream !== '' ? [$stream] : $this->every($ledger);
+            $streams = is_string($stream) && $stream !== '' ? [$stream] : $this->streams($ledger);
             $issued = [];
 
             foreach ($streams as $name) {
@@ -62,16 +64,6 @@ final class CheckpointCommand extends Command
         $this->info($this->translated('anchored', ['count' => count($issued)]));
 
         return self::SUCCESS;
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function every(Ledger $ledger): array
-    {
-        return $ledger instanceof EnumeratesStreams
-            ? $ledger->streams()
-            : throw QueryException::cannotEnumerateStreams($ledger::class);
     }
 
     /**

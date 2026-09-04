@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Console;
 
 use ElPandaPe\Sentinel\Compliance\Export;
+use ElPandaPe\Sentinel\Console\Concerns\NarrowsTheTrail;
 use ElPandaPe\Sentinel\Console\Concerns\Translates;
 use ElPandaPe\Sentinel\Query\AuditQuery;
 use Illuminate\Console\Command;
@@ -23,6 +24,7 @@ use Throwable;
  */
 final class ExportCommand extends Command
 {
+    use NarrowsTheTrail;
     use Translates;
 
     /**
@@ -89,30 +91,6 @@ final class ExportCommand extends Command
         $this->info($this->translated('rendered', ['entries' => $rendered->entries, 'digest' => $rendered->digest]));
 
         return self::SUCCESS;
-    }
-
-    private function narrowed(AuditQuery $query): AuditQuery
-    {
-        $tenant = $this->text('tenant');
-        $type = $this->text('type');
-        $limit = $this->text('limit');
-
-        if ($tenant !== null) {
-            $query = $query->forTenant($tenant);
-        }
-
-        if ($type !== null) {
-            $query = $query->whereType($type);
-        }
-
-        return $query->take($limit === null ? 500 : (int) $limit);
-    }
-
-    private function text(string $option): ?string
-    {
-        $value = $this->option($option);
-
-        return is_string($value) && $value !== '' ? $value : null;
     }
 
     /**

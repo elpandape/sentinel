@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Console;
 
 use Carbon\CarbonImmutable;
+use ElPandaPe\Sentinel\Console\Concerns\ReadsOptions;
 use ElPandaPe\Sentinel\Console\Concerns\Translates;
 use ElPandaPe\Sentinel\Partitions\Maintainer;
 use ElPandaPe\Sentinel\Partitions\Maintenance;
@@ -32,6 +33,7 @@ use Throwable;
  */
 final class PartitionsCommand extends Command
 {
+    use ReadsOptions;
     use Translates;
 
     /**
@@ -142,20 +144,6 @@ final class PartitionsCommand extends Command
         $declared = $this->text('retire');
 
         return $declared === null ? null : Duration::of('--retire', $declared);
-    }
-
-    private function text(string $option): ?string
-    {
-        $value = $this->option($option);
-
-        return is_string($value) && $value !== '' ? $value : null;
-    }
-
-    private function number(string $option): ?int
-    {
-        $value = $this->option($option);
-
-        return is_string($value) && is_numeric($value) ? (int) $value : null;
     }
 
     /**
