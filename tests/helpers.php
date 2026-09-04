@@ -22,6 +22,7 @@ use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Enums\FanoutPolicy;
 use ElPandaPe\Sentinel\Enums\RelationOperation;
 use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Import\Origins\Altek;
 use ElPandaPe\Sentinel\Import\Origins\OwenIt;
 use ElPandaPe\Sentinel\Import\Row;
 use ElPandaPe\Sentinel\Integrity\Checkpoint;
@@ -66,6 +67,7 @@ use ElPandaPe\Sentinel\Snapshot\SnapshotBuilder;
 use ElPandaPe\Sentinel\Support\AuditCollection;
 use ElPandaPe\Sentinel\Support\Config;
 use ElPandaPe\Sentinel\Telemetry\TraceParent;
+use ElPandaPe\Sentinel\Tests\Fixtures\AltekTrail;
 use ElPandaPe\Sentinel\Tests\Fixtures\AuditedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\EncryptedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\EventLog;
@@ -163,6 +165,59 @@ function phpFilesOffending(string $pattern, ?string $directory = null): array
     }
 
     return $offenders;
+}
+
+/**
+ * A ledgers table shaped and filled the way accountant would have left it.
+ *
+ * @param  list<array<string, mixed>>  $rows
+ */
+function seedAltekTrail(string $table, array $rows, string $actor = Altek::ACTOR): void
+{
+    Schema::dropIfExists($table);
+
+    Schema::create($table, function (Blueprint $blueprint) use ($actor): void {
+        $blueprint->bigIncrements('id');
+        $blueprint->string($actor.'_type')->nullable();
+        $blueprint->unsignedBigInteger($actor.'_id')->nullable();
+        $blueprint->unsignedTinyInteger('context');
+        $blueprint->string('event');
+        $blueprint->string('recordable_type');
+        $blueprint->unsignedBigInteger('recordable_id');
+        $blueprint->text('properties');
+        $blueprint->text('modified');
+        $blueprint->text('pivot');
+        $blueprint->text('extra');
+        $blueprint->text('url')->nullable();
+        $blueprint->string('ip_address', 45)->nullable();
+        $blueprint->string('user_agent', 1023)->nullable();
+        $blueprint->string('signature');
+        $blueprint->timestamps();
+    });
+
+    DB::table($table)->insert($rows);
+}
+
+/**
+ * The altek origin, under whichever actor prefix the source application chose.
+ */
+function altek(string $actor = Altek::ACTOR): Altek
+{
+    return new Altek(sentinelConfig(), $actor);
+}
+
+/**
+ * One row of the accountant dump, as the reader would hand it over.
+ */
+function altekRow(int $id): Row
+{
+    /** @var array<string, mixed> $row */
+    $row = array_values(array_filter(
+        AltekTrail::rows(),
+        static fn (array $candidate): bool => $candidate['id'] === $id,
+    ))[0];
+
+    return new Row($row);
 }
 
 /**

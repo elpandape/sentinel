@@ -46,3 +46,20 @@ it('reads an instant, and says nothing rather than inventing one', function (): 
 it('reads a row the driver handed back as an object', function (): void {
     expect(Row::of((object) ['name' => 'Ada'])->text('name'))->toBe('Ada');
 });
+
+it('reads a json list of names, whether the driver handed it back as text or as an array', function (): void {
+    expect(new Row(['modified' => '["status","total"]'])->names('modified'))->toBe(['status', 'total'])
+        ->and(new Row(['modified' => ['status']])->names('modified'))->toBe(['status'])
+        ->and(new Row(['modified' => '[]'])->names('modified'))->toBe([]);
+});
+
+it('keeps the two json questions apart, because confusing them is how a column is half understood', function (): void {
+    expect(new Row(['values' => '["status"]'])->json('values'))->toBeNull()
+        ->and(new Row(['modified' => '{"status":true}'])->names('modified'))->toBeNull()
+        ->and(new Row(['modified' => null])->names('modified'))->toBeNull()
+        ->and(new Row(['modified' => 'not json'])->names('modified'))->toBeNull();
+});
+
+it('drops what is not a name from a list of names', function (): void {
+    expect(new Row(['modified' => '["status",7,null,"total"]'])->names('modified'))->toBe(['status', 'total']);
+});

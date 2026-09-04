@@ -71,6 +71,27 @@ final readonly class Row
     }
 
     /**
+     * A column the other package encoded as a JSON list of names. It is a different question from
+     * the one above and gets a different answer: a list where an attribute map was expected is a
+     * column this does not understand, and a map where a list was expected is the same mistake
+     * facing the other way.
+     *
+     * @return list<string>|null
+     */
+    public function names(string $column): ?array
+    {
+        $value = $this->values[$column] ?? null;
+
+        $decoded = is_array($value) ? $value : (is_string($value) && $value !== '' ? json_decode($value, true) : null);
+
+        if (! is_array($decoded) || ! array_is_list($decoded)) {
+            return null;
+        }
+
+        return array_values(array_filter($decoded, is_string(...)));
+    }
+
+    /**
      * When the row says it happened. Both packages made their timestamps nullable, so a row that
      * does not say is a row this cannot place on a timeline — and an entry whose instant was made
      * up is worse than an entry that was not written.
