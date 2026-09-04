@@ -44,12 +44,17 @@ trait Auditable
     }
 
     /**
+     * The labels come with the entries because `Audit::toArray()` reads them unconditionally, and
+     * that shape is frozen. The ledger already loads them on the two paths it owns; this is the
+     * third, and without it the frozen serialiser is a lazy load — an N+1 in the ordinary case and
+     * a `LazyLoadingViolationException` in an application that forbids one.
+     *
      * @return MorphMany<Audit, $this>
      */
     public function audits(): MorphMany
     {
         /** @var MorphMany<Audit, $this> $audits */
-        $audits = $this->morphMany($this->auditModel(), 'subject')->orderBy('id');
+        $audits = $this->morphMany($this->auditModel(), 'subject')->with('tags')->orderBy('id');
 
         return $audits;
     }

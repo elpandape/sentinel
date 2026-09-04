@@ -6,14 +6,32 @@ use ElPandaPe\Sentinel\Contracts\Auditable;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
 use ElPandaPe\Sentinel\Facades\Sentinel;
+use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Tests\Fixtures\AuditedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\PolicySubject;
+use ElPandaPe\Sentinel\Tests\Fixtures\TaggedSubject;
+use Illuminate\Database\Eloquent\Model;
 
 use function ElPandaPe\Sentinel\Tests\insertAudit;
 
 it('answers for every method the contract declares, by using the trait alone', function (): void {
     expect(array_diff(get_class_methods(Auditable::class), get_class_methods(AuditedSubject::class)))
         ->toBeEmpty();
+});
+
+it('serialises entries reached through the relation with lazy loading forbidden', function (): void {
+    $subject = TaggedSubject::query()->create(['name' => 'invoice']);
+    $subject->update(['name' => 'credit note']);
+
+    Model::preventLazyLoading();
+
+    try {
+        expect($subject->audits()->get()->map(static fn (Audit $entry): mixed => $entry->toArray()['tags'])->all())
+            ->toBe([['billing', 'refund'], ['billing', 'refund']])
+            ->and($subject->latestAudit()?->relationLoaded('tags'))->toBeTrue();
+    } finally {
+        Model::preventLazyLoading(false);
+    }
 });
 
 it('answers with no field policy when the model declares none', function (): void {
