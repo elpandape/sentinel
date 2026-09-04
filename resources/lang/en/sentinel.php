@@ -5,6 +5,16 @@ declare(strict_types=1);
 return [
 
     'commands' => [
+        'install' => [
+            'description' => 'Publish the configuration and report what an installation is still missing',
+            'published' => 'Published the configuration to config/sentinel.php.',
+            'configured' => 'config/sentinel.php is already there, and nothing in it was touched.',
+            'migrated' => 'All :tables tables are present.',
+            'unmigrated' => ':missing of :tables tables are not there yet: :names',
+            'migrate' => 'Run php artisan migrate to create them.',
+            'unreadable' => 'The configuration is in place, but the schema could not be read: :reason',
+            'optional' => 'Publishable and not published by default, each a choice with a cost: :tags',
+        ],
         'flush' => [
             'description' => 'Settle everything the audit buffer is holding',
             'settled' => 'Settled :count entries from the buffer.',

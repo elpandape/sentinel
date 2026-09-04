@@ -11,6 +11,7 @@ use ElPandaPe\Sentinel\Compliance\Requirements;
 use ElPandaPe\Sentinel\Console\CheckpointCommand;
 use ElPandaPe\Sentinel\Console\ExportCommand;
 use ElPandaPe\Sentinel\Console\FlushCommand;
+use ElPandaPe\Sentinel\Console\InstallCommand;
 use ElPandaPe\Sentinel\Console\PartitionsCommand;
 use ElPandaPe\Sentinel\Console\PruneCommand;
 use ElPandaPe\Sentinel\Console\RedactCommand;
@@ -159,6 +160,7 @@ final class SentinelServiceProvider extends ServiceProvider
                 CheckpointCommand::class,
                 ExportCommand::class,
                 FlushCommand::class,
+                InstallCommand::class,
                 PartitionsCommand::class,
                 PruneCommand::class,
                 RedactCommand::class,
