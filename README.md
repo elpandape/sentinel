@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.22.0-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.22.1-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -20,7 +20,7 @@ the state was before, what it is now — and whether the record itself can be pr
 
 ```json
 "repositories": [{ "type": "vcs", "url": "https://github.com/elpandape/sentinel" }],
-"require": { "elpandape/sentinel": "v0.22.0" }
+"require": { "elpandape/sentinel": "v0.22.1" }
 ```
 
 ```bash
@@ -32,6 +32,25 @@ php artisan migrate
 is, and tells you which tables are still missing. Run it again whenever you want to know where an
 installation stands — that is what it is for. If you would rather publish by hand,
 `vendor:publish --tag=sentinel-config` does the same one thing.
+
+### Migrating from another package
+
+A history written by `owen-it/laravel-auditing` or `altek/accountant` has a way in. Start with the
+dry run, which is the documented route and not a suggestion:
+
+```bash
+php artisan sentinel:import --from=owenit --dry-run
+```
+
+The mapping, what each source already lost before Sentinel saw it, and what an import does and does
+not guarantee are in the guide for your package — one apiece, because they are not the same
+migration: [MIGRATE_FROM_OWEN_IT.md](MIGRATE_FROM_OWEN_IT.md) and
+[MIGRATE_FROM_ALTEK.md](MIGRATE_FROM_ALTEK.md).
+
+> ⚠️ **The chain starts at the import.** What the other package recorded before it has no link,
+> because nobody hashed those rows as they were written. Sentinel could fabricate one backwards and
+> does not: that would be a proof nobody touched data this package never saw. Your trail is provable
+> from the import forward, and honest about the part before it.
 
 ## What's available
 
@@ -69,8 +88,9 @@ installation stands — that is what it is for. If you would rather publish by h
 | `v0.21.0` | Distributed tracing: a strict W3C Trace Context parser, the active span of an OpenTelemetry SDK when there is one, the trace carried across the queue, a root trace per console run, and `Sentinel::trace()` |
 | `v0.21.1` | A flush that fails says how many entries it was and where they are, and a summary entry says which mode settled it |
 | `v0.22.0` | The command surface closed: `sentinel:install`, `sentinel:show`, one exit-code vocabulary across the ten, and a Sentinel section in `php artisan about` |
+| `v0.22.1` | A way in from other packages: `sentinel:import` from `owen-it/laravel-auditing` or `altek/accountant`, resumable and idempotent, with a guide apiece |
 
-Everything else is on the roadmap: a way in from other packages.
+Everything else is on the roadmap: the freeze.
 
 `v0.4.0` is the version that starts auditing: a model with the trait writes its own chained entries.
 `v0.5.0` is the one that answers what changed, instead of leaving you two states to compare.
@@ -3414,6 +3434,7 @@ $this->app->bind(SpanContextProvider::class, MyTracer::class);
 |---|---|---|
 | `sentinel:install` | Publishes the configuration and says what an installation is still missing | `0` published, or already there · `2` the schema could not be read |
 | `sentinel:show` | Reads one entry, or a subject's life, out loud | `0` read out, or nothing recorded · `2` no such entry, an unreadable subject, or both asked at once |
+| `sentinel:import` | Brings a trail in from another audit package | `0` everything read came across · `1` something did not · `2` a package it does not read, or a table shaped like something else |
 | `sentinel:flush` | Settles everything the buffer is holding | `0` settled · `1` the flush failed · `2` not in `buffered` mode |
 | `sentinel:verify` | Walks the chain and reports what it found | `0` intact · `1` broken · `2` could not run |
 | `sentinel:checkpoint` | Anchors every complete window the streams still owe | `0` anchored, or nothing left to anchor · `2` could not run |
@@ -3423,10 +3444,11 @@ $this->app->bind(SpanContextProvider::class, MyTracer::class);
 | `sentinel:rekey` | Re-encrypts a range of the trail under another key | `0` re-encrypted, or nothing to re-encrypt · `2` could not run |
 | `sentinel:partitions` | Keeps a partitioned trail supplied with months ahead and clear of the empty ones behind | `0` maintained, or nothing to maintain · `1` refused to retire a partition still holding entries · `2` could not run |
 
-**Ten commands, three codes, one meaning each.** `0` is the ordinary outcome, and it includes having
+**Eleven commands, three codes, one meaning each.** `0` is the ordinary outcome, and it includes having
 found nothing to do. `1` is a bad finding from a run that happened. `2` is a run that could not
 happen. A dry run suppresses the acting and not the checking, so `sentinel:prune --dry-run` and
-`sentinel:partitions --dry-run` still exit `1` when they meet something they would refuse.
+`sentinel:partitions --dry-run` still exit `1` when they meet something they would refuse, and
+`sentinel:import --dry-run` still exits `1` when a source row will not come across.
 
 ```bash
 php artisan sentinel:install

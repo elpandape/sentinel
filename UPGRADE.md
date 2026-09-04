@@ -7,6 +7,10 @@ here, with the before and the after. Versions that only add are covered by the
 Sentinel is in its `0.x` cycle: only the last minor receives fixes, and there are no backports
 before `1.0.0`.
 
+**This page covers moving between versions of Sentinel and nothing else.** Coming from another audit
+package is a different journey with a different reader, and it has a guide of its own per source:
+[MIGRATE_FROM_OWEN_IT.md](MIGRATE_FROM_OWEN_IT.md) and [MIGRATE_FROM_ALTEK.md](MIGRATE_FROM_ALTEK.md).
+
 ---
 
 ## v0.22.0 → v0.22.1

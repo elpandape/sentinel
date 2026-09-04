@@ -2,6 +2,64 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.22.1 — A way in from another package (2026-09-04)
+
+The last minor before the freeze, and the one that closes phase four: a history written by
+`owen-it/laravel-auditing` or by `altek/accountant` can be brought in. `sentinel:import` reads it in
+batches, is safe to run twice and safe to interrupt, and settles what it reads through the same
+pipeline everything else goes through. No migration, no new column, `payload_version` stays at `1`,
+and every entry written before this release verifies unchanged.
+
+The chain starts at the import. What the other package recorded before it has no link, because
+nobody hashed those rows as they were written — and manufacturing one backwards would be a proof
+that nobody touched data this package never saw. The guides say so in the same words.
+
+### Added
+
+- **`sentinel:import`**, the eleventh command, with `--from`, `--dry-run`, `--table`,
+  `--connection`, `--actor`, `--size` and `--after`. The dry run suppresses the writing and never
+  the reading: it maps every row and puts each through the pipeline that would refuse it, so what
+  it reports is what a real run would do — which is why it can exit non-zero.
+- **Two origins.** `owen-it/laravel-auditing`, whose `audits` table has not moved a column since its
+  tenth major, and `altek/accountant`, whose `ledgers` table has not moved since its third. Each
+  declares its own shape, and a table that does not match it is refused before a row is read: a
+  mapping one column out does not fail, it imports, and what lands says something other than what
+  it means.
+- **`Source::Import`**, a ninth source and the only one nothing resolves. It lives inside the
+  canonical payload, so the hash covers it and an imported entry cannot be quietly rewritten as a
+  native one.
+- **`Omission::EntryImported`.** A whole-record `restore()` on an imported entry is refused, because
+  an entry from another package may not portray the whole record; one that names its fields is
+  planned as before. The reason list is a frozen contract, so this is an addition to it.
+- **`MIGRATE_FROM_OWEN_IT.md` and `MIGRATE_FROM_ALTEK.md`**, each declaring the source version it
+  was written against, and a Rector stub apiece under `stubs/rector/` that renames imports in dry
+  run and nothing else.
+- **A golden dataset per source**, frozen: what every row of every dump means. It is the contract
+  with the two packages, and a mapping that drifts does not fail — it imports.
+
+### Changed
+
+- **An import resolves no context; it carries the source's.** Every other capture happens where the
+  fact happened, so asking the runtime who the actor is answers correctly. This one happens years
+  later in somebody's terminal, and asking there would sign every historical action with the name of
+  whoever ran the migration. The stage that would do it steps out for the length of the run.
+- **An import writes synchronously** whatever the application is configured for, and puts the
+  setting back. Under the queued mode it would push a job per batch and return having written
+  nothing; under the buffered one it would fill a store nobody sized for a backfill.
+
+### What an import does not claim
+
+Both guides carry the same section and it is worth repeating here. Sentinel does not guarantee the
+integrity of anything that happened before the import, nor that the source captured everything it
+should have, nor that `before` and `after` are complete snapshots — `owen-it` records only the dirty
+attributes of an update and `altek` records no earlier values at all — nor that an event or a label
+means the same thing in both packages. Each guide names what its own source had already lost.
+
+### Upgrade notes
+
+`Omission` gains a reason, which a `match` over it will not know. Nothing else changes for an
+installation that does not import. See [UPGRADE.md](UPGRADE.md).
+
 ## v0.22.0 — The command surface, closed (2026-09-03)
 
 The last thing an operator touches before the API freezes. Ten artisan commands stop being ten
