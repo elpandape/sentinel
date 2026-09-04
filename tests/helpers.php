@@ -22,8 +22,10 @@ use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Enums\FanoutPolicy;
 use ElPandaPe\Sentinel\Enums\RelationOperation;
 use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Import\Importer;
 use ElPandaPe\Sentinel\Import\Origins\Altek;
 use ElPandaPe\Sentinel\Import\Origins\OwenIt;
+use ElPandaPe\Sentinel\Import\Report;
 use ElPandaPe\Sentinel\Import\Row;
 use ElPandaPe\Sentinel\Integrity\Checkpoint;
 use ElPandaPe\Sentinel\Integrity\Checkpoints;
@@ -218,6 +220,14 @@ function altekRow(int $id): Row
     ))[0];
 
     return new Row($row);
+}
+
+/**
+ * An import of the owen-it dump, with the knobs a test wants to turn.
+ */
+function importing(int $size = 2, ?string $after = null, bool $rehearse = false): Report
+{
+    return app(Importer::class)->import(owenIt(), OwenItTrail::TABLE, null, $size, $after, $rehearse);
 }
 
 /**
