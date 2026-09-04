@@ -28,6 +28,7 @@ return [
             'unknown_format' => 'The format [:format] is not one this command writes. Accepted: :accepted.',
             'rendered' => 'Rendered :entries entries. Digest :digest — the manifest beside it is what a recipient verifies against.',
             'written' => 'Wrote :entries entries to [:path] on the [:disk] disk, with its manifest beside it. Digest :digest.',
+            'failed' => 'Nothing was exported: :reason',
         ],
         'rekey' => [
             'description' => 'Re-encrypt a range of the trail under another key',
@@ -42,6 +43,7 @@ return [
             'unknown_entry' => 'No entry with id [:audit], so nothing was redacted.',
             'would' => 'Would destroy the contents of entry :audit, at sequence :sequence of stream :stream. Its position, its hash and its link would stay.',
             'redacted' => 'Destroyed the contents of entry :audit, at sequence :sequence of stream :stream. Its position, its hash and its link are untouched, and a new entry records who did it and why.',
+            'failed' => 'Nothing was redacted: :reason',
         ],
         'partitions' => [
             'description' => 'Keeps a partitioned trail supplied with months ahead and clear of the empty ones behind',

@@ -146,3 +146,11 @@ it('narrows by tenant and by type from the command line', function (): void {
         '--limit' => '10',
     ])->expectsOutputToContain('Wrote 1 entries')->assertSuccessful();
 });
+
+it('exits on a disk it cannot reach instead of letting the failure out untranslated', function (): void {
+    ledger()->write(auditData());
+
+    $this->artisan('sentinel:export', ['--disk' => 'nowhere', '--path' => 'trail.ndjson'])
+        ->expectsOutputToContain('Nothing was exported')
+        ->assertExitCode(2);
+});

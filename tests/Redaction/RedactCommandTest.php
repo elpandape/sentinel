@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Console\RedactCommand;
+use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Enums\ContentState;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Tests\Fixtures\FailingLedger;
 use Illuminate\Support\Facades\DB;
 
 use function ElPandaPe\Sentinel\Tests\auditData;
@@ -107,4 +109,16 @@ it('reads its description out of the translations', function (): void {
 
     expect(app(RedactCommand::class)->getDescription())
         ->toBe('Destruye el contenido de un asiento y deja en pie todo lo demás');
+});
+
+it('tells a run that could not happen apart from an entry it refuses to touch', function (): void {
+    $written = ledger()->write(auditData(['before' => ['a' => 1]]));
+
+    app()->instance(Ledger::class, new FailingLedger);
+
+    $this->artisan('sentinel:redact', [
+        'audit' => $written->id,
+        '--reason' => 'erasure request',
+        '--actor' => 'member:77',
+    ])->expectsOutputToContain('Nothing was redacted')->assertExitCode(2);
 });

@@ -9,6 +9,7 @@ use ElPandaPe\Sentinel\Query\AuditQuery;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Filesystem\Factory;
 use Override;
+use Throwable;
 
 /**
  * Hands the trail to somebody who does not have the database, with what proves it came from here.
@@ -53,6 +54,22 @@ final class ExportCommand extends Command
             return self::INVALID;
         }
 
+        try {
+            return $this->write($export, $query, $disks, $format);
+        } catch (Throwable $failure) {
+            $this->error($this->translated('failed', ['reason' => $failure->getMessage()]));
+
+            return self::INVALID;
+        }
+    }
+
+    /**
+     * Reading the trail, rendering it and putting it somewhere are one operation as far as an
+     * operator is concerned: either the export exists or it does not. Splitting them out is what
+     * lets the one catch above cover all three without wrapping the returns in it.
+     */
+    private function write(Export $export, AuditQuery $query, Factory $disks, string $format): int
+    {
         $rendered = $export->render($this->narrowed($query)->get(), $format);
 
         $disk = $this->text('disk');

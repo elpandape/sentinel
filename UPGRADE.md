@@ -11,6 +11,25 @@ before `1.0.0`.
 
 ## v0.21.1 → v0.22.0
 
+### Two commands now exit `2` where they exited `1`
+
+The three exit codes have meant the same thing since `sentinel:verify` introduced them: `0` is the
+ordinary outcome, `1` is a bad finding from a run that happened, and `2` is a run that could not
+happen. Two commands did not follow it.
+
+`sentinel:redact` caught everything its service threw and reported all of it as a refusal, so a
+dead connection exited `1` alongside "this entry is archived" and "this entry no longer reproduces
+its own hash". Now only those deliberate refusals exit `1`; anything else exits `2`, which is what
+the command's own docblock had been promising.
+
+`sentinel:export` caught nothing at all: a disk it could not reach, or a query that failed, escaped
+as an uncaught exception with a stack trace and whatever exit code the framework chose. Now it
+reports the reason and exits `2`, which is the only non-zero code the README ever listed for it.
+
+**If a cron ramifies on the exit code of either**, `1` no longer means what it did. Treat `2` as the
+retryable one for `sentinel:export`, and for `sentinel:redact` treat `1` as "this entry will never
+be redactable by this version" and `2` as "try again".
+
 ### `integrity.enabled` is gone
 
 Delete it from your published `config/sentinel.php`:

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Console;
 
+use ElPandaPe\Sentinel\Exceptions\ComplianceException;
+use ElPandaPe\Sentinel\Exceptions\RedactionException;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Redaction\Redactor;
 use ElPandaPe\Sentinel\Support\Reference;
@@ -24,7 +26,9 @@ use Throwable;
  *
  * Three exit codes, the same three the other commands use: zero for a redaction and for an entry that
  * was already redacted, failure for an entry this refuses to touch, and invalid for a run that could
- * not happen.
+ * not happen. The refusals are the two exceptions the service raises deliberately; anything else it
+ * throws is the second thing, and reporting a dead connection as a refusal would tell an operator
+ * their entry is archived when nothing of the sort is true.
  */
 final class RedactCommand extends Command
 {
@@ -89,10 +93,14 @@ final class RedactCommand extends Command
 
         try {
             $tombstone = $redactor->redact($entry, $reason, $actor);
-        } catch (Throwable $refusal) {
+        } catch (ComplianceException|RedactionException $refusal) {
             $this->error($refusal->getMessage());
 
             return self::FAILURE;
+        } catch (Throwable $failure) {
+            $this->error($this->translated('failed', ['reason' => $failure->getMessage()]));
+
+            return self::INVALID;
         }
 
         $this->info($this->translated('redacted', [

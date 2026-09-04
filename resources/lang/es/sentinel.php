@@ -28,6 +28,7 @@ return [
             'unknown_format' => 'El formato [:format] no es uno de los que este comando escribe. Aceptados: :accepted.',
             'rendered' => 'Renderizados :entries asientos. Digest :digest — el manifiesto que va al lado es contra lo que verifica quien lo recibe.',
             'written' => 'Escritos :entries asientos en [:path] del disco [:disk], con su manifiesto al lado. Digest :digest.',
+            'failed' => 'No se exportó nada: :reason',
         ],
         'rekey' => [
             'description' => 'Recifra un rango del rastro con otra clave',
@@ -42,6 +43,7 @@ return [
             'unknown_entry' => 'No hay ningún asiento con id [:audit], así que no se redactó nada.',
             'would' => 'Destruiría el contenido del asiento :audit, en la secuencia :sequence del stream :stream. Su posición, su hash y su eslabón se quedarían.',
             'redacted' => 'Destruido el contenido del asiento :audit, en la secuencia :sequence del stream :stream. Su posición, su hash y su eslabón siguen intactos, y un asiento nuevo registra quién lo hizo y por qué.',
+            'failed' => 'No se redactó nada: :reason',
         ],
         'partitions' => [
             'description' => 'Mantiene un rastro particionado con meses por delante y sin las particiones vacías de atrás',

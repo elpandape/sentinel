@@ -36,9 +36,11 @@ final class FlushCommand extends Command
     }
 
     /**
-     * A failure is reported and given back as a non-zero exit, because a command that says nothing
-     * and exits zero is one a cron will keep failing behind. Nothing is lost either way: what could
-     * not be settled is back in the buffer, waiting for whatever triggers next.
+     * A flush that did not settle exits failure rather than invalid, which is the opposite of what
+     * every other command does with a caught throwable, and it is deliberate. The run happened: a
+     * batch was taken, refused and put back, so what an operator has is a bad outcome and not an
+     * impossible one — and the answer to it is to run again, which is what failure tells a cron.
+     * Invalid stays for the one thing that cannot run at all, a mode with no buffer under it.
      */
     public function handle(Config $config, Flusher $flusher): int
     {
