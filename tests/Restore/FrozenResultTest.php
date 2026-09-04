@@ -17,6 +17,7 @@ it('answers with every reason it declared and no others', function (): void {
         'entry_tampered',
         'entry_stateless',
         'cancelled',
+        'entry_imported',
         'unknown_field',
         'unrecorded_field',
         'identity_field',

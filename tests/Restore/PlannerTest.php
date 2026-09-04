@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Enums\Omission;
+use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Tests\Fixtures\AuditedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\EncryptedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\ProtectedSubject;
@@ -129,4 +130,36 @@ it('puts back a value the entry stored before the model declared it encrypted', 
 
     expect(planner()->for(restorableEntry($record, ['secret' => 'before']), $record)->applying)
         ->toBe(['secret' => 'before']);
+});
+
+it('refuses a whole restoration of an imported entry, which may not portray the whole record', function (): void {
+    $record = AuditedSubject::query()->create(['name' => 'Grace', 'status' => 'open']);
+    $entry = restorableEntry($record, ['name' => 'Ada', 'status' => 'closed'], ['source' => Source::Import]);
+
+    expect(planner()->for($entry, $record)->refused)->toBe(Omission::EntryImported);
+});
+
+it('plans the fields a caller names on an imported entry, because there they know what they asked for', function (): void {
+    $record = AuditedSubject::query()->create(['name' => 'Grace', 'status' => 'open']);
+    $entry = restorableEntry($record, ['name' => 'Ada', 'status' => 'closed'], ['source' => Source::Import]);
+
+    $plan = planner()->for($entry, $record, ['name']);
+
+    expect($plan->refused)->toBeNull()
+        ->and($plan->applying)->toBe(['name' => 'Ada']);
+});
+
+it('calls a redacted imported entry redacted, because that is the bigger fact about it', function (): void {
+    $record = AuditedSubject::query()->create(['name' => 'Grace']);
+    $entry = restorableEntry($record, ['name' => 'Ada'], ['source' => Source::Import]);
+
+    redactor()->redact($entry, 'erasure request');
+
+    expect(planner()->for(reread($entry), $record)->refused)->toBe(Omission::EntryRedacted);
+});
+
+it('says why in the language the application is using', function (): void {
+    app()->setLocale('es');
+
+    expect(Omission::EntryImported->message())->toContain('se importó de otro paquete');
 });

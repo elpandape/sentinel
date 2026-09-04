@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Restore;
 
 use ElPandaPe\Sentinel\Enums\Omission;
+use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Integrity\Verifier;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Security\Keyring;
@@ -59,6 +60,10 @@ final readonly class Planner
 
         if ($state === null) {
             return Plan::refused(Omission::EntryStateless);
+        }
+
+        if ($fields === null && $audit->source === Source::Import) {
+            return Plan::refused(Omission::EntryImported);
         }
 
         return $this->weigh($audit, $subject, $state, $fields ?? array_keys($state), $fields === null);

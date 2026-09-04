@@ -210,6 +210,7 @@ return [
         'entry_tampered' => 'This entry no longer reproduces its own hash, so nothing it holds may be written back.',
         'entry_stateless' => 'This entry holds no earlier state to put back.',
         'cancelled' => 'A listener cancelled the restoration.',
+        'entry_imported' => 'This entry was imported from another package, which may not have recorded the whole record. Name the fields to put back and they will be.',
         'unknown_field' => 'The record no longer has a :key.',
         'unrecorded_field' => 'This entry does not record the :key.',
         'identity_field' => 'The :key identifies the record rather than describing its state.',

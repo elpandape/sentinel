@@ -9,6 +9,31 @@ before `1.0.0`.
 
 ---
 
+## v0.22.0 → v0.22.1
+
+### `Omission` gains a reason, and a whole restore of an imported entry is refused
+
+The list of reasons a restoration can give is public and frozen since `v0.19.0`'s predecessor under
+one rule: a reason may be added, none may be removed or renamed. `entry_imported` is added, between
+`cancelled` and `unknown_field`.
+
+It is refused only for a restoration that named no fields. An entry brought in from another package
+may not portray the whole record — `owen-it/laravel-auditing` records only the dirty attributes of
+an update, and `altek/accountant` records no earlier values at all — so putting back "everything the
+entry recorded" would write a partial state as if it were a whole one. Naming the fields still works
+and always will:
+
+```php
+$audit->restore();                    // refused with Omission::EntryImported
+$audit->restore(['email', 'name']);   // planned, as before
+```
+
+**If you switch on `RestoreResult::$refused`,** add the case. Nothing else about a restoration
+changed, and no entry Sentinel itself wrote is affected: the guard reads `source`, and only the
+importer writes `import` there.
+
+---
+
 ## v0.21.1 → v0.22.0
 
 ### `sentinel:verify --depth=anchors` and `--depth=roots` report two signature tallies

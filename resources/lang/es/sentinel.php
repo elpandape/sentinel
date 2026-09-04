@@ -210,6 +210,7 @@ return [
         'entry_tampered' => 'Este asiento ya no reproduce su propio hash, así que nada de lo que guarda puede escribirse de vuelta.',
         'entry_stateless' => 'Este asiento no guarda ningún estado anterior que devolver.',
         'cancelled' => 'Un listener canceló la restauración.',
+        'entry_imported' => 'Este asiento se importó de otro paquete, que puede no haber registrado el registro entero. Nombra los campos a devolver y se devolverán.',
         'unknown_field' => 'El registro ya no tiene :key.',
         'unrecorded_field' => 'Este asiento no registra el campo :key.',
         'identity_field' => 'El campo :key identifica al registro en vez de describir su estado.',
