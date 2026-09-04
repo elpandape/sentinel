@@ -23,6 +23,7 @@ use ElPandaPe\Sentinel\Enums\FanoutPolicy;
 use ElPandaPe\Sentinel\Enums\RelationOperation;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Import\Importer;
+use ElPandaPe\Sentinel\Import\Origin;
 use ElPandaPe\Sentinel\Import\Origins\Altek;
 use ElPandaPe\Sentinel\Import\Origins\OwenIt;
 use ElPandaPe\Sentinel\Import\Report;
@@ -220,6 +221,19 @@ function altekRow(int $id): Row
     ))[0];
 
     return new Row($row);
+}
+
+/**
+ * What an origin makes of one raw source row, in the shape the golden dataset freezes.
+ *
+ * @param  array<string, mixed>  $row
+ * @return array<string, mixed>
+ */
+function frozen(Origin $origin, array $row): array
+{
+    $mapping = $origin->map(new Row($row));
+
+    return $mapping->data?->toPayload() ?? ['refused' => $mapping->refused];
 }
 
 /**
