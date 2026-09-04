@@ -22,6 +22,8 @@ use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Enums\FanoutPolicy;
 use ElPandaPe\Sentinel\Enums\RelationOperation;
 use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Import\Origins\OwenIt;
+use ElPandaPe\Sentinel\Import\Row;
 use ElPandaPe\Sentinel\Integrity\Checkpoint;
 use ElPandaPe\Sentinel\Integrity\Checkpoints;
 use ElPandaPe\Sentinel\Integrity\Content;
@@ -68,6 +70,7 @@ use ElPandaPe\Sentinel\Tests\Fixtures\AuditedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\EncryptedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\EventLog;
 use ElPandaPe\Sentinel\Tests\Fixtures\GoldenLedger;
+use ElPandaPe\Sentinel\Tests\Fixtures\OwenItTrail;
 use ElPandaPe\Sentinel\Tests\Fixtures\ProtectedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\ReferenceChain;
 use ElPandaPe\Sentinel\Tests\Fixtures\SigningKeys;
@@ -160,6 +163,56 @@ function phpFilesOffending(string $pattern, ?string $directory = null): array
     }
 
     return $offenders;
+}
+
+/**
+ * The owen-it origin, under whichever actor prefix the source application chose.
+ */
+function owenIt(string $actor = OwenIt::ACTOR): OwenIt
+{
+    return new OwenIt(sentinelConfig(), $actor);
+}
+
+/**
+ * One row of the dump, as the reader would hand it over.
+ */
+function owenItRow(int $id): Row
+{
+    /** @var array<string, mixed> $row */
+    $row = array_values(array_filter(
+        OwenItTrail::rows(),
+        static fn (array $candidate): bool => $candidate['id'] === $id,
+    ))[0];
+
+    return new Row($row);
+}
+
+/**
+ * A source table shaped and filled the way the other package would have left it.
+ *
+ * @param  list<array<string, mixed>>  $rows
+ */
+function seedForeignTrail(string $table, array $rows, string $actor = 'user'): void
+{
+    Schema::dropIfExists($table);
+
+    Schema::create($table, function (Blueprint $blueprint) use ($actor): void {
+        $blueprint->bigIncrements('id');
+        $blueprint->string($actor.'_type')->nullable();
+        $blueprint->unsignedBigInteger($actor.'_id')->nullable();
+        $blueprint->string('event');
+        $blueprint->string('auditable_type');
+        $blueprint->unsignedBigInteger('auditable_id');
+        $blueprint->text('old_values')->nullable();
+        $blueprint->text('new_values')->nullable();
+        $blueprint->text('url')->nullable();
+        $blueprint->string('ip_address', 45)->nullable();
+        $blueprint->string('user_agent', 1023)->nullable();
+        $blueprint->string('tags')->nullable();
+        $blueprint->timestamps();
+    });
+
+    DB::table($table)->insert($rows);
 }
 
 /**
