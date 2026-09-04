@@ -9,6 +9,32 @@ before `1.0.0`.
 
 ---
 
+## v0.21.1 → v0.22.0
+
+### `integrity.enabled` is gone
+
+Delete it from your published `config/sentinel.php`:
+
+```php
+'integrity' => [
+-   'enabled' => false,
+    'algorithm' => 'sha256',
+    // ...
+],
+```
+
+Nothing changes when you do, which is the point. Chaining has been unconditional since `v0.3.0` —
+every entry links to the one before it in its stream, regardless of configuration — so the key has
+governed nothing for nineteen minors while reading as if it governed the chain. What is actually
+optional is signatures and checkpoints, and each has its own `enabled` below it; both still ship
+off and are untouched.
+
+Leaving the key in place is harmless: Laravel does not object to a key nothing reads. It is worth
+removing anyway, because the next thing a published configuration file gets read by is
+`php artisan about`.
+
+---
+
 ## v0.19.5 → v0.20.0
 
 Nothing here is required. Both of the things this release adds are migrations the package publishes

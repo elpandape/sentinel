@@ -188,7 +188,6 @@ return [
      * or a closure. Checkpoints anchor ranges so verification stays cheap.
      */
     'integrity' => [
-        'enabled' => false,
         'algorithm' => 'sha256',
         'stream' => 'tenant',
         'checkpoints' => [

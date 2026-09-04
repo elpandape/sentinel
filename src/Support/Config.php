@@ -337,11 +337,6 @@ final readonly class Config
         return $this->boolean('snapshots.include_hidden');
     }
 
-    public function integrityEnabled(): bool
-    {
-        return $this->boolean('integrity.enabled');
-    }
-
     public function integrityAlgorithm(): string
     {
         $algorithm = $this->string('integrity.algorithm');

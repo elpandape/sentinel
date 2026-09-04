@@ -2251,9 +2251,8 @@ Replace the model with your own subclass:
 ## Integrity chain
 
 Chaining is unconditional: every entry a `Ledger` writes links to the one before it in its stream,
-regardless of configuration. `integrity.enabled` does not govern this — it is
-[signatures](#signing-the-chain) and [anchors](#anchoring-ranges) that are optional, and both ship
-off.
+regardless of configuration. There is no switch for it — what is optional is
+[signatures](#signing-the-chain) and [anchors](#anchoring-ranges), and both ship off.
 
 Each entry's `hash` covers a prefix and the canonical payload:
 
@@ -2456,7 +2455,6 @@ Anchors are off by default:
 
 ```php
 'integrity' => [
-    'enabled' => true,
     'checkpoints' => [
         'enabled' => true,
         'every' => 1000,

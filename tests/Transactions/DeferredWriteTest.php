@@ -175,7 +175,6 @@ it('keeps the actor of the capture when someone logs in before the commit', func
 });
 
 it('keeps the tenant of the capture, so the entry lands on the chain it belonged to', function (): void {
-    config()->set('sentinel.integrity.enabled', true);
     config()->set('sentinel.integrity.stream', 'tenant');
 
     $tenant = 'acme';

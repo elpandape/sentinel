@@ -24,7 +24,6 @@ it('reads the defaults shipped with the package', function (): void {
         ->and($config->connection())->toBeNull()
         ->and($config->snapshotsEnabled())->toBeTrue()
         ->and($config->snapshotsIncludeHidden())->toBeTrue()
-        ->and($config->integrityEnabled())->toBeFalse()
         ->and($config->checkpointsEnabled())->toBeFalse()
         ->and($config->checkpointsEvery())->toBe(1000)
         ->and($config->complianceEnabled())->toBeFalse()
@@ -32,7 +31,7 @@ it('reads the defaults shipped with the package', function (): void {
 });
 
 it('reads no anchoring at all out of a configuration published before anchors existed', function (): void {
-    $config = sentinelConfig(['integrity' => ['enabled' => true]]);
+    $config = sentinelConfig(['integrity' => ['algorithm' => 'sha256']]);
 
     expect($config->checkpointsEnabled())->toBeFalse()
         ->and($config->checkpointsEvery())->toBe(1000);
