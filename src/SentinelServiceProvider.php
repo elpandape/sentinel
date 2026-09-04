@@ -16,6 +16,7 @@ use ElPandaPe\Sentinel\Console\PartitionsCommand;
 use ElPandaPe\Sentinel\Console\PruneCommand;
 use ElPandaPe\Sentinel\Console\RedactCommand;
 use ElPandaPe\Sentinel\Console\RekeyCommand;
+use ElPandaPe\Sentinel\Console\ShowCommand;
 use ElPandaPe\Sentinel\Console\VerifyCommand;
 use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Context\ExecutionContext;
@@ -165,6 +166,7 @@ final class SentinelServiceProvider extends ServiceProvider
                 PruneCommand::class,
                 RedactCommand::class,
                 RekeyCommand::class,
+                ShowCommand::class,
                 VerifyCommand::class,
             ]);
 

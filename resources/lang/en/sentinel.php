@@ -97,6 +97,14 @@ return [
             'unknown_action' => 'There is no :action action. Pass one of: :accepted.',
             'failed' => 'Nothing was removed: :reason',
         ],
+        'show' => [
+            'description' => 'Read one entry, or a subject\'s life, out loud',
+            'ambiguous' => 'Name an entry or pass --subject, but not both and not neither: they are two questions and the answer to one is not the answer to the other.',
+            'unknown_entry' => 'No entry with id [:audit].',
+            'unreadable_subject' => 'The subject [:subject] is not readable as type:id.',
+            'nothing' => 'Nothing has been recorded about :subject.',
+            'failed' => 'Nothing was read: :reason',
+        ],
         'verify' => [
             'description' => 'Walk the chain and report what it found',
             'columns' => [

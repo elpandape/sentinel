@@ -97,6 +97,14 @@ return [
             'unknown_action' => 'No existe la acción :action. Pasa una de: :accepted.',
             'failed' => 'No se retiró nada: :reason',
         ],
+        'show' => [
+            'description' => 'Lee en voz alta un asiento, o la vida de un sujeto',
+            'ambiguous' => 'Nombra un asiento o pasa --subject, pero no los dos ni ninguno: son dos preguntas y la respuesta a una no es la respuesta a la otra.',
+            'unknown_entry' => 'No hay ningún asiento con id [:audit].',
+            'unreadable_subject' => 'El sujeto [:subject] no se lee como tipo:id.',
+            'nothing' => 'No hay nada registrado sobre :subject.',
+            'failed' => 'No se leyó nada: :reason',
+        ],
         'verify' => [
             'description' => 'Recorre la cadena y reporta lo que encuentra',
             'columns' => [
