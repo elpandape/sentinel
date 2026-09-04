@@ -101,7 +101,8 @@ it('reports the refusal of an entry that no longer reproduces its hash', functio
         'audit' => $written->id,
         '--reason' => 'erasure request',
         '--actor' => 'member:77',
-    ])->expectsOutputToContain('does not reproduce its own hash')->assertExitCode(1);
+    ])->expectsOutputToContain('This entry cannot be redacted: Entry 1 of stream global does not reproduce its own hash')
+        ->assertExitCode(1);
 });
 
 it('reads its description out of the translations', function (): void {

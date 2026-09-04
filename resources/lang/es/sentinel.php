@@ -53,6 +53,7 @@ return [
             'unknown_entry' => 'No hay ningún asiento con id [:audit], así que no se redactó nada.',
             'would' => 'Destruiría el contenido del asiento :audit, en la secuencia :sequence del stream :stream. Su posición, su hash y su eslabón se quedarían.',
             'redacted' => 'Destruido el contenido del asiento :audit, en la secuencia :sequence del stream :stream. Su posición, su hash y su eslabón siguen intactos, y un asiento nuevo registra quién lo hizo y por qué.',
+            'refused' => 'Este asiento no se puede redactar: :reason',
             'failed' => 'No se redactó nada: :reason',
         ],
         'partitions' => [

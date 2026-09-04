@@ -92,7 +92,7 @@ final class RedactCommand extends Command
         try {
             $tombstone = $redactor->redact($entry, $reason, $actor);
         } catch (ComplianceException|RedactionException $refusal) {
-            $this->error($refusal->getMessage());
+            $this->error($this->translated('refused', ['reason' => $refusal->getMessage()]));
 
             return self::FAILURE;
         } catch (Throwable $failure) {

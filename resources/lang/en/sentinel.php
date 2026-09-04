@@ -53,6 +53,7 @@ return [
             'unknown_entry' => 'No entry with id [:audit], so nothing was redacted.',
             'would' => 'Would destroy the contents of entry :audit, at sequence :sequence of stream :stream. Its position, its hash and its link would stay.',
             'redacted' => 'Destroyed the contents of entry :audit, at sequence :sequence of stream :stream. Its position, its hash and its link are untouched, and a new entry records who did it and why.',
+            'refused' => 'This entry cannot be redacted: :reason',
             'failed' => 'Nothing was redacted: :reason',
         ],
         'partitions' => [
