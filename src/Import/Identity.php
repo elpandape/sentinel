@@ -5,16 +5,18 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Import;
 
 /**
- * The identity an imported entry carries, derived from the row it came from rather than minted.
+ * An identity derived from what it stands for rather than minted: the row an import read, the
+ * entry and key a rotation goes to.
  *
- * It is what makes running an import twice cost nothing. Every write in this package already goes
+ * It is what makes running the same pass twice cost nothing. Every write in this package already goes
  * through one deduplication: a capture identifier the ledger is asked about before a batch is
  * settled, and a unique index that has the last word. A minted identifier is different on every
  * run and buys none of that; one derived from the source and the row's own key is the same on
- * every run, so the second import finds its own work already done and writes nothing.
+ * every run, so the second pass finds its own work already done and writes nothing.
  *
  * The source name is part of the digest and not a prefix, because two packages are free to number
- * their rows from one and a row's key alone would collide across them.
+ * their rows from one and a row's key alone would collide across them. It is what keeps the two
+ * callers apart too: a rotation names itself, so it cannot land on an identity an import derived.
  *
  * What comes out is a valid ULID by shape — twenty-six Crockford characters, the first of them
  * inside the three bits a ULID leaves for it — and is not one by meaning: there is no instant
