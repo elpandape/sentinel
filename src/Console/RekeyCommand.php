@@ -37,12 +37,13 @@ final class RekeyCommand extends Command
         {--tenant= : Only this tenant}
         {--type= : Only this audit type}
         {--limit=500 : How many entries at most}
+        {--after= : Resume behind this entry id, as reported by the pass before}
         {--dry-run : Say how many would be re-encrypted, and re-encrypt none}';
 
     public function handle(Rekeyer $rekeyer, AuditQuery $query): int
     {
         $key = $this->text('key');
-        $entries = $this->narrowed($query)->get();
+        $entries = $this->resumed($query)->get();
 
         if ($this->option('dry-run')) {
             $this->info($this->translated('would', ['entries' => $entries->count()]));
@@ -60,7 +61,25 @@ final class RekeyCommand extends Command
 
         $this->info($this->translated('rekeyed', ['entries' => $rekeyed, 'read' => $entries->count()]));
 
+        $last = $entries->last();
+
+        if ($last instanceof Audit) {
+            $this->info($this->translated('resume', ['audit' => $last->id]));
+        }
+
         return self::SUCCESS;
+    }
+
+    /**
+     * The narrowing, plus where the last pass stopped. Without it a pass reads the same oldest
+     * entries every time: rotating them is now free, but the trail behind them is never reached.
+     */
+    private function resumed(AuditQuery $query): AuditQuery
+    {
+        $after = $this->text('after');
+        $narrowed = $this->narrowed($query);
+
+        return $after === null ? $narrowed : $narrowed->after($after);
     }
 
     /**
@@ -78,8 +97,4 @@ final class RekeyCommand extends Command
 
         return $rekeyed;
     }
-
-    /**
-     * @param  array<string, int|string>  $replace
-     */
 }

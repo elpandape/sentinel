@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Console\RekeyCommand;
+use ElPandaPe\Sentinel\Facades\Sentinel;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Tests\Fixtures\EncryptedSubject;
 
@@ -87,4 +88,46 @@ it('narrows by tenant and by type from the command line', function (): void {
         '--type' => 'model',
         '--limit' => '10',
     ])->expectsOutputToContain('Re-encrypted 0 of the 0 entries read')->assertSuccessful();
+});
+
+it('rotates a trail once however many times it is run', function (): void {
+    EncryptedSubject::query()->create(['secret' => 'launch codes']);
+    EncryptedSubject::query()->create(['secret' => 'other codes']);
+
+    $this->artisan('sentinel:rekey', ['--key' => 'rotated'])->assertSuccessful();
+
+    $after = Audit::query()->count();
+
+    $this->artisan('sentinel:rekey', ['--key' => 'rotated'])
+        ->expectsOutputToContain('Re-encrypted 0 of the')
+        ->assertSuccessful();
+
+    expect(Audit::query()->count())->toBe($after);
+});
+
+it('says which entry to resume behind', function (): void {
+    $subject = EncryptedSubject::query()->create(['secret' => 'launch codes']);
+    $last = auditsOf($subject)->last();
+
+    $this->artisan('sentinel:rekey', ['--key' => 'rotated'])
+        ->expectsOutputToContain('Pass --after='.($last?->id ?? ''))
+        ->assertSuccessful();
+});
+
+it('reads only what comes behind the cursor it was given', function (): void {
+    $subject = EncryptedSubject::query()->create(['secret' => 'launch codes']);
+    $last = auditsOf($subject)->last();
+
+    $this->artisan('sentinel:rekey', ['--key' => 'rotated', '--after' => (string) ($last?->id ?? '')])
+        ->expectsOutputToContain('Re-encrypted 0 of the 0 entries read')
+        ->assertSuccessful();
+});
+
+it('leaves the chain verifying after a pass that rotated and one that did not', function (): void {
+    EncryptedSubject::query()->create(['secret' => 'launch codes']);
+
+    $this->artisan('sentinel:rekey', ['--key' => 'rotated'])->assertSuccessful();
+    $this->artisan('sentinel:rekey', ['--key' => 'rotated'])->assertSuccessful();
+
+    expect(Sentinel::verifyIntegrity('global')->isIntact())->toBeTrue();
 });

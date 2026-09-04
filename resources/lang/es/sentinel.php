@@ -65,6 +65,7 @@ return [
             'description' => 'Recifra un rango del rastro con otra clave',
             'would' => 'Recifraría lo que encuentre entre :entries asientos. No se escribió nada.',
             'rekeyed' => 'Recifrados :entries de los :read asientos leídos. Los originales conservan su hash, su eslabón y su secuencia, y siguen verificando mientras su clave vieja siga en el llavero.',
+            'resume' => 'El último asiento leído fue :audit. Pasa --after=:audit para seguir por detrás de él.',
             'failed' => 'No se recifró nada: :reason',
         ],
         'redact' => [

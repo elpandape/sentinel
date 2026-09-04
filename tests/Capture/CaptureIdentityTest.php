@@ -5,6 +5,7 @@ declare(strict_types=1);
 use ElPandaPe\Sentinel\Capture\Recorder;
 use ElPandaPe\Sentinel\Facades\Sentinel;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Security\Rekeyer;
 use ElPandaPe\Sentinel\Tests\Fixtures\AuditedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\EncryptedSubject;
 
@@ -43,15 +44,30 @@ it('keeps an identifier the caller brought, so a retry stays the same unit of wo
     expect(Audit::query()->sole()->capture_id)->toBe($brought);
 });
 
-it('writes a rotation entry without one, because rotation never goes through a capture', function (): void {
+it('derives the identifier of a rotation instead of minting one, so a second pass finds it taken', function (): void {
     config()->set('sentinel.security.encryption.keys', [
         'default' => str_repeat('a', 32),
         'rotated' => str_repeat('b', 32),
     ]);
 
     $subject = EncryptedSubject::query()->create(['secret' => 'launch codes']);
+    $original = auditsOf($subject)->firstOrFail();
 
-    rekeyer()->rekey(auditsOf($subject)->firstOrFail(), 'rotated');
+    rekeyer()->rekey($original, 'rotated');
 
-    expect(Audit::query()->where('event', 'rekeyed')->sole()->capture_id)->toBeNull();
+    expect(Audit::query()->where('event', 'rekeyed')->sole()->capture_id)
+        ->toBe(Rekeyer::identity($original, 'rotated'));
+});
+
+it('derives a different identifier for a rotation under a different key', function (): void {
+    config()->set('sentinel.security.encryption.keys', [
+        'default' => str_repeat('a', 32),
+        'rotated' => str_repeat('b', 32),
+        'later' => str_repeat('c', 32),
+    ]);
+
+    $subject = EncryptedSubject::query()->create(['secret' => 'launch codes']);
+    $original = auditsOf($subject)->firstOrFail();
+
+    expect(Rekeyer::identity($original, 'rotated'))->not->toBe(Rekeyer::identity($original, 'later'));
 });

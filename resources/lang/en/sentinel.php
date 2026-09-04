@@ -65,6 +65,7 @@ return [
             'description' => 'Re-encrypt a range of the trail under another key',
             'would' => 'Would re-encrypt what it finds among :entries entries. Nothing was written.',
             'rekeyed' => 'Re-encrypted :entries of the :read entries read. The originals keep their hash, their link and their sequence, and keep verifying while their old key stays on the keyring.',
+            'resume' => 'The last entry read was :audit. Pass --after=:audit to carry on behind it.',
             'failed' => 'Nothing was re-encrypted: :reason',
         ],
         'redact' => [

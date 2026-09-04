@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Security;
 
 use Carbon\CarbonImmutable;
+use ElPandaPe\Sentinel\Contracts\Deduplicates;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
+use ElPandaPe\Sentinel\Import\Identity;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Support\Config;
 
@@ -25,6 +27,12 @@ final readonly class Rekeyer
 {
     public const string AUDIT_TYPE = 'security';
 
+    /**
+     * What the derived identity of a rotation is namespaced under, so it cannot collide with an
+     * identity an import derived from a row of somebody else's table.
+     */
+    private const string ORIGIN = 'rekey';
+
     public function __construct(
         private Ledger $ledger,
         private Keyring $keyring,
@@ -41,11 +49,44 @@ final readonly class Rekeyer
             return null;
         }
 
-        $data = $this->carry($audit, $target);
+        $identity = self::identity($audit, $target);
+
+        if ($this->rotated($identity)) {
+            return null;
+        }
+
+        $data = $this->carry($audit, $target, $identity);
 
         Fields::protect($data, $fields, fn (mixed $value): mixed => $this->translate($value, $source, $target));
 
         return $this->ledger->write($data);
+    }
+
+    /**
+     * The identity a rotation of this entry under this key would carry, derived rather than minted.
+     *
+     * It is what makes a second pass cost nothing. The original keeps its own key by design — that
+     * is what lets it go on verifying — so nothing about the original says it has been rotated, and
+     * a walk that reads the same prefix twice rotates it twice. Two entries where there should be
+     * one, append-only, and undoable only by redaction.
+     */
+    public static function identity(Audit $audit, string $target): string
+    {
+        return Identity::of(self::ORIGIN, $audit->id.':'.$target);
+    }
+
+    /**
+     * Whether this rotation is already on the trail. It is asked before the ledger and never after:
+     * letting the identity collide with the unique index would abort the pass rather than skip the
+     * entry, because a batch that comes back with nothing unsettled in it is rethrown.
+     *
+     * A ledger that cannot answer is taken at its word and the write goes ahead. That is the same
+     * position the contract takes everywhere else: idempotency belongs to the caller, and a caller
+     * with no reliable read cannot have it.
+     */
+    private function rotated(string $identity): bool
+    {
+        return $this->ledger instanceof Deduplicates && $this->ledger->settled([$identity]) !== [];
     }
 
     private function translate(mixed $value, string $source, string $target): mixed
@@ -55,7 +96,7 @@ final readonly class Rekeyer
             : $value;
     }
 
-    private function carry(Audit $audit, string $target): AuditData
+    private function carry(Audit $audit, string $target, string $identity): AuditData
     {
         return new AuditData(
             audit_type: self::AUDIT_TYPE,
@@ -77,6 +118,7 @@ final readonly class Rekeyer
             ]],
             encryption: ['fields' => $this->fields($audit), 'key_id' => $target],
             source_audit_id: $audit->id,
+            capture_id: $identity,
         );
     }
 
