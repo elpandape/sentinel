@@ -163,6 +163,21 @@ function phpFilesOffending(string $pattern, ?string $directory = null): array
 }
 
 /**
+ * What the package tells git to keep out of the tarball.
+ *
+ * @return list<string>
+ */
+function exportIgnored(): array
+{
+    $lines = file(dirname(__DIR__).'/.gitattributes', FILE_IGNORE_NEW_LINES) ?: [];
+
+    return array_values(array_map(
+        static fn (string $line): string => trim(explode(' ', trim($line))[0], '/'),
+        array_filter($lines, static fn (string $line): bool => str_contains($line, 'export-ignore')),
+    ));
+}
+
+/**
  * Every place a command prints a string it wrote itself instead of one the translations hold.
  *
  * Only what reaches a reader counts: the arguments to the printing methods, and the header row of

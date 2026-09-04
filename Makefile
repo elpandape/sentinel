@@ -80,8 +80,13 @@ shell: ## Shell inside the container
 	$(PHP) sh
 
 # pest --mutate does not accumulate repeated --path flags: one pass per path.
-MUTATION_PATHS = src/Telemetry src/Support src/Context src/Http src/Diff src/Integrity src/Ledger src/Query src/Snapshot src/Pipeline src/Presentation src/Security src/Capture src/Concerns src/Models src/Transactions src/Transitions src/Restore src/Events src/Dispatch src/Buffer src/Jobs src/Console src/SentinelServiceProvider.php
+MUTATION_PATHS = src/Integrity src/Context src/Presentation src/Pipeline src/Security src/Diff src/Ledger src/Query src/Snapshot src/Http src/Dispatch src/Buffer src/Mass src/Retention src/Redaction src/Archive src/Compliance src/Partitions src/Telemetry src/Transactions src/Transitions src/Restore src/Events src/Jobs src/Console src/Capture src/Concerns src/Support src/Models src/SentinelServiceProvider.php
 
+# The same paths the nightly walks, in the same order, without the thresholds: a number is
+# something a scheduled run reports, and a local pass is something you read. What is NOT here is
+# deliberate — Contracts, Exceptions, Facades, Data, Enums and Testing hold no decision to mutate,
+# and a pass over them would buy percentages of nothing at the price of the ones that matter.
+#
 # Serial on purpose, and not for memory. Each mutant is run by relaunching pest with the
 # parent's arguments, so --parallel is inherited by a subprocess that cannot fork one and
 # dies at startup — and a non-zero exit is scored as a mutant killed. The pass ends up

@@ -30,13 +30,19 @@ jobs:
         run: composer update --prefer-dist --no-interaction
 
       - name: Mutation testing
-        # Mirrors `make mutation`: pest does not accumulate repeated --path flags.
+        # The same paths as MUTATION_PATHS in the Makefile, in the same order — the two lists had
+        # drifted apart for four minors while this comment claimed they matched, so they are now
+        # written to be diffed by eye.
+        #
+        # Pest does not accumulate repeated --path flags, hence one pass each.
         # Integrity sits higher than the rest: a mutant surviving there is a verification that lies.
+        # A zero means measured and not gated, which is a position and not an omission: it is what
+        # the paths holding no decision worth a percentage get.
         # Every path is measured before any threshold is enforced. The step runs under `bash -e`, so
         # letting a missed minimum abort it would leave the modules queued behind that one unmeasured
         # for as long as it stays below its threshold — which is exactly when their numbers matter.
         run: |
-          set -- "src/Integrity:95" "src/Context:95" "src/Pipeline:90" "src/Security:90" "src/Diff:90" "src/Ledger:90" "src/Query:90" "src/Presentation:95" "src/Snapshot:90" "src/Http:90" "src/Dispatch:90" "src/Buffer:90" "src/Jobs:0" "src/Console:0" "src/Capture:0" "src/Concerns:0" "src/Support:0" "src/Models:0" "src/SentinelServiceProvider.php:0"
+          set -- "src/Integrity:95" "src/Context:95" "src/Presentation:95" "src/Pipeline:90" "src/Security:90" "src/Diff:90" "src/Ledger:90" "src/Query:90" "src/Snapshot:90" "src/Http:90" "src/Dispatch:90" "src/Buffer:90" "src/Mass:90" "src/Retention:90" "src/Redaction:90" "src/Archive:0" "src/Compliance:0" "src/Partitions:0" "src/Telemetry:0" "src/Transactions:0" "src/Transitions:0" "src/Restore:0" "src/Events:0" "src/Jobs:0" "src/Console:0" "src/Capture:0" "src/Concerns:0" "src/Support:0" "src/Models:0" "src/SentinelServiceProvider.php:0"
           below=""
           for entry in "$@"; do
             path="${entry%%:*}"

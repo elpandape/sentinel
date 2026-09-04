@@ -1,4 +1,9 @@
 version: 2
+
+# Actions only. There is no composer entry because there is no lock file to update: this is a
+# library, its lock is not committed, and what a composer entry would open pull requests against is
+# the version ranges in composer.json — which are deliberate and widened by hand when the support
+# matrix moves, not narrowed by a bot.
 updates:
   - package-ecosystem: github-actions
     directory: /
