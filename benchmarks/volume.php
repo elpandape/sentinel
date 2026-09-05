@@ -59,6 +59,8 @@ $app->register(SentinelServiceProvider::class);
 /** @var Config $sentinel */
 $sentinel = $app->make(Config::class);
 $table = $sentinel->table('audits');
+$labels = $sentinel->table('audit_tags');
+$lines = $sentinel->table('audit_relations');
 
 echo "engine={$engine} rows={$rows} shape={$shape}\n\n";
 
@@ -116,15 +118,32 @@ $timed = static function (string $label, Closure $work): float {
  * The dataset. Both engines can generate it themselves, which keeps a ten-million row seed at a few
  * minutes instead of a few hours, and the shape is the one the indexes were built for: many
  * subjects, many actors, many tenants, and a severity where the interesting value is the rare one.
+ *
+ * Four things the seed used to hide, and what each of them cost:
+ *
+ *  - The address had 255 x 255 possible values, so one of them matched 154 rows out of ten million
+ *    and whereIp() measured a filter with almost nothing behind it. It now spreads over four
+ *    hundred, which puts it beside the tenant and the route rather than two orders under them.
+ *  - occurred_at and created_at were the same expression, month modulo plus day modulo: 1 080
+ *    distinct instants for ten million rows, none of them ordered with the identifier. Every read
+ *    orders by that column. It is now strictly increasing with the row number and spread evenly
+ *    over the months the partitions cover.
+ *  - capture_id was left null, so the unique index over it was measured empty.
+ *  - The labels and the relations tables were created and never written to, which is why four
+ *    published filters had no row in the table this file prints.
  */
 $seed = static function (int $count) use ($engine, $table, $timed): void {
     $months = max(1, (int) ceil($count / 250_000));
 
-    $timed("seeding {$count} entries", static function () use ($engine, $table, $count, $months): void {
+    // One microsecond step per row across the whole seeded span, so the clock is distinct per row
+    // and ordered with the identifier — which is what the composite indexes are built on.
+    $step = max(1, intdiv($months * 30 * 86_400 * 1_000_000, max(1, $count)));
+
+    $timed("seeding {$count} entries", static function () use ($engine, $table, $count, $step): void {
         $columns = 'id, stream, sequence, audit_type, event, severity, subject_type, subject_id,'
             .' actor_type, actor_id, tenant_id, transaction_id, request_id, trace_id, span_id,'
             .' source, version, context, "before", "after", changes, metadata, payload_version,'
-            .' algorithm, previous_hash, hash, occurred_at, created_at';
+            .' algorithm, previous_hash, hash, capture_id, occurred_at, created_at';
 
         if ($engine === 'pgsql') {
             DB::statement("insert into {$table} ({$columns})
@@ -136,13 +155,14 @@ $seed = static function (int $count) use ($engine, $table, $timed): void {
                     lpad((i % 1000)::text, 26, '0'), 'req-' || i,
                     lpad((i % 10000)::text, 32, '0'), lpad((i % 10000)::text, 16, '0'),
                     case when i % 2 = 0 then 'http' else 'cli' end, i % 10,
-                    jsonb_build_object('ip', '10.' || (i % 255) || '.' || ((i / 255) % 255) || '.1',
+                    jsonb_build_object('ip', '10.0.' || ((i % 400) / 256) || '.' || ((i % 400) % 256),
                         'route', 'invoices.' || (i % 300), 'method', 'GET', 'url', '/invoices/' || i),
                     jsonb_build_object('total', i), jsonb_build_object('total', i + 1),
                     jsonb_build_array(jsonb_build_object('op', 'replace', 'path', '/total')),
                     '{}'::jsonb, 1, 'sha256', repeat('a', 64), repeat('b', 64),
-                    date_trunc('month', now()) + ((i % {$months}) || ' months')::interval + ((i % 27) || ' days')::interval,
-                    date_trunc('month', now()) + ((i % {$months}) || ' months')::interval + ((i % 27) || ' days')::interval
+                    'C' || lpad(i::text, 25, '0'),
+                    date_trunc('month', now()) + ((i::bigint * {$step}) || ' microseconds')::interval,
+                    date_trunc('month', now()) + ((i::bigint * {$step}) || ' microseconds')::interval
                 from generate_series(1, {$count}) i");
 
             return;
@@ -171,16 +191,48 @@ $seed = static function (int $count) use ($engine, $table, $timed): void {
                 lpad(i % 1000, 26, '0'), concat('req-', i),
                 lpad(i % 10000, 32, '0'), lpad(i % 10000, 16, '0'),
                 case when i % 2 = 0 then 'http' else 'cli' end, i % 10,
-                json_object('ip', concat('10.', i % 255, '.', floor(i / 255) % 255, '.1'),
+                json_object('ip', concat('10.0.', floor((i % 400) / 256), '.', (i % 400) % 256),
                     'route', concat('invoices.', i % 300), 'method', 'GET', 'url', concat('/invoices/', i)),
                 json_object('total', i), json_object('total', i + 1),
                 json_array(json_object('op', 'replace', 'path', '/total')),
                 json_object(), 1, 'sha256', repeat('a', 64), repeat('b', 64),
-                date_add(date_add(date_format(now(), '%Y-%m-01'), interval (i % {$months}) month), interval (i % 27) day),
-                date_add(date_add(date_format(now(), '%Y-%m-01'), interval (i % {$months}) month), interval (i % 27) day)
+                concat('C', lpad(i, 25, '0')),
+                date_add(date_format(now(), '%Y-%m-01'), interval (i * {$step}) microsecond),
+                date_add(date_format(now(), '%Y-%m-01'), interval (i * {$step}) microsecond)
             from bench_numbers");
 
         DB::statement('drop table bench_numbers');
+    });
+};
+
+/*
+ * The labels and the relation lines, over one entry in a hundred. Four published filters read these
+ * two tables and neither was ever written to, so four rows of the table this file prints could not
+ * be measured at all — the filters answered nothing, quickly.
+ *
+ * One in a hundred is what keeps a label selective. Both planners are cost-based and a label carried
+ * by a large share of the table is walked rather than sought, which is the right plan for a label
+ * that broad and the wrong shape for measuring the index.
+ */
+$seedProjections = static function () use ($engine, $table, $labels, $lines, $timed): void {
+    $concat = static fn (string $prefix, string $of): string => $engine === 'mysql'
+        ? "concat('{$prefix}', {$of})"
+        : "'{$prefix}' || ({$of})";
+
+    $timed('seeding labels and relation lines', static function () use ($table, $labels, $lines, $concat): void {
+        DB::statement("insert into {$labels} (audit_id, tag)
+            select id, ".$concat('label.', '(sequence / 100) % 20')."
+            from {$table} where sequence % 100 = 0");
+
+        DB::statement("insert into {$labels} (audit_id, tag)
+            select id, ".$concat('label.', '((sequence / 100) % 20 + 1) % 20')."
+            from {$table} where sequence % 100 = 0");
+
+        DB::statement("insert into {$lines} (audit_id, relation, operation, related_type, related_id)
+            select id, ".$concat('relation.', '(sequence / 100) % 10').",
+                case when sequence % 200 = 0 then 'attached' else 'detached' end,
+                'Label', ".$concat('', 'sequence % 5000')."
+            from {$table} where sequence % 100 = 0");
     });
 };
 
@@ -190,6 +242,7 @@ $analyze = static fn (): bool => DB::statement(match (DB::connection()->getDrive
 });
 
 $seed($rows);
+$seedProjections();
 $timed('analyze', $analyze);
 
 echo "\n-- the write path, on a table of that size --\n";
