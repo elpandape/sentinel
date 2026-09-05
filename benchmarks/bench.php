@@ -708,33 +708,10 @@ $settling(WARMUP);
 $workerSettling = $settling(MODE_ITERATIONS);
 
 /*
- * The buffered mode, against the same Redis the suite covers it with. What the request pays is the
- * push on its own, with the size threshold set past what the pass writes so nothing flushes in the
- * middle of the measurement; what the flush pays is the batch, which is the number the other two
- * modes have no equivalent of — they settle one entry at a time by construction.
+ * Everything that does not need Redis is printed before anything touches it. Seven tables are
+ * measured and sitting in memory by this point, and a refused connection used to take all seven
+ * down with it: the script had not printed a byte yet.
  */
-$app->make('config')->set('database.redis.default.host', getenv('REDIS_HOST') ?: '127.0.0.1');
-$app->make('config')->set('database.redis.default.database', 14);
-$app->make('config')->set('sentinel.mode', 'buffered');
-$app->make('config')->set('sentinel.buffer.key', 'sentinel:bench');
-$app->make('config')->set('sentinel.buffer.size', 1_000_000);
-$app->make('config')->set('sentinel.buffer.flush_interval', 86_400);
-$app->forgetScopedInstances();
-
-$app->make(Redis::class)->connection()->command('del', ['sentinel:bench']);
-
-$run(BenchAudited::class, WARMUP, $offset);
-$offset += WARMUP;
-$bufferedRequest = $run(BenchAudited::class, MODE_ITERATIONS, $offset);
-$offset += MODE_ITERATIONS;
-
-$app->make('config')->set('sentinel.buffer.size', 500);
-
-$start = hrtime(true);
-$flushed = $app->make(Flusher::class)->flush();
-$bufferedFlush = (hrtime(true) - $start) / 1_000_000;
-
-$app->make(Redis::class)->connection()->command('del', ['sentinel:bench']);
 
 $baseline = $results['plain (not audited)'];
 
@@ -873,6 +850,35 @@ foreach ([
         PHP_EOL,
     );
 }
+
+/*
+ * The buffered mode, against the same Redis the suite covers it with. What the request pays is the
+ * push on its own, with the size threshold set past what the pass writes so nothing flushes in the
+ * middle of the measurement; what the flush pays is the batch, which is the number the other two
+ * modes have no equivalent of — they settle one entry at a time by construction.
+ */
+$app->make('config')->set('database.redis.default.host', getenv('REDIS_HOST') ?: '127.0.0.1');
+$app->make('config')->set('database.redis.default.database', 14);
+$app->make('config')->set('sentinel.mode', 'buffered');
+$app->make('config')->set('sentinel.buffer.key', 'sentinel:bench');
+$app->make('config')->set('sentinel.buffer.size', 1_000_000);
+$app->make('config')->set('sentinel.buffer.flush_interval', 86_400);
+$app->forgetScopedInstances();
+
+$app->make(Redis::class)->connection()->command('del', ['sentinel:bench']);
+
+$run(BenchAudited::class, WARMUP, $offset);
+$offset += WARMUP;
+$bufferedRequest = $run(BenchAudited::class, MODE_ITERATIONS, $offset);
+$offset += MODE_ITERATIONS;
+
+$app->make('config')->set('sentinel.buffer.size', 500);
+
+$start = hrtime(true);
+$flushed = $app->make(Flusher::class)->flush();
+$bufferedFlush = (hrtime(true) - $start) / 1_000_000;
+
+$app->make(Redis::class)->connection()->command('del', ['sentinel:bench']);
 
 echo PHP_EOL, '| Performance mode | Writes | Total (ms) | Per write (µs) | Δ vs plain |', PHP_EOL;
 echo '|---|---|---|---|---|', PHP_EOL;

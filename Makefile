@@ -37,7 +37,7 @@ test: redis-up ## Run the test suite (make test ARGS="tests/Support/ConfigTest.p
 test-quiet: redis-up ## Same suite, output trimmed to its result
 	$(PHP) vendor/bin/pest --parallel $(WORKER_PHP) --colors=never $(ARGS)
 
-bench: ## Write-path baseline (report, not a gate)
+bench: redis-up ## Write-path baseline (report, not a gate)
 	$(PHP) php -d memory_limit=1G benchmarks/bench.php
 
 bench-up:
