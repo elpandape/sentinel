@@ -688,6 +688,8 @@ $settling = static function (int $times) use ($app): float {
             severity: Severity::Info,
             occurred_at: new DateTimeImmutable,
             capture_id: (string) Str::ulid(),
+            subject_type: BenchAudited::class,
+            subject_id: (string) $i,
             after: ['name' => 'subject', 'email' => 'subject@example.com', 'role' => 'admin', 'score' => 1, 'active' => true],
         )->toPayload();
     }
@@ -880,6 +882,24 @@ $bufferedFlush = (hrtime(true) - $start) / 1_000_000;
 
 $app->make(Redis::class)->connection()->command('del', ['sentinel:bench']);
 
+/*
+ * The same mode at the buffer size that ships. The two rows above hold the threshold past what the
+ * pass writes so that nothing flushes in the middle of them, which is the right way to separate what
+ * the request pays from what the flush pays — and is not what an installation runs. At five hundred
+ * the request pays for the flushes it triggers, which is the number to put beside sync and queue.
+ */
+$app->make('config')->set('sentinel.buffer.size', 500);
+$app->make('config')->set('sentinel.buffer.flush_interval', 86_400);
+$app->forgetScopedInstances();
+
+$run(BenchAudited::class, WARMUP, $offset);
+$offset += WARMUP;
+$bufferedDefault = $run(BenchAudited::class, MODE_ITERATIONS, $offset);
+$offset += MODE_ITERATIONS;
+
+$app->make(Flusher::class)->flush();
+$app->make(Redis::class)->connection()->command('del', ['sentinel:bench']);
+
 echo PHP_EOL, '| Performance mode | Writes | Total (ms) | Per write (µs) | Δ vs plain |', PHP_EOL;
 echo '|---|---|---|---|---|', PHP_EOL;
 
@@ -892,6 +912,7 @@ foreach ([
     'queue, what the worker pays to settle one' => $workerSettling,
     'buffered, what the request pays' => $bufferedRequest,
     'buffered, what the flush pays per entry' => $bufferedFlush * MODE_ITERATIONS / max(1, $flushed),
+    'buffered at the shipped size of 500, request and flushes together' => $bufferedDefault,
 ] as $label => $total) {
     printf(
         '| %s | %d | %.1f | %.1f | %s |%s',

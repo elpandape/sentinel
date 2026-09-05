@@ -364,6 +364,59 @@ $indexed = $timed("{$writes} writes, json index published", static fn () => $wri
 
 printf("%-52s %+9.1f %%\n", 'delta per write', ($indexed - $plain) / $plain * 100);
 
+echo "\n-- a write on a subject that already has history --\n";
+
+/*
+ * The one cost in the package that grows with a subject's own history, and the only one no published
+ * number covered: before numbering an entry the ledger asks the table for the highest version that
+ * subject already carries. Every write above this line — and every write in bench.php's variants
+ * table — invents a subject of its own, so all of them measure that read against an empty history.
+ *
+ * A fresh subject per pass rather than one that grows through the measurement: five passes of a
+ * hundred writes would leave the last pass measuring a history five hundred longer than the first.
+ */
+$writeTo = static function (string $subject, int $times) use ($ledger): void {
+    for ($i = 0; $i < $times; $i++) {
+        $ledger->write(new AuditData(
+            audit_type: 'model',
+            event: 'created',
+            severity: Severity::Info,
+            occurred_at: new DateTimeImmutable,
+            stream: 'history',
+            subject_type: 'invoice-history',
+            subject_id: $subject,
+            context: ['ip' => '203.0.113.7', 'route' => 'invoices.store'],
+        ));
+    }
+};
+
+printf("%-38s %11s %8s %8s\n", 'entries already on the subject', 'median', 'low', 'high');
+
+foreach ([1, 10, 100, 1_000] as $history) {
+    $times = [];
+
+    for ($pass = 0; $pass < 5; $pass++) {
+        $subject = "h{$history}-p{$pass}";
+
+        $writeTo($subject, $history);
+
+        $start = hrtime(true);
+        $writeTo($subject, 100);
+        $times[] = (hrtime(true) - $start) / 1000 / 100;
+    }
+
+    sort($times);
+
+    printf(
+        "%-38d %8.1f us %8.1f %8.1f   (spread %+.1f%%)\n",
+        $history,
+        $times[2],
+        $times[0],
+        $times[4],
+        ($times[4] / $times[0] - 1) * 100,
+    );
+}
+
 echo "\n-- what each published filter costs --\n";
 
 /*
