@@ -2,6 +2,75 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v0.22.2 — Defects and instruments (2026-09-04)
+
+Five defects, and the harness that was going to certify them. Nothing migrates, nothing touches the
+chain, `payload_version` stays at `1`, and every entry written before this release verifies
+unchanged.
+
+The other half is `benchmarks/`. The next release re-runs the three published baselines in one pass
+and publishes the series; on the harness as it stood, that pass would have certified the same
+mislabelled numbers with the seal of the release that freezes them. Fixing an instrument before
+using it is not an optimisation — it is the condition for the audit to mean anything.
+
+### Fixed
+
+- **`sentinel:rekey` re-rotated what it had already rotated.** A pass narrowed by `--limit` alone
+  reads the same oldest entries every time, and the original keeps its own key by design, so nothing
+  about it says it has been rotated. The second pass added a second set of rotation entries. A
+  rotation now carries an identity derived from the entry and the key it goes to, asked about before
+  the ledger, so running the command twice writes once. The damage is append-only: a trail already
+  rotated twice keeps its duplicates — they are valid, chained, verifiable entries and deleting them
+  is the one thing this package does not do — and redaction is the only way out. What changes is
+  that the next pass advances instead of duplicating again.
+- **`AuditQuery::paginate()` left no access entry.** It was the one published read that did not, and
+  the one an auditor most needs proof of: it is the only path that reaches past a prefix. `v0.19.5`
+  shipped a ticked box saying every read of the Query API leaves an entry and a row, and it has been
+  false since that tag. What gets recorded is the page, not the extra row a page asks for.
+- **The placeholder ceiling was the widest engine's, not the narrowest.** One constant of 65 535 for
+  three engines, when SQLite has compiled `SQLITE_MAX_VARIABLE_NUMBER` at 32 766 since 3.32 and the
+  package supports it from 3.38. An entry is thirty-five columns, so a batch sized for PostgreSQL
+  crosses SQLite's ceiling at 937 rows — well inside what a mass operation writes, and on the
+  default write path the loss is silent, since the business statement has already committed by the
+  time the deferred write runs. It is `v0.16.0`'s defect reproduced in the third engine. The ledger's
+  own unbounded `whereIn` divides the same way. **The number of installations this reached is not
+  known**: it takes a non-default write mode and a non-default build of `libsqlite3` at once, and the
+  distributions that ship one raise the constant to 250 000.
+- **`Auditable::audits()` did not load the labels `Audit::toArray()` reads.** The frozen serialiser
+  dereferences them unconditionally, and of the three ways to an entry only the ledger's two loaded
+  the relation. An N+1 in the ordinary case, and a `LazyLoadingViolationException` raised from the
+  package's own frozen serialiser in an application that forbids lazy loading.
+- **`events.read` and `events.redacted` were in neither language catalogue.** The presenter fell back
+  to the raw column value, so `sentinel:show` printed an English token in both languages. Under
+  compliance mode `read` is the most numerous entry type of the whole trail.
+
+### Added
+
+- **`AuditQuery::after()`**, a cursor by entry identifier, and `--after` on `sentinel:rekey` with the
+  same contract `sentinel:import` uses. Idempotency stops the command duplicating; the cursor is what
+  lets a trail larger than a `--limit` be rotated whole.
+
+### Changed
+
+- **`benchmarks/` measures what it says.** The seed no longer hides the address behind 65 025 values,
+  gives every row a distinct clock ordered with its identifier, populates `capture_id`, and writes to
+  the labels and relations tables — four published filters read tables that were created and never
+  written to. Every published filter is warmed, run five times and reported with its spread, the rows
+  it matched and the plan the engine chose, and **the pass fails** when a filter the README does not
+  call a refiner walks the trail. The verification walk canonicalises and hashes, which is what
+  verifying is and what the old loop never did. `make bench` prints the tables that do not need Redis
+  before it touches Redis.
+
+### Upgrade notes
+
+Nothing to migrate and nothing to change. `sentinel:rekey` gains an option and no signature changes.
+
+If you have run `sentinel:rekey` more than once over a trail larger than its `--limit`, you have
+duplicate rotation entries: one set per pass, all valid and all verifying. This release stops the
+next pass adding another set; it does not remove the ones already there, and nothing in this package
+will. To rotate a large trail from here, chain the passes with `--after`, feeding each one the
+identifier the pass before it reported.
+
 ## v0.22.1 — A way in from another package (2026-09-04)
 
 The last minor before the freeze, and the one that closes phase four: a history written by

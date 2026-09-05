@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.22.1-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.22.2-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -20,7 +20,7 @@ the state was before, what it is now — and whether the record itself can be pr
 
 ```json
 "repositories": [{ "type": "vcs", "url": "https://github.com/elpandape/sentinel" }],
-"require": { "elpandape/sentinel": "v0.22.1" }
+"require": { "elpandape/sentinel": "v0.22.2" }
 ```
 
 ```bash
@@ -89,6 +89,7 @@ migration: [MIGRATE_FROM_OWEN_IT.md](MIGRATE_FROM_OWEN_IT.md) and
 | `v0.21.1` | A flush that fails says how many entries it was and where they are, and a summary entry says which mode settled it |
 | `v0.22.0` | The command surface closed: `sentinel:install`, `sentinel:show`, one exit-code vocabulary across the ten, and a Sentinel section in `php artisan about` |
 | `v0.22.1` | A way in from other packages: `sentinel:import` from `owen-it/laravel-auditing` or `altek/accountant`, resumable and idempotent, with a guide apiece |
+| `v0.22.2` | Five defects closed — a rotation that ran twice, a page that left no access entry, a batch ceiling set for the widest engine, a frozen serialiser that lazy-loaded, two untranslated events — plus `AuditQuery::after()` and a `benchmarks/` that measures what it says |
 
 Everything else is on the roadmap: the freeze.
 
@@ -1111,6 +1112,28 @@ There is no total, and that is a decision rather than an omission: counting the 
 matches on a table that only ever grows is the one question in this API whose cost is unbounded
 and that no index answers. A page costs one call to the ledger, which asks for one entry more
 than it hands back — which is how it knows there is another page.
+
+**`after()` is the third way through a trail, and the one for a process rather than a screen.** It
+narrows to what was written after an entry, by identifier:
+
+```php
+$batch = Sentinel::audits()->after($lastSeenId)->take(1000)->get();
+```
+
+Where `paginate()` walks with an offset — which an engine resolves by counting past the rows it
+skips, so a deep page costs more than a shallow one — a cursor resumes from a place. It is what
+`sentinel:rekey --after` uses to work through a trail in passes, and what an exporter or a follower
+wants: hand back the identifier the last pass ended on, and the next one starts behind it. The
+identifier is the axis rather than the clock because it is total, and because a ULID sorts by the
+instant it was minted, where two entries sharing a clock reading do not order against each other at
+all.
+
+Under compliance mode a paginated read leaves an access entry like any other, and that entry lands
+in `sentinel_audits`. An unfiltered walk of the whole table therefore sees its own footprints: the
+default order is oldest-first, which pushes them to the tail rather than into the page in front of
+you, but a walk that keeps paginating will eventually reach them. They are legitimate entries of a
+legitimate read and Sentinel does not hide them from you; the cost is the one
+[compliance mode already declares](#compliance-mode).
 
 ### Drivers that cannot answer everything
 
@@ -2228,6 +2251,14 @@ Only the middle column is a support claim: this package does not declare compati
 run. The right-hand column is not a promise — it is the floor the emitted SQL needs, and the first
 place to look when an older engine misbehaves.
 
+**SQLite also has a ceiling, and it is not a version.** `SQLITE_MAX_VARIABLE_NUMBER` is a
+compile-time constant of `libsqlite3`, 32 766 since 3.32, and it is the number of placeholders one
+statement may carry. The package batches to fit it: an entry is thirty-five columns, so a batch is
+divided every 936 rows, and the division is the narrowest of the three engines rather than the
+widest — PostgreSQL and the MySQL prepared protocol both stop at 65 535. This is the one limit
+Sentinel inherits from a library it does not choose. Distributions raise it (Alpine, Debian, Ubuntu
+and Homebrew all compile at 250 000) and a build of your own may not.
+
 MariaDB is not in that table and is refused rather than guessed at. `whereFieldChanged()` has no
 dialect for it, so it declines by name instead of answering with something that might not mean the
 same thing.
@@ -2566,6 +2597,14 @@ The recommended route is the command, on the application's own schedule:
 // routes/console.php
 Schedule::command('sentinel:checkpoint')->hourly();
 ```
+
+**The first pass over an existing trail is not like the ones after it, and there is no `--limit`.**
+Every command that walks the trail is bounded per pass except this one: it anchors every complete
+window each stream still owes, and on a trail that predates the feature that is all of them. At the
+default of one anchor per thousand entries, a ten-million-entry stream emits ten thousand anchors on
+the first run — each one a fold over its window, so the first pass reads the whole trail. Steady
+state after that is one anchor per thousand writes, which is what the numbers above measure. Run the
+first one by hand, off the schedule, before putting it on `->hourly()`.
 
 **The schedule belongs to the application.** Sentinel registers commands and nothing else; a package
 that puts itself on a scheduler is a surprise in somebody else's application.
@@ -3042,6 +3081,23 @@ keyring.
 Which is the opposite of a redaction, and why no path of this command calls that one: a tombstone
 destroys content, a rekey preserves it under a different lock.
 
+**Rotating a trail larger than one pass.** `--limit` defaults to five hundred, and the walk is
+oldest-first, so a bare second run reads the same five hundred entries again. Running it twice is
+safe — a rotation carries an identity derived from the entry and the key it goes to, so the second
+pass finds its work done and writes nothing — but safe is not the same as finished. To get through
+a whole trail, chain the passes on the identifier each one reports:
+
+```bash
+php artisan sentinel:rekey --key=2027-q1 --limit=5000
+# ... The last entry read was 01JB7Q... Pass --after=01JB7Q... to carry on behind it.
+php artisan sentinel:rekey --key=2027-q1 --limit=5000 --after=01JB7Q...
+```
+
+Before `v0.22.2` the second bare run wrote a second set of rotation entries instead of nothing. If
+that happened to you, those entries are still there and still verify — they are valid and this
+package does not delete entries — and [redaction](#redaction) is the only way to
+remove their contents.
+
 ## Scaling
 
 A trail only grows. Nothing in this package deletes an entry to make room, so at some point the
@@ -3070,6 +3126,14 @@ eight points more per write than the expression index and four times the space, 
 plan this API publishes worse — 1.18 ms against 0.067 ms. Over `changes` it is not used at all:
 `whereFieldChanged()` walks the array in a correlated `exists`, and the plan with a GIN present is
 still a sequential scan.
+
+> **Not reproducible from `make`.** Those four figures come from a one-off comparison on PostgreSQL
+> 16 over a ten-million-row table, run in September 2026 on the same machine as the rest of this
+> section: a GIN built over `context` and over `changes`, timed against the expression index for
+> writes, index size and the plan of each published filter. No script in this repository rebuilds
+> it, which is why it says so here rather than being quoted as if `make bench-volume` produced it.
+> Every other number in this section is reproducible; this one is a decision to **not** ship
+> something, and re-measuring it is the cost of disputing that decision.
 
 ### Partitioning
 
@@ -3249,8 +3313,15 @@ no headline:
 | PostgreSQL 16 on disk, ten million entries, flat | 2.20 ms (**+6 %**) |
 | MySQL 9 on disk, ten million entries, flat | 1.97 ms (**−5 %**) |
 
-A ten-million-entry trail on a real engine costs what a small one on SQLite costs. What a write pays
-is the pipeline, the canonicalisation and the hash — not the size of the table it lands in.
+A ten-million-entry trail on a real engine costs what a small one on SQLite costs — **not** the size
+of the table it lands in.
+
+The two rows are not the same measurement, and the comparison is only good for that one conclusion.
+The SQLite baseline is a capture: a `save()` on an audited model, through the observer and the whole
+pipeline. The two volume rows are a write straight to the ledger — canonicalisation, hash and
+insert, without the pipeline in front of it. So what the volume rows show is that the engine and the
+size of the table are not where the time goes; what a *capture* pays is the SQLite row, and the
+[write-path table](#what-the-modes-actually-cost) is where that is broken down.
 
 **The JSON index, measured end to end.** Across all eight runs the delta of publishing it lands
 between −5.4 % and +7.2 % — which is to say it is noise. That is not a contradiction of the +15 % and
@@ -3260,8 +3331,11 @@ canonicalisation and the hash dominate and the insert is a fraction. Both number
 first to reason about a bulk load or the `buffered` mode, and the second to decide whether to publish
 it at all.
 
-**Retiring a range.** The same ~260 000 entries removed, as a `DELETE` on the flat table and as a
-`DROP PARTITION` on the divided one. This is the argument for partitioning, and it is not a small
+**What a shape costs to retire from, not a choice the package makes.** The same ~260 000 entries
+removed, as a `DELETE` on the flat table and as a `DROP PARTITION` on the divided one. No path of
+this package picks between the two: `sentinel:prune` always takes the `DELETE` row, because
+`Cascade` deletes by range whatever the table looks like, and `--retire` reclaims the empty shell
+afterwards. What the table below is the argument for is **partitioning**, and it is not a small
 one:
 
 | ~260 000 entries | PostgreSQL 1M | PostgreSQL 10M | MySQL 1M | MySQL 10M |
@@ -3283,9 +3357,13 @@ magnitude. On MySQL at ten million it is the difference between a minute and a b
 | MySQL, flat | 37.8 s | 392.4 s |
 | MySQL, partitioned | 38.5 s | 444.9 s |
 
-Linear, about 35 µs per entry, and partitioning adds roughly a fifth. A full verification of ten
-million entries is minutes rather than hours — which is the number to have in hand when deciding
-between `--depth=entries` and the [shallower walks](#artisan-commands).
+Linear, and partitioning adds roughly a fifth. **What that number measures is the walk, not the
+verification**: the loop it comes from hydrates each entry and discards it, without canonicalising or
+hashing anything, and canonicalising and hashing is the whole of what verifying an entry is. It is
+the floor — the cost of getting the rows out of the engine — and the real figure is several times
+it. The harness that measures the rest lands in `v0.22.2`; the numbers it produces are republished
+with the rest of the performance audit, and until then read this row as the walk and not as
+`sentinel:verify`.
 
 **Reading it back.** Every published filter, over ten million entries, taking fifty:
 
