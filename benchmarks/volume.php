@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
+use ElPandaPe\Sentinel\Enums\RelationOperation;
 use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Facades\Sentinel;
 use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
 use ElPandaPe\Sentinel\Partitions\Grammar;
@@ -230,11 +232,92 @@ $seedProjections = static function () use ($engine, $table, $labels, $lines, $ti
 
         DB::statement("insert into {$lines} (audit_id, relation, operation, related_type, related_id)
             select id, ".$concat('relation.', '(sequence / 100) % 10').",
-                case when sequence % 200 = 0 then 'attached' else 'detached' end,
+                case when sequence % 200 = 0 then 'attach' else 'detach' end,
                 'Label', ".$concat('', 'sequence % 5000')."
             from {$table} where sequence % 100 = 0");
     });
 };
+
+/**
+ * The statement the driver actually issued for a read, captured as it ran rather than rebuilt. What
+ * gets explained has to be what the engine was asked, or the plan describes a query nobody made.
+ *
+ * It is the read of the trail itself and not the eager load of the labels hanging off it.
+ *
+ * @return array{string, list<mixed>}
+ */
+$statement = static function (Closure $read) use ($table): array {
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+
+    $read();
+
+    DB::disableQueryLog();
+
+    foreach (DB::getQueryLog() as $query) {
+        if (str_contains((string) $query['query'], $table)) {
+            /** @var list<mixed> $bindings */
+            $bindings = $query['bindings'];
+
+            return [(string) $query['query'], $bindings];
+        }
+    }
+
+    return ['', []];
+};
+
+/**
+ * The plan, on one line, in the engine's own words. PostgreSQL says `Seq Scan`; MySQL says
+ * `Table scan`, but only under FORMAT=TREE — the tabular EXPLAIN spells the same thing `type: ALL`,
+ * and one vocabulary for two engines is what makes the assertion below readable.
+ *
+ * @param  list<mixed>  $bindings
+ */
+$explain = static function (string $sql, array $bindings): string {
+    if ($sql === '') {
+        return '(not captured)';
+    }
+
+    $driver = DB::connection()->getDriverName();
+    $rows = DB::select(($driver === 'mysql' ? 'explain format=tree ' : 'explain ').$sql, $bindings);
+
+    $lines = [];
+
+    foreach ($rows as $row) {
+        $columns = array_map(static fn (mixed $value): string => is_scalar($value) ? (string) $value : '', (array) $row);
+
+        $lines[] = trim(implode(' ', $columns));
+    }
+
+    return preg_replace('/\s+/', ' ', implode(' | ', $lines)) ?? '';
+};
+
+/**
+ * How many entries the filter matched, which is the number that explains the clock beside it: a
+ * filter that reaches its index and then sorts a third of the table is slow for a reason that has
+ * nothing to do with the index.
+ *
+ * The prefix is dropped rather than the query rebuilt, so what is counted is what was read.
+ *
+ * @param  list<mixed>  $bindings
+ */
+$matched = static function (string $sql, array $bindings): string {
+    $unbounded = preg_replace('/\s+limit\s+\d+\s*$/i', '', $sql);
+
+    if ($unbounded === null || $unbounded === $sql) {
+        return '-';
+    }
+
+    $counted = DB::selectOne("select count(*) as matched from ({$unbounded}) as bounded", $bindings);
+    $rows = is_object($counted) ? ($counted->matched ?? 0) : 0;
+
+    return number_format(is_numeric($rows) ? (float) $rows : 0.0);
+};
+
+/**
+ * Whether a plan walks the table instead of seeking into it, in either engine's spelling.
+ */
+$scans = static fn (string $plan): bool => str_contains($plan, 'Seq Scan') || str_contains($plan, 'Table scan');
 
 $analyze = static fn (): bool => DB::statement(match (DB::connection()->getDriverName()) {
     'mysql' => "analyze table {$table}",
@@ -279,19 +362,95 @@ printf("%-52s %+9.1f %%\n", 'delta per write', ($indexed - $plain) / $plain * 10
 
 echo "\n-- what each published filter costs --\n";
 
+/*
+ * Every published filter, measured the same way: warmed, then five passes, reported as the median
+ * and the spread, with the rows it matched and the plan the engine chose printed beside it.
+ *
+ * A single cold pass was what this used to report, which is why eight numbers went into the README
+ * under a heading that says every published filter. There were eighteen, and four of them could not
+ * be measured at all because nothing seeded the tables they read.
+ *
+ * The pass FAILS on a filter the README does not call a refiner whose plan walks the table. That is
+ * the deuda v0.20.0 left open: the README claims no published filter falls back to a full pass
+ * without being called a refiner, and until now nothing at volume checked the claim.
+ */
+$cursor = str_pad((string) intdiv($rows, 2), 26, '0', STR_PAD_LEFT);
+
+/** @var list<array{string, Closure(): AuditQuery, ?bool}> $filters */
 $filters = [
-    'for()' => static fn (): AuditQuery => Sentinel::audits()->for('invoice', '7'),
-    'by()' => static fn (): AuditQuery => Sentinel::audits()->by('user', '7'),
-    'whereEvent()' => static fn (): AuditQuery => Sentinel::audits()->whereEvent('event.7'),
-    'whereSeverity()' => static fn (): AuditQuery => Sentinel::audits()->whereSeverity(Severity::Critical),
-    'forTenant()' => static fn (): AuditQuery => Sentinel::audits()->forTenant('tenant-7'),
-    'whereType()' => static fn (): AuditQuery => Sentinel::audits()->whereType('transition'),
-    'whereIp()' => static fn (): AuditQuery => Sentinel::audits()->whereIp('10.7.0.1'),
-    'whereRoute()' => static fn (): AuditQuery => Sentinel::audits()->whereRoute('invoices.7'),
+    ['for()', static fn (): AuditQuery => Sentinel::audits()->for('invoice', '7'), true],
+    ['by()', static fn (): AuditQuery => Sentinel::audits()->by('user', '7'), true],
+    ['whereEvent()', static fn (): AuditQuery => Sentinel::audits()->whereEvent('event.7'), true],
+    ['whereType()', static fn (): AuditQuery => Sentinel::audits()->whereType('transition'), true],
+    ['whereSeverity()', static fn (): AuditQuery => Sentinel::audits()->whereSeverity(Severity::Critical), true],
+    ['forTenant()', static fn (): AuditQuery => Sentinel::audits()->forTenant('tenant-7'), true],
+    ['inTransaction()', static fn (): AuditQuery => Sentinel::audits()->inTransaction(str_pad('7', 26, '0', STR_PAD_LEFT)), true],
+    ['withTrace()', static fn (): AuditQuery => Sentinel::audits()->withTrace(str_pad('7', 32, '0', STR_PAD_LEFT)), true],
+    ['whereTag()', static fn (): AuditQuery => Sentinel::audits()->whereTag('label.7'), true],
+    ['whereAnyTag()', static fn (): AuditQuery => Sentinel::audits()->whereAnyTag(['label.7', 'label.8']), true],
+    ['whereIp()', static fn (): AuditQuery => Sentinel::audits()->whereIp('10.0.0.7'), true],
+    ['whereRoute()', static fn (): AuditQuery => Sentinel::audits()->whereRoute('invoices.7'), true],
+
+    // The four the README calls refiners: they narrow a result, they do not find one, and each of
+    // them alone walks the table on purpose.
+    ['whereSource()', static fn (): AuditQuery => Sentinel::audits()->whereSource(Source::Cli), false],
+    ['between()', static fn (): AuditQuery => Sentinel::audits()->between(
+        CarbonImmutable::now()->startOfMonth(), CarbonImmutable::now()->startOfMonth()->addDays(3),
+    ), false],
+    ['whereFieldChanged()', static fn (): AuditQuery => Sentinel::audits()->whereFieldChanged('total'), false],
+    ['whereVersion()', static fn (): AuditQuery => Sentinel::audits()->whereVersion(7), false],
+
+    // The four the README's filter table does not classify at all. Their plan is printed and not
+    // asserted: which of them find and which refine is v0.22.3's row to write, not this file's to
+    // decide by failing.
+    ['whereRelation()', static fn (): AuditQuery => Sentinel::audits()->whereRelation('relation.7'), null],
+    ['whereRelated()', static fn (): AuditQuery => Sentinel::audits()->whereRelated('Label', '700'), null],
+    ['whereOperation()', static fn (): AuditQuery => Sentinel::audits()->whereOperation(RelationOperation::Attach), null],
+    ['after()', static fn (): AuditQuery => Sentinel::audits()->after($cursor), null],
 ];
 
-foreach ($filters as $label => $build) {
-    $timed($label, static fn () => $build()->take(50)->get());
+printf("%-22s %10s %10s %10s %12s  %s\n", 'filter', 'median', 'low', 'high', 'rows', 'plan');
+
+$walking = [];
+
+foreach ($filters as [$label, $build, $finds]) {
+    $read = static fn () => $build()->take(50)->get();
+
+    $read();
+
+    $times = [];
+
+    for ($pass = 0; $pass < 5; $pass++) {
+        $start = hrtime(true);
+        $read();
+        $times[] = (hrtime(true) - $start) / 1_000_000;
+    }
+
+    sort($times);
+
+    [$sql, $bindings] = $statement($read);
+    $plan = $explain($sql, $bindings);
+
+    printf(
+        "%-22s %8.1f ms %8.1f %8.1f %12s  %s\n",
+        $label,
+        $times[2],
+        $times[0],
+        $times[4],
+        $matched($sql, $bindings),
+        $plan,
+    );
+
+    if ($finds === true && $scans($plan)) {
+        $walking[] = $label;
+    }
+}
+
+if ($walking !== []) {
+    echo "\nFAILED: the plan walks the table for ", implode(', ', $walking),
+    ", and the README does not call any of them a refiner.\n";
+
+    exit(1);
 }
 
 echo "\n-- walking a stream --\n";
