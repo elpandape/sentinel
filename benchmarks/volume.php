@@ -319,9 +319,27 @@ $matched = static function (string $sql, array $bindings): string {
 };
 
 /**
- * Whether a plan walks the table instead of seeking into it, in either engine's spelling.
+ * Whether a plan walks the trail instead of seeking into it.
+ *
+ * The string `Seq Scan` alone will not do, and finding that out cost a false positive on nine
+ * filters: over a divided table every plan carries one per empty partition, because reading zero
+ * rows through an index is not a plan any planner would pick. Those nodes are free and say so —
+ * `cost=0.00..0.00` — so what is asked is whether a walk of the trail costs anything.
+ *
+ * Only the trail counts. A walk of the labels or the relations table is a different fact about a
+ * different table, and the README's claim is about this one.
  */
-$scans = static fn (string $plan): bool => str_contains($plan, 'Seq Scan') || str_contains($plan, 'Table scan');
+$scans = static function (string $plan) use ($table): bool {
+    preg_match_all("/(?:Parallel )?(?:Seq Scan|Table scan) on {$table}\S*[^(]*\(cost=(?:[\d.]+\.\.)?([\d.]+)/", $plan, $found);
+
+    foreach ($found[1] as $cost) {
+        if ((float) $cost > 100) {
+            return true;
+        }
+    }
+
+    return false;
+};
 
 $analyze = static fn (): bool => DB::statement(match (DB::connection()->getDriverName()) {
     'mysql' => "analyze table {$table}",
@@ -658,6 +676,73 @@ foreach ($weights as $weight) {
     $name = $row['name'] ?? null;
 
     printf("%-52s %10.1f MB\n", is_scalar($name) ? (string) $name : '?', $bytes / 1_048_576);
+}
+
+echo "\n-- what a read of the trail costs under compliance mode --\n";
+
+/*
+ * One of the four numbers the README published with no harness behind it: about +2.5 ms a read, or
+ * 1.8x what a read cost before. It is measurable in a few lines, so it gets a harness rather than a
+ * disclaimer — a read under compliance writes a chained entry and a row, which is a write on the
+ * read path and the one place in this package where reading is not free.
+ */
+$reading = static function (bool $compliance) use ($config, $app): float {
+    $config->set('sentinel.compliance', $compliance);
+    $app->forgetScopedInstances();
+
+    Sentinel::audits()->forTenant('tenant-7')->take(50)->get();
+
+    $times = [];
+
+    for ($pass = 0; $pass < 5; $pass++) {
+        $start = hrtime(true);
+        Sentinel::audits()->forTenant('tenant-7')->take(50)->get();
+        $times[] = (hrtime(true) - $start) / 1_000_000;
+    }
+
+    sort($times);
+
+    return $times[2];
+};
+
+$plainRead = $reading(false);
+$loggedRead = $reading(true);
+
+$config->set('sentinel.compliance', false);
+$app->forgetScopedInstances();
+
+printf("%-52s %10.2f ms\n", 'a read, compliance off', $plainRead);
+printf("%-52s %10.2f ms\n", 'a read, compliance on', $loggedRead);
+printf("%-52s %+9.2f ms\n", 'what the entry and the row cost', $loggedRead - $plainRead);
+
+if ($shape === 'partitioned') {
+    echo "\n-- what the partitions cost the planner --\n";
+
+    /*
+     * The second number the README published with nothing behind it, and the one that carries an
+     * operational instruction: keep --ahead to a few months. Every write reads the tail of its
+     * stream, and over a divided table that read is a Merge Append across every partition, because
+     * nothing in `where stream = ?` says which one holds the highest sequence. The cost lands on
+     * planning, which is why it is invisible to anything that times execution.
+     */
+    $tail = "select sequence, hash from {$table} where stream = 'global' order by sequence desc limit 1";
+
+    foreach (DB::select("explain (analyze, format text) {$tail}") as $line) {
+        $text = (array) $line;
+        $said = $text['QUERY PLAN'] ?? '';
+
+        if (is_string($said) && (str_contains($said, 'Planning Time') || str_contains($said, 'Execution Time'))) {
+            echo '  ', trim($said), "\n";
+        }
+    }
+
+    $counted = DB::selectOne('select count(*) as parts from pg_inherits
+        join pg_class parent on parent.oid = pg_inherits.inhparent
+        where parent.relname = ?', [$table]);
+
+    $parts = is_object($counted) ? ($counted->parts ?? 0) : 0;
+
+    printf("%-52s %10d\n", 'partitions the planner had to consider', is_numeric($parts) ? (int) $parts : 0);
 }
 
 echo "\n-- retiring a range --\n";
