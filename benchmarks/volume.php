@@ -3,11 +3,15 @@
 declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
+use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Enums\RelationOperation;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Facades\Sentinel;
+use ElPandaPe\Sentinel\Integrity\Content;
+use ElPandaPe\Sentinel\Integrity\Verifier;
 use ElPandaPe\Sentinel\Ledger\DatabaseLedger;
+use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Partitions\Grammar;
 use ElPandaPe\Sentinel\Partitions\Partition;
 use ElPandaPe\Sentinel\Query\AuditQuery;
@@ -336,7 +340,7 @@ $sequence = $rows;
 
 $write = static function (int $times) use ($ledger, &$sequence): void {
     for ($i = 0; $i < $times; $i++) {
-        $ledger->write(new ElPandaPe\Sentinel\Data\AuditData(
+        $ledger->write(new AuditData(
             audit_type: 'model',
             event: 'created',
             severity: Severity::Info,
@@ -453,15 +457,155 @@ if ($walking !== []) {
     exit(1);
 }
 
-echo "\n-- walking a stream --\n";
+echo "\n-- walking a stream, and what verifying it adds --\n";
 
-$walked = 0;
-$timed('LedgerStream over the whole seeded stream', static function () use ($ledger, &$walked): void {
-    foreach ($ledger->stream('global') as $ignored) {
-        $walked++;
+/*
+ * What `sentinel:verify --depth=entries` actually does, in four rows instead of one.
+ *
+ * The number this file used to publish — about 35 microseconds an entry, quoted in the README as
+ * what sentinel:verify costs — came from a loop that hydrated each entry and threw it away. It never
+ * canonicalised anything and it never hashed anything, which is the whole of what verifying is. What
+ * it measured is the floor of the walk: the cost of getting the rows out of the engine.
+ *
+ * The walk and the rehash run over the seeded stream, where the volume is the point. The seeded
+ * entries carry a planted hash, so every rehash comes back Altered — the comparison is what costs,
+ * not the answer, and the answer over this dataset means nothing.
+ *
+ * The two signature rows cannot run there. A signature is over the canonical payload, so it cannot
+ * be planted with SQL the way a hash string can; they run over a stream this file writes through the
+ * ledger, signed for real, and are reported per entry like the others.
+ *
+ * Everything is a window with several passes rather than one pass over the whole stream. Five passes
+ * over ten million entries would be half an hour a row.
+ */
+$window = min($rows, 100_000);
+$signedWindow = min($writes, 2_000);
+
+/** @var Content $content */
+$content = $app->make(Content::class);
+
+$rehash = static fn (object $entry): mixed => $entry instanceof Audit ? $content->of($entry) : null;
+
+$walking = static function (string $stream, int $upTo, ?Closure $check) use ($ledger): int {
+    $seen = 0;
+
+    foreach ($ledger->stream($stream)->range(1, $upTo) as $entry) {
+        if ($check instanceof Closure) {
+            $check($entry);
+        }
+
+        $seen++;
     }
-});
-echo "  ({$walked} entries)\n";
+
+    return $seen;
+};
+
+$perEntry = static function (string $label, string $stream, int $upTo, ?Closure $check, int $passes = 3) use ($walking, $shape): void {
+    $walking($stream, $upTo, $check);
+
+    $times = [];
+
+    for ($pass = 0; $pass < $passes; $pass++) {
+        $start = hrtime(true);
+        $seen = $walking($stream, $upTo, $check);
+        $times[] = (hrtime(true) - $start) / 1000 / max(1, $seen);
+    }
+
+    sort($times);
+
+    printf(
+        "%-38s %8.1f us %8.1f %8.1f   (%s, %d entries)\n",
+        $label,
+        $times[intdiv($passes, 2)],
+        $times[0],
+        $times[$passes - 1],
+        $shape,
+        $upTo,
+    );
+};
+
+printf("%-38s %11s %8s %8s\n", 'verification depth', 'median', 'low', 'high');
+
+$perEntry('walk only (hydrate, discard)', 'global', $window, null);
+$perEntry('walk + rehash', 'global', $window, $rehash);
+
+// Generated per run rather than shipped: a key pair in a repository is a key pair someone reuses.
+$pair = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+
+if ($pair === false) {
+    throw new RuntimeException('The benchmark could not generate a key pair to sign with.');
+}
+
+$private = '';
+openssl_pkey_export($pair, $private);
+$public = openssl_pkey_get_details($pair)['key'] ?? '';
+
+$config->set('sentinel.integrity.signature.enabled', true);
+$config->set('sentinel.integrity.signature.keys', ['default' => 'bench-signing-secret', 'rsa' => $public]);
+
+foreach (['hmac' => 'default', 'openssl' => 'rsa'] as $signer => $keyId) {
+    $config->set('sentinel.integrity.signature.signer', $signer);
+    $config->set('sentinel.integrity.signature.key_id', $keyId);
+    $config->set('sentinel.integrity.signature.private_key', $signer === 'openssl' ? $private : null);
+    $app->forgetScopedInstances();
+
+    /** @var Verifier $verifier */
+    $verifier = $app->make(Verifier::class);
+
+    $stream = "signed-{$signer}";
+    $signing = $app->make(DatabaseLedger::class);
+
+    for ($i = 0; $i < $signedWindow; $i++) {
+        $signing->write(new AuditData(
+            audit_type: 'model',
+            event: 'created',
+            severity: Severity::Info,
+            occurred_at: new DateTimeImmutable,
+            stream: $stream,
+            subject_type: 'invoice',
+            subject_id: (string) $i,
+            context: ['ip' => '203.0.113.7', 'route' => 'invoices.store'],
+        ));
+    }
+
+    // The control row, over the same entries. Without it the signature delta is read against a
+    // measurement of a different population — the seeded stream — and is not a delta of anything.
+    $perEntry("walk + rehash ({$signer} stream, control)", $stream, $signedWindow, $rehash);
+
+    $perEntry("walk + rehash + signature ({$signer})", $stream, $signedWindow, static function (object $entry) use ($content, $verifier): void {
+        if ($entry instanceof Audit) {
+            $content->of($entry);
+            $verifier->verifySignature($entry);
+        }
+    });
+}
+
+$config->set('sentinel.integrity.signature.enabled', false);
+$config->set('sentinel.integrity.signature.key_id', 'default');
+$app->forgetScopedInstances();
+
+echo "\n-- what the indexes weigh --\n";
+
+/*
+ * Every index of the trail, after the seed. Without these numbers the roughly 560 bytes a row that
+ * v0.20.0's section 7 publishes cannot be reconciled with anything, and no decision about dropping
+ * an index has a figure under it.
+ */
+$weights = DB::connection()->getDriverName() === 'mysql'
+    ? DB::select("select index_name as name, stat_value * @@innodb_page_size as bytes
+        from mysql.innodb_index_stats
+        where database_name = database() and table_name = ? and stat_name = 'size'
+        order by bytes desc", [$table])
+    : DB::select('select indexrelname as name, pg_relation_size(indexrelid) as bytes
+        from pg_stat_user_indexes where relname = ? order by bytes desc', [$table]);
+
+foreach ($weights as $weight) {
+    $row = (array) $weight;
+    $bytes = is_numeric($row['bytes'] ?? null) ? (float) $row['bytes'] : 0.0;
+    $name = $row['name'] ?? null;
+
+    printf("%-52s %10.1f MB\n", is_scalar($name) ? (string) $name : '?', $bytes / 1_048_576);
+}
 
 echo "\n-- retiring a range --\n";
 
