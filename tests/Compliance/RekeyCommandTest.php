@@ -131,3 +131,30 @@ it('leaves the chain verifying after a pass that rotated and one that did not', 
 
     expect(Sentinel::verifyIntegrity('global')->isIntact())->toBeTrue();
 });
+
+it('gets through a trail larger than one pass without duplicating any of it', function (): void {
+    foreach (range(1, 5) as $n) {
+        EncryptedSubject::query()->create(['secret' => "launch codes {$n}"]);
+    }
+
+    $this->artisan('sentinel:rekey', ['--key' => 'rotated', '--limit' => '2'])
+        ->expectsOutputToContain('Re-encrypted 2 of the 2 entries read')
+        ->assertSuccessful();
+
+    $afterFirst = Audit::query()->count();
+
+    $this->artisan('sentinel:rekey', ['--key' => 'rotated', '--limit' => '2'])
+        ->expectsOutputToContain('Re-encrypted 0 of the 2 entries read')
+        ->assertSuccessful();
+
+    expect(Audit::query()->count())->toBe($afterFirst);
+
+    $cursor = Audit::query()->where('event', 'created')->orderBy('id')->skip(1)->first();
+
+    $this->artisan('sentinel:rekey', ['--key' => 'rotated', '--limit' => '2', '--after' => (string) $cursor?->id])
+        ->expectsOutputToContain('Re-encrypted 2 of the 2 entries read')
+        ->assertSuccessful();
+
+    expect(Audit::query()->where('event', 'rekeyed')->count())->toBe(4)
+        ->and(Sentinel::verifyIntegrity('global')->isIntact())->toBeTrue();
+});
