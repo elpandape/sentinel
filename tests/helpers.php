@@ -1972,6 +1972,9 @@ function runTheWorker(): void
 /**
  * How many statements the ledger spends inserting a batch of a known size. The ceiling divides by
  * the number of columns a row carries, so what this counts is the division and not the write.
+ *
+ * The table is matched unquoted: MySQL wraps an identifier in backticks and the other two in double
+ * quotes, and a counter that only recognises one of the three counts zero on the others.
  */
 function statementsWriting(int $entries): int
 {
@@ -1979,7 +1982,7 @@ function statementsWriting(int $entries): int
     $table = auditsTable();
 
     DB::listen(static function (QueryExecuted $query) use (&$seen, $table): void {
-        if (str_starts_with($query->sql, 'insert into "'.$table.'"')) {
+        if (str_starts_with($query->sql, 'insert into') && str_contains($query->sql, $table)) {
             $seen++;
         }
     });
@@ -2001,7 +2004,7 @@ function statementsAsking(int $captures): int
     $table = auditsTable();
 
     DB::listen(static function (QueryExecuted $query) use (&$seen, $table): void {
-        if (str_contains($query->sql, 'from "'.$table.'"') && str_contains($query->sql, 'capture_id')) {
+        if (str_starts_with($query->sql, 'select') && str_contains($query->sql, $table) && str_contains($query->sql, 'capture_id')) {
             $seen++;
         }
     });
