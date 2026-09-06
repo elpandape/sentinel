@@ -7,6 +7,8 @@ namespace ElPandaPe\Sentinel\Compliance;
 /**
  * An export and what proves it. The manifest travels beside the body rather than inside it: putting
  * the digest into the bytes it digests is the one shape that cannot work.
+ *
+ * @internal
  */
 final readonly class Exported
 {

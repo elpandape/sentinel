@@ -16,6 +16,8 @@ use UnitEnum;
  * Mirrors what the snapshot builder already applied, for the caller who compares two
  * structures the package never built. The date format is the same string on purpose:
  * a test ties the two constants together so they cannot drift apart in silence.
+ *
+ * @internal
  */
 final class Normalizer
 {

@@ -30,6 +30,8 @@ use Throwable;
  * does not partition, an unreadable option, a thrown exception. FAILURE is a refusal: a partition
  * behind the cutoff that still holds entries under compliance mode, where a range may not leave
  * without a copy of it existing somewhere first.
+ *
+ * @internal
  */
 final class PartitionsCommand extends Command
 {

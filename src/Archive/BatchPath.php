@@ -18,6 +18,8 @@ use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
  * in either direction: a stream name is any string up to sixty-four characters and a closure
  * resolver can return one full of slashes or dots, so the slug is a traversal guard; and two names
  * that slug alike would otherwise share a directory.
+ *
+ * @internal
  */
 final readonly class BatchPath
 {

@@ -17,6 +17,9 @@ use ElPandaPe\Sentinel\Exceptions\QueryException;
 use ElPandaPe\Sentinel\Models\Audit;
 use Illuminate\Contracts\Events\Dispatcher;
 
+/**
+ * @internal
+ */
 final readonly class Verifier
 {
     public function __construct(

@@ -12,6 +12,8 @@ use ReflectionClass;
  * A pipeline stage knows the subject type, not the model: the data object is named after
  * the columns and travels serialized once the queued mode lands. This is where the type
  * becomes what the model declared, memoized because one subject writes many entries.
+ *
+ * @internal
  */
 final class PolicyRegistry
 {

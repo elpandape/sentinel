@@ -8,6 +8,8 @@ namespace ElPandaPe\Sentinel\Retention;
  * What a purge took, counted per table and never as one total. An operator reading that four
  * thousand rows went needs to know which of them were entries and which were the labels hanging off
  * them, and a single number cannot be read back into either.
+ *
+ * @internal
  */
 final readonly class Removed
 {

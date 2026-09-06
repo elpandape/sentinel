@@ -14,6 +14,8 @@ use ElPandaPe\Sentinel\Exceptions\SignatureException;
  *
  * The signature is stored base64-encoded. The column is text and the export is JSON, so raw DER
  * bytes would survive neither.
+ *
+ * @internal
  */
 final readonly class OpenSslSigner implements Signer
 {

@@ -12,6 +12,8 @@ use ElPandaPe\Sentinel\Retention\Duration;
  *
  * It answers from the clock alone and never touches a database, which is what lets the whole
  * decision be read in one place and tested without one.
+ *
+ * @internal
  */
 final readonly class Calendar
 {

@@ -18,6 +18,8 @@ use Illuminate\Database\Schema\Blueprint;
  *
  * So the blueprint builds the statements and this pins the clause to the one that creates the table.
  * The rest — the keys, the indexes — are separate statements in every grammar and are left alone.
+ *
+ * @internal
  */
 final readonly class PartitionedTable
 {

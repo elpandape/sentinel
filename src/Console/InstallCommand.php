@@ -23,6 +23,8 @@ use Throwable;
  * Running it twice is the ordinary case rather than the careless one, because asking is how you
  * find out what an installation is missing. Nothing here overwrites: a configuration already in
  * place is left exactly as it was, edits and all, and reported as present.
+ *
+ * @internal
  */
 final class InstallCommand extends Command
 {

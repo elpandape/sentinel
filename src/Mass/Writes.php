@@ -18,6 +18,8 @@ use ElPandaPe\Sentinel\Diff\Pointer;
  *
  * Columns are sorted, so two operations that wrote the same thing hash the same however the caller
  * happened to order the array.
+ *
+ * @internal
  */
 final readonly class Writes
 {

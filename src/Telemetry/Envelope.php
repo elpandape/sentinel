@@ -15,6 +15,8 @@ namespace ElPandaPe\Sentinel\Telemetry;
  *
  * An absent envelope is the ordinary case — every job queued before the feature was switched on —
  * and reads as no trace rather than as an error.
+ *
+ * @internal
  */
 final class Envelope
 {

@@ -10,6 +10,8 @@ namespace ElPandaPe\Sentinel\Partitions;
  * A table that is not divided is not a failure and does not report one: it reports that there was
  * nothing to divide. A command that exits non-zero on the ordinary state of an installation that
  * never partitioned anything is a command nobody can schedule.
+ *
+ * @internal
  */
 final readonly class Maintenance
 {

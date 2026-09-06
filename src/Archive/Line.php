@@ -24,6 +24,8 @@ use Illuminate\Database\Eloquent\Collection;
  * stored, and not toArray(), which leaves out encryption, renders changes through the diff and
  * stamps the clocks in another format. Either would produce a line that cannot reproduce its own
  * hash on the way back.
+ *
+ * @internal
  */
 final readonly class Line
 {

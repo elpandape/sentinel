@@ -16,6 +16,8 @@ use Throwable;
  * the same coercions, so they live here once instead of twice, and every one of them answers null
  * rather than guessing — a column that is not there and a column that is empty are the same fact to
  * an importer, which is that there is nothing to carry over.
+ *
+ * @internal
  */
 final readonly class Row
 {

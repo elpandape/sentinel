@@ -18,6 +18,8 @@ namespace ElPandaPe\Sentinel\Import;
  * operator whether they hit one odd row or a whole column they did not know was empty. A pipeline
  * discard already announces itself as an event carrying its stage and its reason, and counting the
  * same thing twice in two shapes is how the two come to disagree.
+ *
+ * @internal
  */
 final readonly class Report
 {

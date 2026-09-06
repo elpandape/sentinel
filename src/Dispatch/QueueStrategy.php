@@ -24,6 +24,8 @@ use Throwable;
  * The job never carries a sequence, a hash or a link. Those are read from the chain and assigned
  * inside the write, in this mode exactly as in the other, because the order entries arrive in a
  * worker is not the order the facts happened in.
+ *
+ * @internal
  */
 final readonly class QueueStrategy implements DispatchStrategy
 {

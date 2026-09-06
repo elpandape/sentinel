@@ -20,6 +20,8 @@ use Illuminate\Contracts\Filesystem\Factory;
  *
  * It reads from the disk the batch NAMES and never from the one configured now. A batch written
  * before an operator moved the archive is still on the old disk, and its row is what says so.
+ *
+ * @internal
  */
 final readonly class BatchReader
 {

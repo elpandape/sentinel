@@ -18,6 +18,8 @@ use Illuminate\Database\Schema\Blueprint;
  * The keys are deliberately NOT here. They are exactly what an engine constrains under
  * partitioning: both MySQL and PostgreSQL refuse a unique key that does not carry the partitioning
  * column, so a stub that could not say its own is a stub that could not exist.
+ *
+ * @internal
  */
 final readonly class AuditSchema
 {

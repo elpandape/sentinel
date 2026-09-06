@@ -14,6 +14,8 @@ use ElPandaPe\Sentinel\Models\Audit;
  * Which entries have lines is asked of the lines and not of the entry's type: a restoration that put
  * a relation back carries the same lines under a type of its own, and asking whoever reads the
  * projection to know that would make it a list of producers.
+ *
+ * @internal
  */
 final readonly class RelationProjection
 {

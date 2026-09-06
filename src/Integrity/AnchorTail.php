@@ -8,6 +8,8 @@ namespace ElPandaPe\Sentinel\Integrity;
  * Where the anchors of a stream end and what the last of them folded to. Both halves are what the
  * next emission needs and neither is worth reading a whole row for: the sequence says where the
  * next window starts, and the root is what that window folds over.
+ *
+ * @internal
  */
 final readonly class AnchorTail
 {

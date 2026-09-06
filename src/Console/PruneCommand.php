@@ -29,6 +29,8 @@ use Throwable;
  * not add up and a command that could not run are different facts. A run that removed nothing exits
  * zero — it is the ordinary outcome of a schedule, and the report says which of the four reasons it
  * was rather than leaving an operator to guess.
+ *
+ * @internal
  */
 final class PruneCommand extends Command
 {

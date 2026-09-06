@@ -24,6 +24,8 @@ use ElPandaPe\Sentinel\Support\AuditCollection;
  * both are sealed into the next entry and a chain cannot be continued without them. That is a
  * counter per stream and per subject, never one per entry: turning auditing off is not a
  * reason to grow with the traffic it is refusing to record.
+ *
+ * @internal
  */
 final class NullLedger implements DeclaresFilters, Ledger
 {

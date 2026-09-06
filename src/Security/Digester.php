@@ -14,6 +14,8 @@ use ElPandaPe\Sentinel\Support\Config;
  *
  * The salt is per installation and stable by definition — rotating it breaks no chain, but
  * every value hashed before it stops comparing to every value hashed after.
+ *
+ * @internal
  */
 final readonly class Digester
 {

@@ -20,6 +20,8 @@ use Throwable;
  * The pipeline has already run, exactly as in the other two: nothing sensitive waits in the buffer
  * untransformed, and the entry carries the context of the request that captured it rather than of
  * whatever process happens to vacate it.
+ *
+ * @internal
  */
 final readonly class BufferStrategy implements DispatchStrategy
 {

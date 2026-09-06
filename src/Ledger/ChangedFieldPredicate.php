@@ -25,6 +25,8 @@ use ElPandaPe\Sentinel\Exceptions\LedgerException;
  * would make an audit read quietly incomplete. PostgreSQL raises on jsonb_array_elements over a
  * non-array. MySQL needs the element's path to be a string before comparing it, and needs a
  * binary collation, or a query for /email would come back with /Email as well.
+ *
+ * @internal
  */
 final readonly class ChangedFieldPredicate
 {

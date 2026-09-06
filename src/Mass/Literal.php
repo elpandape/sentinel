@@ -17,6 +17,8 @@ use ElPandaPe\Sentinel\Diff\Normalizer;
  * was, read from the record itself; this holds what a caller passed to a query, which is where
  * an SQL expression, a query object or an entity of the application's own turns up — and none of
  * those is something an entry can quote without either lying or leaking.
+ *
+ * @internal
  */
 final readonly class Literal
 {

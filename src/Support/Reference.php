@@ -14,6 +14,8 @@ use Illuminate\Database\Eloquent\Model;
  *
  * It lives here rather than in Query so the query surface never names Eloquent: resolving a
  * morph alias is something every backend needs, not something a builder does.
+ *
+ * @internal
  */
 final readonly class Reference
 {

@@ -23,6 +23,8 @@ use Illuminate\Support\Str;
  * A column, an operator and a boolean are the query's own vocabulary and are always safe. A value
  * is the caller's, so it travels as a binding does — separate, and through the same redaction the
  * snapshots go through.
+ *
+ * @internal
  */
 final readonly class Criteria
 {

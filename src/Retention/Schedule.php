@@ -23,6 +23,8 @@ use Illuminate\Database\Eloquent\Relations\Relation;
  * Two keys that seat the same entry with the same specificity are refused here rather than
  * arbitrated later: a purge that picked one of them would be choosing how long to keep evidence by
  * hash order.
+ *
+ * @internal
  */
 final readonly class Schedule
 {

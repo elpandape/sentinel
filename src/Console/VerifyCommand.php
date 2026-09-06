@@ -27,6 +27,8 @@ use Throwable;
  * it is sound and saying otherwise would make the command useless on every installation that has
  * not switched signing on; the report says how many entries are unsigned so the operator sees it
  * without being alarmed by it.
+ *
+ * @internal
  */
 final class VerifyCommand extends Command
 {

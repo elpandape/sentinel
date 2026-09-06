@@ -36,6 +36,8 @@ use Illuminate\Support\Carbon;
  * A batch is sealed when it fills, when a read is asked of the driver, or when somebody calls
  * seal(). What it does NOT do is write to sentinel_archives: a row there means a range left the hot
  * table, and a cold copy of a range that is still hot would disarm the tamper guard that reads it.
+ *
+ * @internal
  */
 final class ArchiveLedger implements DeclaresFilters, EnumeratesStreams, Ledger
 {

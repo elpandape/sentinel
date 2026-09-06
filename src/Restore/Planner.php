@@ -28,6 +28,8 @@ use Throwable;
  * Both sides of every comparison are snapshots, built by the one builder that decides what a value
  * looks like when it is written down. Comparing the stored string against the live carbon instance
  * would report a change on every date the record holds.
+ *
+ * @internal
  */
 final readonly class Planner
 {

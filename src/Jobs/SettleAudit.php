@@ -26,6 +26,8 @@ use Illuminate\Queue\InteractsWithQueue;
  * capture identifier — which the ledger refuses to settle twice — and what still does not land ends
  * up where an operator can see it. The write-failure policy governs the request that caused the
  * fact, and by now there is no request left to protect.
+ *
+ * @internal
  */
 final class SettleAudit implements ShouldQueue
 {

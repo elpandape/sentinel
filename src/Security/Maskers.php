@@ -12,6 +12,8 @@ use Illuminate\Contracts\Container\Container;
  * One masker per field, because no single mask fits every kind of secret: an address wants
  * its shape kept, a national id wants none of it. The package imposes one default and lets
  * a field name override it.
+ *
+ * @internal
  */
 final class Maskers
 {

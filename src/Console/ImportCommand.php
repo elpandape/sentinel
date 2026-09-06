@@ -27,6 +27,8 @@ use Throwable;
  * A dry run is the documented way to start and the flag suppresses the writing, never the reading:
  * it maps every row, applies the pipeline that would refuse one, and reports exactly what a real
  * run would do. That is why it can exit non-zero.
+ *
+ * @internal
  */
 final class ImportCommand extends Command
 {

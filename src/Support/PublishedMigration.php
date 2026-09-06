@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Support;
 
+/**
+ * @internal
+ */
 final readonly class PublishedMigration
 {
     public function __construct(private string $directory, private string $name) {}

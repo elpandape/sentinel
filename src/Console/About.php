@@ -23,6 +23,8 @@ use Illuminate\Foundation\Console\AboutCommand;
  * The labels are in English and not in `resources/lang`, unlike everything the package's own
  * commands print. They sit inside a framework command whose every other row is untranslated, and a
  * section that alone changed language would read as a fault rather than as a courtesy.
+ *
+ * @internal
  */
 final readonly class About
 {

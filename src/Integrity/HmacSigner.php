@@ -11,6 +11,8 @@ use ElPandaPe\Sentinel\Contracts\Signer;
  * what it proves: whoever can verify can forge. It stands between an entry and someone who reached
  * the database without reaching the application — a stolen backup, a replica, a console — and it
  * stands nowhere at all against an attacker who can read the application key.
+ *
+ * @internal
  */
 final readonly class HmacSigner implements Signer
 {

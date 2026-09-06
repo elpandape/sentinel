@@ -16,6 +16,8 @@ use Illuminate\Contracts\Container\Container;
  * The mode a query asked for, or the one the configuration set. Resolved per operation rather than
  * held, for the reason the dispatcher resolves its own strategy per entry: the mode is
  * configuration, and configuration is allowed to change between two of them.
+ *
+ * @internal
  */
 final readonly class Strategies
 {

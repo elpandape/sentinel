@@ -21,6 +21,8 @@ use Illuminate\Database\Eloquent\Model;
  * and recorded another would be the one bug this is here to make impossible.
  *
  * @template TModel of Model
+ *
+ * @internal
  */
 final readonly class Operation
 {

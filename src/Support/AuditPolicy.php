@@ -14,6 +14,8 @@ use Illuminate\Database\Eloquent\Model;
  * What a model says about auditing itself. A trait cannot implement an interface, so a
  * model that uses the concern satisfies the contract without declaring it: this is the
  * one place that accepts either shape, and the defaults for a model that is neither.
+ *
+ * @internal
  */
 final readonly class AuditPolicy
 {

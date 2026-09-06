@@ -12,6 +12,8 @@ use UnitEnum;
  * Snapshot\SnapshotBuilder does — the backing value, or the case name when there is none — so a
  * transition and the snapshot of the same column say the same thing, and the entry hashes the
  * same text whichever form the call used.
+ *
+ * @internal
  */
 final class State
 {

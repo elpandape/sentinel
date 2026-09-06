@@ -9,6 +9,8 @@ use ElPandaPe\Sentinel\Integrity\VerificationResult;
 /**
  * What one run did to one stream. It mirrors Integrity\StreamVerification on purpose: a reader who
  * has learned to read one report has learned to read the other.
+ *
+ * @internal
  */
 final readonly class Pruning
 {

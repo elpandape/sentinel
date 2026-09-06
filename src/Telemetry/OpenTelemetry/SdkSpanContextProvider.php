@@ -16,6 +16,8 @@ use OpenTelemetry\API\Trace\Span;
  * It reads the active span and never writes one. The API answers with a non-recording span carrying
  * an invalid context when no tracer is registered, so there is no null to check and no exception to
  * catch: the question is whether the context is valid.
+ *
+ * @internal
  */
 final class SdkSpanContextProvider implements SpanContextProvider
 {

@@ -32,6 +32,8 @@ use Illuminate\Support\Collection;
  * test that has been in place since the package had nothing in it.
  *
  * @phpstan-require-extends BelongsToMany
+ *
+ * @internal
  */
 trait RecordsRelationChanges
 {

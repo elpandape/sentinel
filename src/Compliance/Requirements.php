@@ -17,6 +17,8 @@ use ElPandaPe\Sentinel\Support\Config;
  *
  * It fails at boot rather than at the first write, because the first write may be a year away and by
  * then the entries that were supposed to be signed are not.
+ *
+ * @internal
  */
 final readonly class Requirements
 {

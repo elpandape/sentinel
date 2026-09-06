@@ -14,6 +14,8 @@ use ElPandaPe\Sentinel\Enums\Omission;
  * back a json column, and MySQL returns an object's keys by length and then alphabetically where
  * the other two keep insertion order. Handing that order on would make the result of the same
  * restoration differ by database, and it travels into the entry's own metadata.
+ *
+ * @internal
  */
 final readonly class Plan
 {

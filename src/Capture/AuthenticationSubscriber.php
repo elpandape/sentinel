@@ -34,6 +34,8 @@ use Illuminate\Contracts\Auth\Authenticatable;
  * The credentials of a failed attempt are never read. Failed carries them — marked sensitive by
  * the framework — and the guarantee here is that they are not captured, which is stronger than
  * capturing them and redacting them afterwards.
+ *
+ * @internal
  */
 final readonly class AuthenticationSubscriber
 {

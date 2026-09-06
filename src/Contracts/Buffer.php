@@ -18,6 +18,8 @@ use ElPandaPe\Sentinel\Data\AuditData;
  * case rather than the edge one — a request terminating while the console command runs. A driver
  * that cannot take atomically will hand the same entries to both, and only the unique index on
  * `capture_id` stands between that and the same fact settled twice.
+ *
+ * @internal
  */
 interface Buffer
 {

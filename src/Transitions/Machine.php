@@ -11,6 +11,8 @@ use Illuminate\Database\Eloquent\Model;
  * The one place a model is asked whether a move is one it makes. A model that declares no
  * machine consents to everything, and that is the default on purpose: Sentinel records the
  * transition, it does not govern the workflow.
+ *
+ * @internal
  */
 final class Machine
 {

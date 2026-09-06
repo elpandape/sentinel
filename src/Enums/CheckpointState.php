@@ -13,6 +13,8 @@ namespace ElPandaPe\Sentinel\Enums;
  * walked entry by entry and comes back with the same answer, only slower; a range whose entries
  * were retired on purpose is one the manifest accounts for and an anchor still answers for; an
  * anchor whose root no longer reproduces is a break, and it goes there.
+ *
+ * @internal
  */
 enum CheckpointState: string
 {

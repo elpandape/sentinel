@@ -25,6 +25,8 @@ use JsonException;
  *
  * A redacted entry exports as redacted: the serialized shape carries the redaction block, so what
  * leaves the building says the contents were destroyed rather than pretending they were empty.
+ *
+ * @internal
  */
 final readonly class Export
 {

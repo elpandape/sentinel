@@ -16,6 +16,9 @@ use JsonSerializable;
 use Stringable;
 use UnitEnum;
 
+/**
+ * @internal
+ */
 final readonly class SnapshotBuilder
 {
     // Frozen with payload_version 1: a snapshot that round trips has to keep its precision.

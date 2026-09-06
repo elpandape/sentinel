@@ -23,6 +23,8 @@ use Illuminate\Database\Eloquent\Model;
  * without it costs exactly what it cost before: no listener, no extra statement, no branch.
  *
  * @template TModel of Model
+ *
+ * @internal
  */
 final readonly class AuditedQuery
 {

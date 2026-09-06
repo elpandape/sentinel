@@ -11,6 +11,8 @@ use ElPandaPe\Sentinel\Data\AuditData;
  * The package ships no policy of its own: it ships the register an application puts its
  * own in. Not scoped, because a policy is a decision of the application and outlives the
  * request or the job that happens to be running when an entry is built.
+ *
+ * @internal
  */
 final class Policies
 {

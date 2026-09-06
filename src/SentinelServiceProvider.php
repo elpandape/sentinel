@@ -74,6 +74,9 @@ use Illuminate\Routing\Events\Routing;
 use Illuminate\Support\Facades\Context;
 use Illuminate\Support\ServiceProvider;
 
+/**
+ * @internal
+ */
 final class SentinelServiceProvider extends ServiceProvider
 {
     public function register(): void

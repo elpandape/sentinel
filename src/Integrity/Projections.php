@@ -25,6 +25,8 @@ use Illuminate\Contracts\Events\Dispatcher;
  * It is a pass of its own rather than part of the chain walk, because verifying a chain reads the
  * entries and verifying the projection reads a second table as well. Nobody should pay for the
  * second question while asking the first.
+ *
+ * @internal
  */
 final readonly class Projections
 {

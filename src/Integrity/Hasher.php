@@ -8,6 +8,9 @@ use ElPandaPe\Sentinel\Contracts\Canonicalizer;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
 use ElPandaPe\Sentinel\Models\Audit;
 
+/**
+ * @internal
+ */
 final readonly class Hasher
 {
     // The prefix parts are separated so ("a", 11) and ("a1", 1) cannot produce the same link.

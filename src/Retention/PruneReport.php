@@ -9,6 +9,8 @@ use ElPandaPe\Sentinel\Integrity\VerificationResult;
 /**
  * Every stream one run touched, in the order the ledger named them. One shape to read whether the
  * run covered one chain or all of them, which is the choice Integrity\IntegrityReport already made.
+ *
+ * @internal
  */
 final readonly class PruneReport
 {

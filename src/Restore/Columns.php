@@ -16,6 +16,8 @@ use Illuminate\Database\Eloquent\Model;
  * Scoped, like the rest of the package's per-request state. A migration that runs inside a request
  * and then restores in the same one is not a case worth holding a stale answer for; a request that
  * restores a thousand rows is.
+ *
+ * @internal
  */
 final class Columns
 {

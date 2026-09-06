@@ -17,6 +17,8 @@ use RuntimeException;
  *
  * Losing a key means losing the values it wrote. That is the correct behaviour: the keyring
  * belongs to the application and lives outside the database the entries do.
+ *
+ * @internal
  */
 final class Keyring
 {

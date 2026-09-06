@@ -7,6 +7,8 @@ namespace ElPandaPe\Sentinel\Snapshot;
 /**
  * Null means the state does not apply to the event; an empty map means the state
  * applied and was empty. The difference is audited information.
+ *
+ * @internal
  */
 final readonly class SnapshotPair
 {

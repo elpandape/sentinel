@@ -24,6 +24,8 @@ use Throwable;
  * is the coordinate somebody copies out of a log or a report; a life is asked for by subject,
  * which is the coordinate somebody has when they do not have an entry yet. Asking for both at once
  * is a mistake rather than a preference, so it is refused instead of resolved.
+ *
+ * @internal
  */
 final class ShowCommand extends Command
 {

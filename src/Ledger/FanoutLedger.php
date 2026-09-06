@@ -26,6 +26,8 @@ use Throwable;
  * entry it sealed, through append(), because two ledgers each numbering their own chain
  * produce two different truths about one fact. For the same reason every read goes to the
  * primary: it is the destination whose chain the sequence belongs to.
+ *
+ * @internal
  */
 final readonly class FanoutLedger implements DeclaresFilters, Deduplicates, EnumeratesStreams, Ledger
 {

@@ -21,6 +21,8 @@ use Illuminate\Contracts\Events\Dispatcher as Events;
  * It carries no failure policy of its own on purpose. What a failed write costs depends on where
  * it is being attempted from — a request that can still be refused, a commit callback that cannot
  * be, a worker whose queue is going to retry it — and that is the caller's to know.
+ *
+ * @internal
  */
 final readonly class Settlement
 {

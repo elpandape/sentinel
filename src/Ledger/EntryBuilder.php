@@ -14,6 +14,9 @@ use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Str;
 
+/**
+ * @internal
+ */
 final readonly class EntryBuilder
 {
     public const int PAYLOAD_VERSION = 1;

@@ -30,6 +30,8 @@ use Throwable;
  * not happen. The refusals are the two exceptions the service raises deliberately; anything else it
  * throws is the second thing, and reporting a dead connection as a refusal would tell an operator
  * their entry is archived when nothing of the sort is true.
+ *
+ * @internal
  */
 final class RedactCommand extends Command
 {

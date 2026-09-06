@@ -16,6 +16,8 @@ use Illuminate\Database\Eloquent\Relations\Relation;
  * A type that no longer resolves to a model answers the same as a record that was deleted for
  * good — from here there is nothing to write to either way, and the caller is told so rather
  * than handed a class-not-found from three frames down.
+ *
+ * @internal
  */
 final readonly class Subject
 {

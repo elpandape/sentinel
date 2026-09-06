@@ -26,6 +26,8 @@ use Throwable;
  * Announcing and recording are not the same thing. The event says a write did not complete and
  * goes out either way; the log entry stands in for the exception nobody is going to catch, so it
  * is written only where the failure is swallowed.
+ *
+ * @internal
  */
 final readonly class WriteFailure
 {

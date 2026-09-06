@@ -10,6 +10,8 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * How a person becomes two columns. The morph alias is what a query filters on, so a
  * model answers with it and anything else answers with its class name.
+ *
+ * @internal
  */
 final class Identity
 {

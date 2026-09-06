@@ -11,6 +11,8 @@ namespace ElPandaPe\Sentinel\Archive;
  *
  * It is a claim and never a proof. Nothing in the manifest is hashed or signed, so what this
  * carries is an explanation that something else has to stand behind.
+ *
+ * @internal
  */
 final readonly class Claim
 {

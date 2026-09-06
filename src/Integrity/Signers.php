@@ -19,6 +19,8 @@ use ElPandaPe\Sentinel\Support\Config;
  * cannot decide, and calling it an invalid signature would be a verdict nobody is entitled to.
  * Signing is the other way round — being asked to sign with a key that is not here is a
  * configuration error, and it is loud.
+ *
+ * @internal
  */
 final class Signers
 {

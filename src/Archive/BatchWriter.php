@@ -26,6 +26,8 @@ use Illuminate\Contracts\Filesystem\Factory;
  * nothing left to do about it.
  *
  * The read-back is also the only proof the Filesystem contract offers that the bytes landed at all.
+ *
+ * @internal
  */
 final readonly class BatchWriter
 {

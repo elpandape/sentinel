@@ -21,6 +21,9 @@ use ElPandaPe\Sentinel\Transitions\State;
 use ElPandaPe\Sentinel\Transitions\TransitionBuilder;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @internal
+ */
 final readonly class ModelCapture
 {
     public const string AUDIT_TYPE = 'model';

@@ -25,6 +25,8 @@ use stdClass;
  *
  * The result is not a prefix. A window one long-lived entry holds does not hold the windows behind
  * it, which is what lets a range in the middle be retired at all.
+ *
+ * @internal
  */
 final readonly class Frontiers
 {

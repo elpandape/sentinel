@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Diff;
 
+/**
+ * @internal
+ */
 final class Comparator
 {
     /**

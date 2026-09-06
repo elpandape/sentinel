@@ -25,6 +25,8 @@ use ElPandaPe\Sentinel\Support\Config;
  * The manifest row is written before the rows go, so an interruption leaves a range recorded as
  * retired whose entries are still there — which the next run finishes, and which no verification
  * mistakes for anything, because it only ever consults the manifest about an absence.
+ *
+ * @internal
  */
 final readonly class Pruner
 {

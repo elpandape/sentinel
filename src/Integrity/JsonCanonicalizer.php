@@ -8,6 +8,9 @@ use ElPandaPe\Sentinel\Contracts\Canonicalizer;
 use ElPandaPe\Sentinel\Exceptions\CanonicalizationException;
 use JsonException;
 
+/**
+ * @internal
+ */
 final class JsonCanonicalizer implements Canonicalizer
 {
     private const int MAX_SIGNIFICANT_DIGITS = 17;

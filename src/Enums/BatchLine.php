@@ -11,6 +11,8 @@ namespace ElPandaPe\Sentinel\Enums;
  *
  * Kinds may be added. None is ever renamed or reinterpreted — the rule Audit::toArray() already
  * publishes for the serialized entry, applied to the container that carries it.
+ *
+ * @internal
  */
 enum BatchLine: string
 {

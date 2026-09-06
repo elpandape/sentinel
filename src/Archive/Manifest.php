@@ -15,6 +15,8 @@ use ElPandaPe\Sentinel\Models\AuditArchive;
  * The range arithmetic is done in PHP over rows ordered by where they start, never in SQL. Ranges
  * may overlap and may be recorded twice, so the answer is a union and not a lookup, and computing
  * it here is what keeps SQLite, MySQL and PostgreSQL from disagreeing about it.
+ *
+ * @internal
  */
 final readonly class Manifest
 {

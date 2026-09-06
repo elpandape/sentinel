@@ -29,6 +29,8 @@ use Illuminate\Database\Eloquent\Model;
  * Neither kind repeats the other. An individual carries no criteria and no count, because the
  * summary it shares a transaction with carries both, and three thousand copies of one fact is not
  * three thousand facts.
+ *
+ * @internal
  */
 final readonly class MassCapture
 {

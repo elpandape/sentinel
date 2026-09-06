@@ -14,6 +14,8 @@ use ElPandaPe\Sentinel\Integrity\Checkpoint;
  * The windows are anchors and not a shape of their own. The unit of purging is the anchored window
  * because it is the only one the chain admits, and carrying the anchor itself is what keeps that
  * from being a rule somebody has to remember.
+ *
+ * @internal
  */
 final readonly class Frontier
 {

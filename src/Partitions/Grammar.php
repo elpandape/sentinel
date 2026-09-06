@@ -22,6 +22,8 @@ use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
  *
  * SQLite gets nothing, and that is the answer rather than a gap. It does not partition, so a
  * maintenance run there has nothing to maintain and says so.
+ *
+ * @internal
  */
 final readonly class Grammar
 {

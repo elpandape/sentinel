@@ -14,6 +14,8 @@ use ElPandaPe\Sentinel\Enums\BatchLine;
  * A line that will not decode cannot reach here from a file whose checksum passed — the digest is
  * over the exact bytes — so it is treated as what it is: a line this build cannot read, skipped
  * rather than dressed up as a defect the checksum has already ruled out.
+ *
+ * @internal
  */
 final readonly class Batch
 {

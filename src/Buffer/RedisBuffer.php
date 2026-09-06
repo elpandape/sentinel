@@ -17,6 +17,8 @@ use Illuminate\Redis\Connections\Connection;
  * Taking uses a single popping command with a count, which Redis executes atomically: two flushes
  * running at once each get entries, and neither gets the other's. That is what keeps the common
  * case — a request terminating while the console command runs — from settling the same fact twice.
+ *
+ * @internal
  */
 final readonly class RedisBuffer implements Buffer
 {

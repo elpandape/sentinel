@@ -8,6 +8,9 @@ use ElPandaPe\Sentinel\Enums\AuditEvent;
 use ElPandaPe\Sentinel\Snapshot\SnapshotBuilder;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @internal
+ */
 final readonly class ModelObserver
 {
     public function __construct(

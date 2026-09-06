@@ -15,6 +15,8 @@ use ElPandaPe\Sentinel\Models\Audit;
  *
  * It depends on nothing but the hasher, which is what lets the archive use it without the verifier's
  * ledger and manifest coming along.
+ *
+ * @internal
  */
 final readonly class Content
 {

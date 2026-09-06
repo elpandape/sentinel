@@ -23,6 +23,8 @@ use Throwable;
  *
  * On a stream with nothing left to anchor it emits nothing and says so, which is the ordinary
  * outcome of running it on a schedule and is not a failure.
+ *
+ * @internal
  */
 final class CheckpointCommand extends Command
 {

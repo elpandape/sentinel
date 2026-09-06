@@ -32,6 +32,8 @@ use Throwable;
  * and one that will not take a batch back is the only path on which this mode loses a fact
  * outright. All three go out as the same event, because the counts are what say what is at stake
  * and `reason` already says which end it was.
+ *
+ * @internal
  */
 final readonly class Flusher
 {

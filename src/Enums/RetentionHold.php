@@ -12,6 +12,8 @@ namespace ElPandaPe\Sentinel\Enums;
  * It exists because the unit of retention is the anchored window and not the entry: an operator who
  * declared a ninety-day policy and sees nothing purged is owed the reason, and there are four
  * different ones. Without this the honest report and the broken configuration look identical.
+ *
+ * @internal
  */
 enum RetentionHold: string
 {

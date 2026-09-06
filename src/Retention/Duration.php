@@ -20,6 +20,8 @@ use Throwable;
  * Validity is decided by applying the interval rather than by counting its seconds: a month is not
  * a fixed number of them, and the only question worth asking is whether subtracting it moves back
  * in time at all.
+ *
+ * @internal
  */
 final readonly class Duration
 {

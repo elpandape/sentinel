@@ -27,6 +27,8 @@ use Illuminate\Support\Str;
  * Where the entry lands is not decided here. That question has three answers depending on one
  * setting, and mixing them in with "what happened" is how a mode becomes a branch at every point
  * of capture instead of a strategy in one place.
+ *
+ * @internal
  */
 final readonly class Recorder
 {

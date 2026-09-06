@@ -13,6 +13,8 @@ use OpenTelemetry\API\Trace\Span;
  * rather than in the provider keeps the SDK's name inside this namespace, which is what the arch
  * test checks, and keeps both answers reachable from a test — the installed half is the one the
  * suite runs under, and the other would otherwise be a branch nobody could enter.
+ *
+ * @internal
  */
 final class Sdk
 {

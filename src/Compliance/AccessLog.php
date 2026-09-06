@@ -30,6 +30,8 @@ use ElPandaPe\Sentinel\Support\Reference;
  *
  * Nothing is written unless compliance mode is on. An installation that did not ask for a row per
  * query does not pay for one.
+ *
+ * @internal
  */
 final class AccessLog
 {

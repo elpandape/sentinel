@@ -31,6 +31,9 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Database\UniqueConstraintViolationException;
 
+/**
+ * @internal
+ */
 final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, EnumeratesStreams, Ledger
 {
     private const int MAX_ATTEMPTS = 3;

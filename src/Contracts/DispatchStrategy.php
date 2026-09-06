@@ -16,6 +16,8 @@ use ElPandaPe\Sentinel\Dispatch\Handover;
  * the transaction that produced the fact has committed. It is not a flag on one method because
  * the branches are not variations of a policy: a write in the request may refuse the request,
  * and one running from a commit callback may never do so.
+ *
+ * @internal
  */
 interface DispatchStrategy
 {

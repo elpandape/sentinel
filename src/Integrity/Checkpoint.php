@@ -17,6 +17,8 @@ use ElPandaPe\Sentinel\Models\AuditCheckpoint;
  * construction that produced it, and the signature with the identifier of the key that made it.
  * Whoever holds the verifying half of that key can check the anchor without reaching the trail at
  * all — which is the whole point of exporting one.
+ *
+ * @internal
  */
 final readonly class Checkpoint
 {

@@ -16,6 +16,8 @@ use ElPandaPe\Sentinel\Data\AuditData;
  * what the buffered mode already asks you to accept. Reachable by configuration all the same, and
  * named for what it is, because a driver that silently stood in for Redis would be the one thing
  * this mode cannot afford: durability nobody chose.
+ *
+ * @internal
  */
 final class MemoryBuffer implements Buffer
 {

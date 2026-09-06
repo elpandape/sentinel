@@ -28,6 +28,8 @@ use ElPandaPe\Sentinel\Exceptions\LedgerException;
  * SQLite guards the column before reading it, for the reason PoisonedChangesTest states: this engine
  * stores JSON as bare text, and json_extract over something unparseable aborts a statement that
  * PDO::fetchAll then answers partially and without raising — an audit that looks complete and is not.
+ *
+ * @internal
  */
 final readonly class ContextPredicate
 {

@@ -12,6 +12,8 @@ namespace ElPandaPe\Sentinel\Retention;
  *
  * A subject policy is more specific than a type policy, and that is the whole of the precedence
  * rule — decided here rather than at each of the two places that ask.
+ *
+ * @internal
  */
 final readonly class Policy
 {

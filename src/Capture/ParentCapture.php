@@ -26,6 +26,8 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * The line is the one v0.11.0 froze, with the child as the related record and no pivot on either
  * side, because there is no pivot. The api in metadata is the foreign key itself: there was no
  * method to intercept, the fact is that the column changed.
+ *
+ * @internal
  */
 final readonly class ParentCapture
 {

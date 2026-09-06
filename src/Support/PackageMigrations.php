@@ -9,6 +9,8 @@ namespace ElPandaPe\Sentinel\Support;
  * taken over. The decision is per file: a package that ships more than one migration and
  * decides all-or-nothing on the first of them stops delivering every migration it publishes
  * afterwards, to precisely the installations that have the most data.
+ *
+ * @internal
  */
 final readonly class PackageMigrations
 {

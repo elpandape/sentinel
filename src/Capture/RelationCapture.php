@@ -26,6 +26,8 @@ use Illuminate\Database\Eloquent\Model;
  * event has three names for six APIs, which is what the data model publishes, so the API that was
  * actually called travels in metadata. That is inside the canonical payload, so the record of how
  * the change was made is as tamper-evident as the change itself.
+ *
+ * @internal
  */
 final readonly class RelationCapture
 {

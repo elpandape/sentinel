@@ -21,6 +21,8 @@ use Throwable;
  *
  * In compliance mode this is a read like any other, and leaves the same two records behind. That is
  * the point rather than a side effect: an export is the largest read a trail ever serves.
+ *
+ * @internal
  */
 final class ExportCommand extends Command
 {

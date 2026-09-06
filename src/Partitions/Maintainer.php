@@ -22,6 +22,8 @@ use Illuminate\Database\Connection;
  * range of the trail as a catalogue operation, without archiving it and without recording that it
  * went. Under compliance mode that is not even offered — the guard is unconditional there, because
  * the one thing compliance forbids is a range leaving with nothing to answer for it.
+ *
+ * @internal
  */
 final readonly class Maintainer
 {

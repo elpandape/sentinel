@@ -7,6 +7,8 @@ namespace ElPandaPe\Sentinel\Diff;
 /**
  * RFC 6901. The escape order matters: a tilde introduced by escaping a slash must not
  * be escaped again.
+ *
+ * @internal
  */
 final class Pointer
 {

@@ -23,6 +23,8 @@ use Traversable;
  * disagree.
  *
  * @implements IteratorAggregate<int, Audit>
+ *
+ * @internal
  */
 final readonly class Settled implements Countable, IteratorAggregate
 {

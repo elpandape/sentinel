@@ -8,6 +8,9 @@ use ElPandaPe\Sentinel\Contracts\LedgerStream;
 use ElPandaPe\Sentinel\Models\Audit;
 use Traversable;
 
+/**
+ * @internal
+ */
 final readonly class ArrayStream implements LedgerStream
 {
     /**

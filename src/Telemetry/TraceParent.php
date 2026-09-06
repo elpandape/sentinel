@@ -13,6 +13,8 @@ namespace ElPandaPe\Sentinel\Telemetry;
  *
  * A header that does not parse yields null, and null means the caller had no parent. It never
  * means a trace was invented to fill the hole.
+ *
+ * @internal
  */
 final readonly class TraceParent
 {

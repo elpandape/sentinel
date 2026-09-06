@@ -8,6 +8,9 @@ use ElPandaPe\Sentinel\Contracts\LedgerStream;
 use ElPandaPe\Sentinel\Models\Audit;
 use Traversable;
 
+/**
+ * @internal
+ */
 final readonly class DatabaseStream implements LedgerStream
 {
     public function __construct(

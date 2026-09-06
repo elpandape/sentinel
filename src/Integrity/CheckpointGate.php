@@ -17,6 +17,8 @@ use stdClass;
  * The lock names the anchors of a stream and never the stream itself. Emission is kept outside the
  * sealing transaction so it does not hold the writers, and taking the lock the writers take would
  * put it straight back inside.
+ *
+ * @internal
  */
 final readonly class CheckpointGate
 {

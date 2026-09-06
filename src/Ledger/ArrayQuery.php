@@ -15,6 +15,8 @@ use ElPandaPe\Sentinel\Query\AuditQuery;
  * compiles into a where clause, answered by walking what is there. A ledger with no query
  * language of its own reaches for this instead of growing one, which is what keeps the
  * published filters answerable by a backend nobody has written yet.
+ *
+ * @internal
  */
 final readonly class ArrayQuery
 {

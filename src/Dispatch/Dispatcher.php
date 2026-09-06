@@ -28,6 +28,8 @@ use Illuminate\Database\Eloquent\Model;
  * It never assigns a sequence and never computes a hash. Those belong to the ledger, in the same
  * operation as the write, in every mode: it is what makes the chain and an asynchronous mode
  * compatible at all, since the order entries arrive in is not the order the facts happened in.
+ *
+ * @internal
  */
 final readonly class Dispatcher
 {

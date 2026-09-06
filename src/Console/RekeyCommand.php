@@ -22,6 +22,8 @@ use Throwable;
  *
  * Which is what makes this the opposite of a redaction, and why no path of this command calls that
  * one: a tombstone destroys content, a rekey preserves it under a different lock.
+ *
+ * @internal
  */
 final class RekeyCommand extends Command
 {

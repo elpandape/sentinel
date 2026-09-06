@@ -22,6 +22,8 @@ use Illuminate\Http\Request;
  *
  * A header that does not parse is treated as absent, not as an error and never as a trace to
  * invent: traceparent is a value the caller chooses and trace_id is indexed.
+ *
+ * @internal
  */
 final readonly class Tracer
 {

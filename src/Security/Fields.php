@@ -15,6 +15,8 @@ use ElPandaPe\Sentinel\Diff\Pointer;
  *
  * Matching is by key name at any depth, so a field declared once is protected wherever it
  * surfaces — including inside the arguments of a console command.
+ *
+ * @internal
  */
 final readonly class Fields
 {

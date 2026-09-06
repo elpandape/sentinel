@@ -13,6 +13,8 @@ use ElPandaPe\Sentinel\Contracts\Masker;
  *
  * A run of two characters or fewer is replaced whole — keeping both ends of it would be
  * keeping all of it.
+ *
+ * @internal
  */
 final readonly class PartialMasker implements Masker
 {

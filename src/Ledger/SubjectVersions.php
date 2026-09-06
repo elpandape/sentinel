@@ -19,6 +19,8 @@ use ElPandaPe\Sentinel\Models\Audit;
  *
  * One instance per driver instance, never shared: two ledgers counting one subject through the same
  * object would each be numbering a chain the other cannot see.
+ *
+ * @internal
  */
 final class SubjectVersions
 {

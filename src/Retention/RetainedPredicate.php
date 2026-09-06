@@ -19,6 +19,8 @@ use Illuminate\Database\Query\Builder;
  * So every term here evaluates to TRUE or FALSE and never to NULL: an equality on subject_type is
  * guarded by a not-null test in front of it, and the negative is written as "null, or not one of
  * these" rather than as a bare NOT IN.
+ *
+ * @internal
  */
 final readonly class RetainedPredicate
 {

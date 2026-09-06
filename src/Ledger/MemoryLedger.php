@@ -25,6 +25,8 @@ use ElPandaPe\Sentinel\Support\AuditCollection;
  * It keeps everything it is given and nothing survives the instance, which is why it is not
  * reachable as a default driver: a ledger with no durability that looks like it works is
  * worse than one that fails.
+ *
+ * @internal
  */
 final class MemoryLedger implements DeclaresFilters, Deduplicates, EnumeratesStreams, Ledger
 {

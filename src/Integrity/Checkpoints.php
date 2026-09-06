@@ -21,6 +21,8 @@ use Illuminate\Database\UniqueConstraintViolationException;
  * covers the ordinary case — the entries are not there yet — and the one that matters, a hole
  * inside the range: folding over a short range would produce a root that the same range would not
  * reproduce once the missing entry was back.
+ *
+ * @internal
  */
 final readonly class Checkpoints
 {

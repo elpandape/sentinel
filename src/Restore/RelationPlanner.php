@@ -20,6 +20,8 @@ use Illuminate\Database\Eloquent\Relations\Pivot;
  * Pivot values are compared as strings. The three engines disagree about the type an integer comes
  * back as, and a comparison that reports a change because one side is 1 and the other is "1" would
  * be measuring the driver rather than the relation.
+ *
+ * @internal
  */
 final readonly class RelationPlanner
 {

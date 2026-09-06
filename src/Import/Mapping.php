@@ -14,6 +14,8 @@ use ElPandaPe\Sentinel\Data\AuditData;
  * rather than a reason to abandon the other 999,999. The reason travels with the refusal so the
  * report can group by it, which is what tells an operator whether they hit one odd row or a whole
  * column they did not know was empty.
+ *
+ * @internal
  */
 final readonly class Mapping
 {

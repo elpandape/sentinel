@@ -14,6 +14,8 @@ use Throwable;
  * The entry settles in the process that captured it, inside the call that caused it. Maximum
  * durability, and the cost lands on whoever caused the fact — which is the right default for an
  * audit engine, and the only mode where the caller can still be told the write did not work.
+ *
+ * @internal
  */
 final readonly class SyncStrategy implements DispatchStrategy
 {

@@ -22,6 +22,8 @@ use Throwable;
  * Two of them running at once is safe and is the case worth stating: taking from the buffer is
  * atomic, so each gets entries and neither gets the other's, and the unique index on the capture
  * identifier settles the rest.
+ *
+ * @internal
  */
 final class FlushCommand extends Command
 {

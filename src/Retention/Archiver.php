@@ -20,6 +20,8 @@ use Illuminate\Support\Carbon;
  * It also takes the header of every operation the window touches. `Retention\Cascade` removes a
  * header once its last entry is gone, and no column of an entry holds an operation's name: without
  * this, archiving would save the entries of an operation and destroy what it was called.
+ *
+ * @internal
  */
 final readonly class Archiver
 {

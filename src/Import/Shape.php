@@ -19,6 +19,8 @@ use Illuminate\Database\DatabaseManager;
  * Names only. Laravel's schema builder answers with the column list and nothing about types, and
  * asking for more would mean reaching past it into an engine-specific dialect for a check that a
  * missing column already fails.
+ *
+ * @internal
  */
 final readonly class Shape
 {

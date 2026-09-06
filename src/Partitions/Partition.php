@@ -19,6 +19,8 @@ use Carbon\CarbonImmutable;
  * A name that does not parse has no range, and neither does a catch-all: PostgreSQL's DEFAULT and
  * MySQL's MAXVALUE exist so a write whose clock matches no declared month lands somewhere instead
  * of failing. Neither is ever a candidate for retirement — dropping the floor is not maintenance.
+ *
+ * @internal
  */
 final readonly class Partition
 {

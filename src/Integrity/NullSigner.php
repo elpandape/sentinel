@@ -11,6 +11,8 @@ use ElPandaPe\Sentinel\Contracts\Signer;
  * rather than filled with a value that would read as a claim, and verify() refuses rather than
  * agrees: a signer with no key cannot tell a good signature from a bad one, and answering true
  * would be the one answer that is never right.
+ *
+ * @internal
  */
 final readonly class NullSigner implements Signer
 {

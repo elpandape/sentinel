@@ -29,6 +29,8 @@ namespace ElPandaPe\Sentinel\Support;
  * encoded in the front of it. Nothing in the package reads one out. The column holds twenty-six
  * characters and every path that touches it compares it for equality, which is the only thing an
  * identity derived this way is for.
+ *
+ * @internal
  */
 final class DerivedIdentity
 {

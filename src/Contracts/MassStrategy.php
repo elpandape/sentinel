@@ -17,6 +17,8 @@ use ElPandaPe\Sentinel\Mass\Operation;
  * transaction, or it would describe a set that the update had already moved on from.
  *
  * @phpstan-type Statement Closure(): int
+ *
+ * @internal
  */
 interface MassStrategy
 {

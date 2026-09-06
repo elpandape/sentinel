@@ -27,6 +27,8 @@ use Illuminate\Database\DatabaseManager;
  * The read is a plain forward scan by key. An operator who knows where the last run stopped can say
  * so and skip ahead; one who does not can start from the beginning and pay a read per row, which is
  * the cheap half of the work.
+ *
+ * @internal
  */
 final readonly class Importer
 {

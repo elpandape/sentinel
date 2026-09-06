@@ -14,6 +14,8 @@ use ElPandaPe\Sentinel\Models\Audit;
  *
  * Collapsing them into a nullable entry is what would make the process that captured unable to
  * tell a queued audit from a lost one.
+ *
+ * @internal
  */
 final readonly class Handover
 {

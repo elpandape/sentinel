@@ -45,6 +45,8 @@ use Illuminate\Database\Eloquent\Relations\Pivot;
  * about to do; a restoration is not that. It is the engine writing its own trail back into the
  * business model, and a trail that can put a record back without saying so is one that misleads by
  * omission about the only thing it does that is not merely observing.
+ *
+ * @internal
  */
 final readonly class Restorer
 {

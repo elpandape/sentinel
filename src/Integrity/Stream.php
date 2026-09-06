@@ -12,6 +12,9 @@ use ElPandaPe\Sentinel\Support\Config;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Database\Eloquent\Relations\Relation;
 
+/**
+ * @internal
+ */
 final readonly class Stream
 {
     public const int MAX_LENGTH = 64;

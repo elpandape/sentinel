@@ -30,6 +30,8 @@ use Illuminate\Support\Sleep;
  * tables. Interrupted between the labels and the entries, the labels of an entry that is gone would
  * be rows nothing surviving could ever name again: they carry an identifier and no clock, and
  * nothing maps one back to a sequence once the entry is not there.
+ *
+ * @internal
  */
 final readonly class Cascade
 {

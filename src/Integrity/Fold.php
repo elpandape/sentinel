@@ -25,6 +25,8 @@ namespace ElPandaPe\Sentinel\Integrity;
  * anchors a chain: contiguous integers are not linkage, and without it whoever rewrites a range and
  * reissues its anchor produces a history that agrees with itself. With it, reissuing one anchor
  * obliges reissuing every anchor after it.
+ *
+ * @internal
  */
 final readonly class Fold
 {

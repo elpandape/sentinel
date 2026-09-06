@@ -11,6 +11,8 @@ use stdClass;
  * Serializes the writers of one stream before they read its tail. The hash covers the
  * sequence and the previous hash, so the tail has to be read before the row is built:
  * no INSERT can compute its own link.
+ *
+ * @internal
  */
 final readonly class StreamGate
 {
