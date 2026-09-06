@@ -3,9 +3,9 @@
 declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Enums\Source;
-use ElPandaPe\Sentinel\Import\Identity;
 use ElPandaPe\Sentinel\Import\Row;
 use ElPandaPe\Sentinel\Import\Shape;
+use ElPandaPe\Sentinel\Support\DerivedIdentity;
 use ElPandaPe\Sentinel\Tests\Fixtures\AltekTrail;
 
 use function ElPandaPe\Sentinel\Tests\altek;
@@ -86,8 +86,8 @@ it('keeps what the source wrote that this package has no column for', function (
 });
 
 it('gives a row the identity its key earns, and never the same one another origin would', function (): void {
-    expect(altek()->map(altekRow(1))->data?->capture_id)->toBe(Identity::of('altek', '1'))
-        ->and(Identity::of('altek', '1'))->not->toBe(Identity::of('owenit', '1'));
+    expect(altek()->map(altekRow(1))->data?->capture_id)->toBe(DerivedIdentity::of('altek', '1'))
+        ->and(DerivedIdentity::of('altek', '1'))->not->toBe(DerivedIdentity::of('owenit', '1'));
 });
 
 it('refuses a row with no timestamp instead of inventing one for it', function (): void {

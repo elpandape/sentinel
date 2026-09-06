@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace ElPandaPe\Sentinel\Import;
+namespace ElPandaPe\Sentinel\Support;
 
 /**
  * An identity derived from what it stands for rather than minted: the row an import read, the
@@ -18,13 +18,19 @@ namespace ElPandaPe\Sentinel\Import;
  * their rows from one and a row's key alone would collide across them. It is what keeps the two
  * callers apart too: a rotation names itself, so it cannot land on an identity an import derived.
  *
+ * It lives here rather than in Import for the reason Reference lives here rather than in Query:
+ * deriving an identity from what it stands for is something any writer that wants a second pass to
+ * cost nothing does, not something an importer does. It arrived with the importer and stayed there
+ * one version too long — long enough for the call graph to say that rotating keys depends on
+ * importing from another package, which was never true.
+ *
  * What comes out is a valid ULID by shape — twenty-six Crockford characters, the first of them
  * inside the three bits a ULID leaves for it — and is not one by meaning: there is no instant
  * encoded in the front of it. Nothing in the package reads one out. The column holds twenty-six
  * characters and every path that touches it compares it for equality, which is the only thing an
  * identity derived this way is for.
  */
-final class Identity
+final class DerivedIdentity
 {
     public const string ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 

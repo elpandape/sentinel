@@ -3,9 +3,9 @@
 declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Enums\Source;
-use ElPandaPe\Sentinel\Import\Identity;
 use ElPandaPe\Sentinel\Import\Row;
 use ElPandaPe\Sentinel\Import\Shape;
+use ElPandaPe\Sentinel\Support\DerivedIdentity;
 use ElPandaPe\Sentinel\Tests\Fixtures\OwenItTrail;
 
 use function ElPandaPe\Sentinel\Tests\owenIt;
@@ -65,7 +65,7 @@ it('leaves out the context keys the source has no answer for, rather than emptyi
 });
 
 it('gives a row the identity its key earns, so a second run finds it done', function (): void {
-    expect(owenIt()->map(owenItRow(2))->data?->capture_id)->toBe(Identity::of('owenit', '2'));
+    expect(owenIt()->map(owenItRow(2))->data?->capture_id)->toBe(DerivedIdentity::of('owenit', '2'));
 });
 
 it('says which row an entry came from, on the entry', function (): void {

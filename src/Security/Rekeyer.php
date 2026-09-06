@@ -9,9 +9,9 @@ use ElPandaPe\Sentinel\Contracts\Deduplicates;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
-use ElPandaPe\Sentinel\Import\Identity;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Support\Config;
+use ElPandaPe\Sentinel\Support\DerivedIdentity;
 
 /**
  * Rotation writes; it never rewrites. The original entry is protected by its own hash and
@@ -72,7 +72,7 @@ final readonly class Rekeyer
      */
     public static function identity(Audit $audit, string $target): string
     {
-        return Identity::of(self::ORIGIN, $audit->id.':'.$target);
+        return DerivedIdentity::of(self::ORIGIN, $audit->id.':'.$target);
     }
 
     /**

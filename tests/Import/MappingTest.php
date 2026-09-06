@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Enums\Source;
-use ElPandaPe\Sentinel\Import\Identity;
 use ElPandaPe\Sentinel\Import\Row;
+use ElPandaPe\Sentinel\Support\DerivedIdentity;
 use ElPandaPe\Sentinel\Tests\Fixtures\PretendOrigin;
 
 it('turns a row an origin understands into an entry it could have written itself', function (): void {
@@ -19,7 +19,7 @@ it('turns a row an origin understands into an entry it could have written itself
     expect($mapping->refused)->toBeNull()
         ->and($mapping->data?->source)->toBe(Source::Import)
         ->and($mapping->data?->subject_id)->toBe('77')
-        ->and($mapping->data?->capture_id)->toBe(Identity::of('pretend', '4711'))
+        ->and($mapping->data?->capture_id)->toBe(DerivedIdentity::of('pretend', '4711'))
         ->and($mapping->data?->occurred_at->format('Y'))->toBe('2024');
 });
 

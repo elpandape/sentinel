@@ -8,11 +8,11 @@ use DateTimeImmutable;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Diff\Diff;
 use ElPandaPe\Sentinel\Enums\Source;
-use ElPandaPe\Sentinel\Import\Identity;
 use ElPandaPe\Sentinel\Import\Mapping;
 use ElPandaPe\Sentinel\Import\Origin;
 use ElPandaPe\Sentinel\Import\Row;
 use ElPandaPe\Sentinel\Support\Config;
+use ElPandaPe\Sentinel\Support\DerivedIdentity;
 
 /**
  * A trail written by `owen-it/laravel-auditing`, read as entries of this one.
@@ -115,7 +115,7 @@ final readonly class OwenIt implements Origin
             after: $after,
             changes: $before === null && $after === null ? null : Diff::between($before ?? [], $after ?? [])->toArray(),
             metadata: ['import' => ['origin' => self::NAME, 'row' => $key]],
-            capture_id: Identity::of(self::NAME, $key),
+            capture_id: DerivedIdentity::of(self::NAME, $key),
             tags: $this->tags($row),
         ));
     }

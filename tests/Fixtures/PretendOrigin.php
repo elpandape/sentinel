@@ -8,10 +8,10 @@ use DateTimeImmutable;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
-use ElPandaPe\Sentinel\Import\Identity;
 use ElPandaPe\Sentinel\Import\Mapping;
 use ElPandaPe\Sentinel\Import\Origin;
 use ElPandaPe\Sentinel\Import\Row;
+use ElPandaPe\Sentinel\Support\DerivedIdentity;
 
 /**
  * An origin with a shape and almost nothing behind it. It is what lets the shape check and the
@@ -57,7 +57,7 @@ final readonly class PretendOrigin implements Origin
             source: Source::Import,
             subject_type: $row->text('subject_type'),
             subject_id: $row->text('subject_id'),
-            capture_id: Identity::of($this->name(), $key),
+            capture_id: DerivedIdentity::of($this->name(), $key),
         ));
     }
 }
