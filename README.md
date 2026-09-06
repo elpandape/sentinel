@@ -83,7 +83,7 @@ migration: [MIGRATE_FROM_OWEN_IT.md](MIGRATE_FROM_OWEN_IT.md) and
 | `v0.19.2` | Rehydration: a batch goes back into the table exactly as it left, headers included, and `append()` keeps the counter it was silently leaving behind |
 | `v0.19.3` | Tombstones: an entry whose contents are destroyed while its position, its hash and its link stay, a third content state, and `sentinel:redact` |
 | `v0.19.4` | Redaction that reaches the archive: a batch is rewritten with the entry emptied, and a range that was archived refuses to be redacted in place only |
-| `v0.19.5` | Compliance mode with teeth: it refuses to boot without signatures and anchors, a redaction has to name who ordered it, every read leaves an entry and a row, plus `sentinel:export` and `sentinel:rekey` |
+| `v0.19.5` | Compliance mode with teeth: it refuses to boot without signatures and anchors, a redaction has to name who ordered it, every read through the Query API leaves an entry and a row, plus `sentinel:export` and `sentinel:rekey` |
 | `v0.20.0` | Scale: `whereIp()` and `whereRoute()` with the index that serves them, three partitioned alternatives to the base migration, and `sentinel:partitions` |
 | `v0.21.0` | Distributed tracing: a strict W3C Trace Context parser, the active span of an OpenTelemetry SDK when there is one, the trace carried across the queue, a root trace per console run, and `Sentinel::trace()` |
 | `v0.21.1` | A flush that fails says how many entries it was and where they are, and a summary entry says which mode settled it |
@@ -960,8 +960,9 @@ impersonation package stores something else.
 the ledger contract rather than against Eloquent. Nothing here returns a query builder and no
 method takes a column name, so the same query a SQL driver compiles into a `where` clause a
 driver over arrays — or over something that is not a table at all — answers by walking what it
-holds. Every read goes through `Ledger::query()`, which is the one place a later version can
-record who read what.
+holds. Every read of this query goes through `Ledger::query()`, which is the one place the package
+records who read what — see [compliance mode](#compliance-mode) for what that covers and what it
+does not.
 
 ```php
 use ElPandaPe\Sentinel\Enums\Severity;
@@ -3034,11 +3035,41 @@ the one operation that destroys evidence cannot be the one with nobody's name on
 **Deleting requires archiving.** `sentinel:prune --action=delete` refuses a range that has no archive
 batch. The evidence is the manifest row of a real file, not a flag somebody set.
 
-**Every read is recorded, in two places.** An entry with `audit_type = 'access'` — chained, hashed and
-signed like any other — and a row in `sentinel_access_log` carrying the shape of the question, how
-many results came back, and who asked. The entry is what makes a read provable; the row is what makes
-it searchable. The editable copy is deliberately the second one and never the only one, because an
-access log that can be edited proves nothing about who looked.
+**Every read through the Query API is recorded, in two places.** An entry with
+`audit_type = 'access'` — chained, hashed and signed like any other — and a row in
+`sentinel_access_log` carrying the shape of the question, how many results came back, and who asked.
+The entry is what makes a read provable; the row is what makes it searchable. The editable copy is
+deliberately the second one and never the only one, because an access log that can be edited proves
+nothing about who looked.
+
+That covers every terminal the Query API publishes, and the command that reads through it:
+
+| Read | Recorded |
+|---|---|
+| `get()` | Yes — the bound the caller actually got, not the extra row the query asked for |
+| `paginate()` | Yes — the page, with its size and offset |
+| `compare()` | Yes, as the `get()` it performs |
+| `sentinel:export` | Yes, as the `get()` it performs |
+
+**What it does not cover.** The record is written where the Query API hands entries back, so a read
+that never goes through it leaves none. There are three such paths, and they are lines drawn on
+purpose rather than gaps:
+
+- **Eloquent straight at the model** — `$model->audits()`, `latestAudit()`, and the `field()` scope.
+  These are a `MorphMany` and a query scope, so recording them would mean an access entry per row
+  hydrated, including every row the verifier, the presenter and the exporter hydrate on their way to
+  doing something else. What compliance mode promises is a record of the trail being *queried*, and
+  a relation on your own model is not that.
+- **`sentinel:show` and `sentinel:redact`** find one entry by its identifier through the ledger
+  rather than through a query. Redaction leaves its own evidence regardless — it is an entry of its
+  own, and under this mode it cannot be ordered anonymously — but *looking* at one entry by id does
+  not leave a row.
+- **`Sentinel::verifyIntegrity()`, `verifyAnchors()`, `verifyRoots()` and `verifyEverything()`** walk
+  entries in order to hash them and drop them. They read to prove rather than to disclose, and
+  nothing they read reaches a caller.
+
+If your regime needs the first of those recorded, reach the trail through `Sentinel::audits()`
+rather than through the relation, and the read is covered.
 
 ```php
 $reads = AuditAccess::query()
