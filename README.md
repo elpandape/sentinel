@@ -1089,8 +1089,18 @@ sought. That is the right plan for a label that broad — it is a fact about how
 the query.
 
 `between()` bounds `created_at`, the clock the ledger stamps the entry with, and both ends are
-inclusive. It is not `occurred_at`: that is what the entry says about the world, it has no index,
-and the two come apart the moment writing stops being synchronous.
+inclusive. It is not `occurred_at` — which does have an index of its own, two of them since
+`v0.10.0` — and the reason is that `created_at` is the column the rest of the machinery is built on:
+it is the partition key of both published range plans, and the clock retention counts from. A period
+that followed the clock of the fact would select rows across every partition and bound a window that
+does not line up with the one a purge works in. The two clocks come apart the moment writing stops
+being synchronous, so this is a choice and not a coincidence.
+
+If you want the clock of the fact, ask for it: `byOccurrence()` changes what a query orders by, and
+`Sentinel::timeline()` and `Sentinel::transitions()` come with it already in front. What does not
+change is which column `between()` bounds — `Sentinel::transitions()->between($from, $to)` still
+narrows by `created_at` while ordering by `occurred_at`, and that pairing is the one worth knowing
+about before you read a lifeline by date.
 
 ### Order, and how much comes back
 
@@ -1304,6 +1314,12 @@ not `created_at`, when the ledger sealed it: the two agree while writing is sync
 apart the moment it is not. Two indexes ship with this version so that order rides an index instead
 of sorting outside one — measured over two hundred thousand entries on all three engines, where
 without them it sorts outside every index and an indexed filter in front only shrinks what it sorts.
+
+**`between()` still bounds `created_at` here.** Ordering and narrowing follow different clocks on
+purpose, so `Sentinel::timeline()->between($from, $to)` reads the entries the ledger *sealed* in that
+window and hands them back in the order they *happened*. `Sentinel::transitions()` is the same
+pairing with no way out, since it forces the clock of the fact and takes no argument to say
+otherwise. The [refiners](#refiners) section says why the window follows the ledger's clock.
 
 Rendering a page of a timeline resolves what the entries point at in a query per morph type rather
 than a query per line:
