@@ -184,8 +184,9 @@ return [
     ],
 
     /*
-     * The tamper-evident chain. Streams scope it: global, tenant, subject_type
-     * or a closure. Checkpoints anchor ranges so verification stays cheap.
+     * The tamper-evident chain. Streams scope it: global, tenant, subject_type,
+     * a closure, or a class implementing Contracts\StreamResolver.
+     * Checkpoints anchor ranges so verification stays cheap.
      */
     'integrity' => [
         'algorithm' => 'sha256',

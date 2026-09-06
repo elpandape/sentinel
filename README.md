@@ -162,6 +162,24 @@ Sentinel::withContext(['reason' => 'Approved by finance'], function () {
 });
 ```
 
+There is an unscoped pair as well, and the difference matters more than it looks:
+
+```php
+Sentinel::isRecording();   // false while paused, or while the package is switched off
+Sentinel::pause();
+Sentinel::resume();
+
+Sentinel::config();        // the resolved configuration, as an object
+Sentinel::context();       // what the resolvers worked out for this process
+```
+
+**`withoutAuditing()` is the one that survives an exception.** It restores whatever the previous
+state was in a `finally`, so it nests and it cannot leak. `pause()` sets a flag and nothing takes it
+back down: throw between a `pause()` and its `resume()` and auditing stays off for the rest of the
+request, silently, with the entries that were supposed to be written simply absent. Reach for the
+pair only when the two calls genuinely cannot be in the same scope, and put the `resume()` in a
+`finally` yourself when they can.
+
 ## What gets audited
 
 Five kinds of entry, from four eloquent events — a force delete fires `deleted` on its way to
@@ -912,6 +930,20 @@ each model declared:
         'fields' => ['session_id'],
     ],
 ],
+```
+
+A masker is any class implementing `Contracts\Masker`, which is one method:
+
+```php
+use ElPandaPe\Sentinel\Contracts\Masker;
+
+final class IpMasker implements Masker
+{
+    public function mask(string $field, mixed $value): mixed
+    {
+        return is_string($value) ? preg_replace('/\.\d+$/', '.0', $value) : $value;
+    }
+}
 ```
 
 The salt is **stable by definition**. Rotating it breaks no chain and destroys the comparability of
@@ -2239,12 +2271,40 @@ outside `toArray()`: they answer a call, they are not part of an entry.
 `config/sentinel.php` ships every section the package will use through 1.0, with future features
 turned off. Read it once and you know what is coming.
 
-Six sections are live today beyond the basics: `resolvers` decides who and where an entry came
+Seven sections are live today beyond the basics: `resolvers` decides who and where an entry came
 from, `pipeline` is the ordered list of stages every entry travels through, `security` holds the
 redaction mask and field lists, the encryption keyring and the hashing salt, `on_write_failure` with
 `log_channel` decides what a write that did not complete does to the request, `mode` with `queue`
-and `buffer` decides [where an entry settles](#performance-modes), and `retention` with `prune`
-decides [what stops being kept](#retention--pruning).
+and `buffer` decides [where an entry settles](#performance-modes), `retention` with `prune`
+decides [what stops being kept](#retention--pruning), and `tables` names every table the package
+touches.
+
+**`tables` is why this README can write table names in prose and still be right about your
+installation.** A prefix and one key per table; change either and every query, migration and command
+follows, because nothing in the package writes a table name literally:
+
+```php
+'tables' => [
+    'prefix' => 'sentinel_',
+    'audits' => 'audits',
+    // audit_tags, audit_relations, transactions, checkpoints, archives, access_log
+],
+```
+
+**Three `prune` keys decide what a purge is allowed to cost**, and one of them is a bound rather
+than a preference:
+
+| Key | What it decides |
+|---|---|
+| `prune.windows` | How many anchored windows one run may retire. It is the cap that stops a first purge over years of history from becoming a single unbounded transaction |
+| `prune.batch` | How many rows a single statement removes, which `sentinel:prune --batch` overrides for one run |
+| `prune.pause` | How long to wait between batches, so a purge yields to the traffic it is running beside |
+
+**A driver subtree that ships empty takes no options.** `ledger.ledgers` gives `database`, `memory`
+and `null` an empty array each, which is the shape of a driver that has nothing to configure — not
+an invitation. `archive` and `fanout` are the two that do take options, and they are the reason the
+others look like they might. Anything put in an empty one is ignored without a word, and this shape
+is what 1.0 freezes.
 
 Every one of those keys also has its default **in code**. Laravel merges a published config file one
 level deep, so an installation that published `sentinel.php` before a subtree existed would
@@ -2387,6 +2447,33 @@ the payload the hash covers. See [Labels](#labels).
 stream strategy while a chain already holds data does not rewrite the old rows under the new name,
 it starts a second chain under it — the history ends up split across two independent chains instead
 of continuing as one.
+
+`integrity.stream` accepts **five** shapes, and the last one is the way to scope a chain by anything
+the first four do not reach:
+
+| Value | What each entry lands in |
+|---|---|
+| `'global'` | One chain for the whole installation |
+| `'tenant'` | `tenant:<id>`, and `global` for an entry with no tenant |
+| `'subject_type'` | `type:<morph alias>`, and `global` for an entry with no subject |
+| A closure | Whatever string it returns for the `AuditData` it is given |
+| A class implementing `Contracts\StreamResolver` | The same, resolved from the container |
+
+```php
+use ElPandaPe\Sentinel\Contracts\StreamResolver;
+use ElPandaPe\Sentinel\Data\AuditData;
+
+final class RegionStream implements StreamResolver
+{
+    public function resolve(AuditData $audit): string
+    {
+        return 'region:'.($audit->context['region'] ?? 'unknown');
+    }
+}
+```
+
+A name is capped at sixty-four characters and rejected at capture rather than at the ledger, where it
+would arrive as a constraint violation on a write that had already sealed a chain.
 
 Verify a whole chain, or a bounded slice of it:
 
