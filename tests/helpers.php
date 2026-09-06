@@ -625,6 +625,55 @@ function checkpointsTable(): string
     return $config->table('checkpoints');
 }
 
+function accessLogTable(): string
+{
+    /** @var Config $config */
+    $config = app(Config::class);
+
+    return $config->table('access_log');
+}
+
+/**
+ * @param  array<string, mixed>  $overrides
+ * @return array<string, mixed>
+ */
+function archiveRow(array $overrides = []): array
+{
+    return [
+        'id' => frozenUlid('ARCH'),
+        'stream' => 'global',
+        'sequence_from' => 1,
+        'sequence_to' => 4,
+        'records' => 4,
+        'disk' => 's3',
+        'path' => 'sentinel/global/1-4.jsonl.zst',
+        'checksum' => str_repeat('b', 64),
+        'compressed' => 'zstd',
+        'created_at' => '2026-08-30 09:00:00.000000',
+        ...$overrides,
+    ];
+}
+
+/**
+ * @param  array<string, mixed>  $overrides
+ * @return array<string, mixed>
+ */
+function accessRow(array $overrides = []): array
+{
+    return [
+        'id' => frozenUlid('READ'),
+        'audit_id' => frozenUlid('ENTR'),
+        'actor_type' => 'user',
+        'actor_id' => '1',
+        'tenant_id' => 'acme',
+        'query' => json_encode(['filters' => ['subject']]),
+        'results' => 12,
+        'context' => json_encode(['ip' => '203.0.113.7']),
+        'created_at' => '2026-09-02 09:00:00.000000',
+        ...$overrides,
+    ];
+}
+
 /**
  * @param  array<string, mixed>  $overrides
  * @return array<string, mixed>
