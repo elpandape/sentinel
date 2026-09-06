@@ -2,7 +2,21 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
-## Unreleased
+## v0.22.3 — The public surface (2026-09-06)
+
+What this package is, written down. Nothing migrates, nothing touches the chain, `payload_version`
+stays at `1`, and every entry written before this release verifies unchanged.
+
+Two halves. One draws the line between what 1.0 covers and what it does not — a hundred and
+fifty-five declarations marked `@internal`, a hundred and twenty-three left standing, and an arch
+test holding the boundary as data so a class added later cannot slip in unclassified. The other
+takes the README apart against the code: a pipeline stage missing from a block readers are told to
+copy, four published filters absent from the table that promises none of them walks the trail
+unannounced, an access log claim that covered three paths it does not reach, two doc blocks telling
+an operator to throw away the only evidence a gap is legitimate, and four sentences describing
+versions that shipped tags ago.
+
+This is the last release before the freeze, and the last one that may break a published contract.
 
 ### Breaking
 
@@ -18,6 +32,60 @@ All notable changes to `elpandape/sentinel` are documented here.
   narrow driver in the suite declared the floor exactly, so every refusal it produced was for a
   filter published after it, and the nine filters of `Filter::assumed()` had their refusal side
   checked by nothing.
+
+### Added
+
+- **The public surface is decided and marked.** A hundred and fifty-five declarations carry
+  `@internal` and a hundred and twenty-three do not. Public is what a caller can name or receive
+  without the container handing it over: what the facade's `@method` block returns and its
+  transitive closure, what `config/sentinel.php` names as a class, the contracts you implement and
+  the case a driver author extends, the events listened to, the exceptions caught, and what this
+  README teaches you to resolve. Nine namespaces are internal whole — `Buffer`, `Compliance`,
+  `Dispatch`, `Import`, `Jobs`, `Ledger`, `Mass`, `Partitions` and `Retention`. **The eleven
+  commands are public as commands and not as classes**: what 1.0 freezes is the name, the options
+  and the exit codes.
+- **An arch test that holds the boundary as data**, both lists keyed by why, asserting in both
+  directions and naming twenty-five reachable symbols one by one. A declaration added after this tag
+  is classified or the suite goes red.
+- **`Contracts\Masker`, the five shapes of `integrity.stream`, the `tables` section, the three
+  `prune` keys and the five facade methods** that were reachable and documented nowhere — with the
+  warning that `withoutAuditing()` survives an exception and a bare `pause()` does not.
+- **Shape tests for `sentinel_archives` and `sentinel_access_log`**, the two of seven tables whose
+  schema nothing pinned.
+- **`QueryPlanTest` cases** for a relation operation on its own, the lifeline as its only
+  first-party caller reads it, and the timeline of one tenant.
+
+### Fixed
+
+- **`ResolveTags` was missing from the pipeline block** the README tells you to copy in order to
+  drop a stage. Copying it dropped the labels instead, silently.
+- **Four published filters had no row in the filter table** — the three relation filters and the
+  cursor — in a table that promises no published filter walks the trail without being called a
+  refiner in it. The order column now names its clock: three of those composites end in `created_at`,
+  so asking for the clock of the fact leaves the index finding the entries and no longer delivering
+  them sorted.
+- **"Every read is recorded" was true of the Query API and of nothing else.** Three paths reach the
+  trail without leaving a row — Eloquent straight at the model, the `find()` behind `sentinel:show`
+  and `sentinel:redact`, and the verification walk — and each is now named with the reason it is a
+  line drawn on purpose.
+- **Two doc blocks said `sentinel_checkpoints` can be thrown away without losing anything.** After
+  the first purge that is an instruction to destroy the only proof a gap is legitimate: verification
+  refuses an absence unless the manifest accounts for it *and* the anchors reach past it.
+- **The reason given for `between()` bounding `created_at` was that `occurred_at` has no index.** It
+  has had two since `v0.10.0`. The live reason is that `created_at` is the partition key of both
+  published range plans and the clock retention counts from.
+- **Forty columns and thirteen indexes**, in the two places that said thirty and twelve, with the
+  counting convention stated. **Six tables travel beside the trail**, not five.
+- **Four sentences described versions published tags ago**, `capture_id`'s absence from the
+  serialized shape among them — rewritten with the real reason rather than deleted.
+- **`AuditPresenter` promised severity names from `resources/lang`**; neither catalogue has them.
+  Five doc blocks stranded above a closing brace are gone.
+- **`Import\Identity` moved to `Support\DerivedIdentity`.** Rotation became its second caller in
+  `v0.22.2`, so the call graph was saying that rotating keys depends on importing from another
+  package.
+- **`readsAnIndex()` and `sortsOutsideTheIndex()` did not measure what they said** on SQLite: a full
+  walk of an index counted as an index read, and a partial sort as no sort. The filter table is
+  measured by those two helpers, so a blind helper turned every row of it into an unverified claim.
 
 ## v0.22.2 — Defects and instruments (2026-09-04)
 
