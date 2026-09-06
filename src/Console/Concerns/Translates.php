@@ -18,6 +18,8 @@ use Override;
  * The prefix is the command's own name and not a constant written beside it. `sentinel:redact`
  * reads `commands.redact`, so renaming a command without renaming its keys stops the translation
  * rather than leaving it quietly answering to the old name.
+ *
+ * @internal
  */
 trait Translates
 {

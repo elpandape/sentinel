@@ -32,6 +32,8 @@ use ElPandaPe\Sentinel\Support\DerivedIdentity;
  * Its `signature` is a digest of the row over itself and links to nothing: altering one row leaves
  * the next one's signature intact. It is kept as data and never as this package's own signature,
  * which means something else entirely.
+ *
+ * @internal
  */
 final readonly class Altek implements Origin
 {

@@ -13,6 +13,8 @@ use ElPandaPe\Sentinel\Support\Reference;
  * and the two number readers did not agree: one asked whether the text was a number, the other
  * cast whatever arrived. Under the second, `--from=yesterday` is sequence zero and the command
  * answers a question nobody asked. Asking is the rule that survives.
+ *
+ * @internal
  */
 trait ReadsOptions
 {

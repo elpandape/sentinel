@@ -24,6 +24,8 @@ use Illuminate\Database\Eloquent\Model;
  * moved and the three thousand entries saying how are one thing rather than a pile that happens to
  * be adjacent in time. An operation already running inside one keeps that one: a business
  * transaction does not split because of how its implementation writes rows.
+ *
+ * @internal
  */
 final readonly class RowByRow
 {

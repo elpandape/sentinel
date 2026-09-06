@@ -353,6 +353,40 @@ function outputLiterals(): array
 }
 
 /**
+ * Every declaration under src/, named by its path relative to src/ without the extension, mapped to
+ * whether it carries the @internal marker.
+ *
+ * The marker is looked for in the doc block that ends immediately above the declaration and nowhere
+ * else, so a class whose prose happens to mention the word is not mistaken for a marked one.
+ *
+ * @return array<string, bool>
+ */
+function internalMarks(): array
+{
+    $root = dirname(__DIR__).DIRECTORY_SEPARATOR.'src';
+    $marks = [];
+
+    foreach (phpFiles($root) as $file) {
+        $contents = file_get_contents($file);
+
+        if ($contents === false) {
+            continue;
+        }
+
+        $name = str_replace([$root.DIRECTORY_SEPARATOR, '.php'], '', $file);
+
+        $marks[str_replace(DIRECTORY_SEPARATOR, '/', $name)] = preg_match(
+            '#@internal[^/]*\*/\s*(?:(?:final|readonly|abstract)\s+)*(?:class|interface|enum|trait)\s#',
+            $contents,
+        ) === 1;
+    }
+
+    ksort($marks);
+
+    return $marks;
+}
+
+/**
  * @return list<string>
  */
 function phpFiles(?string $directory = null): array

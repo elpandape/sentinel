@@ -18,6 +18,8 @@ use ElPandaPe\Sentinel\Mass\Operation;
  * The default, and it stays the default. It is the only one of the three whose cost does not grow
  * with the size of the set, and a mode that turns a one-line update into thousands of inserts is a
  * decision an application makes for itself.
+ *
+ * @internal
  */
 final readonly class Summary implements MassStrategy
 {

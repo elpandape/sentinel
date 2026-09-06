@@ -16,6 +16,8 @@ use ElPandaPe\Sentinel\Mass\Operation;
  * while they are described. Never the default, and documented by the number rather than by an
  * adjective — an update over three thousand five hundred rows produces three thousand five hundred
  * and one entries, and an installation that wants that is one that asked for it.
+ *
+ * @internal
  */
 final readonly class Individual implements MassStrategy
 {

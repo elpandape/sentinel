@@ -17,6 +17,8 @@ use ElPandaPe\Sentinel\Support\Config;
  * Which side of the line a set falls on is settled by reading one row past the threshold rather
  * than by counting: a count is a second statement over the same predicate, and this way the price
  * of asking is bounded by the threshold itself.
+ *
+ * @internal
  */
 final readonly class Hybrid implements MassStrategy
 {

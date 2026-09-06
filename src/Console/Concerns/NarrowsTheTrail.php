@@ -12,6 +12,8 @@ use ElPandaPe\Sentinel\Query\AuditQuery;
  * It is the Query API and not a second query language, which is the point: what an application
  * writes in code is what an operator writes on the command line, so there is one thing to learn
  * and one thing to keep correct.
+ *
+ * @internal
  */
 trait NarrowsTheTrail
 {

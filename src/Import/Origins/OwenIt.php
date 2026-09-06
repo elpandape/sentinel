@@ -35,6 +35,8 @@ use ElPandaPe\Sentinel\Support\DerivedIdentity;
  * An attribute whose value was an array. That package drops those before it writes, unless the
  * application turned a setting on, so the gap is already in the rows and closing it here would mean
  * inventing what was never captured.
+ *
+ * @internal
  */
 final readonly class OwenIt implements Origin
 {

@@ -14,6 +14,8 @@ use ElPandaPe\Sentinel\Exceptions\QueryException;
  * Three commands asked this and two of them called it different names, which is how a reader ends
  * up believing there are two rules. There is one: a ledger that cannot list its chains is asked to
  * be given one, and it says so rather than working on whatever it happens to know about.
+ *
+ * @internal
  */
 trait WalksStreams
 {
