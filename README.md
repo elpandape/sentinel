@@ -420,6 +420,7 @@ the list is configuration — not a set of flags:
 'pipeline' => [
     ElPandaPe\Sentinel\Pipeline\Stages\FilterUnchanged::class,
     ElPandaPe\Sentinel\Pipeline\Stages\ResolveContext::class,
+    ElPandaPe\Sentinel\Pipeline\Stages\ResolveTags::class,
     ElPandaPe\Sentinel\Pipeline\Stages\NormalizeData::class,
     ElPandaPe\Sentinel\Pipeline\Stages\MaskSensitiveData::class,
     ElPandaPe\Sentinel\Pipeline\Stages\EncryptSensitiveData::class,
@@ -431,6 +432,7 @@ the list is configuration — not a set of flags:
 |---|---|
 | `FilterUnchanged` | Drops an update whose comparison found nothing |
 | `ResolveContext` | Runs the context engine of `v0.6.0` |
+| `ResolveTags` | Joins the labels the model declared, the ones the caller passed and the ones the configuration gives everything, and refuses an over-long one here, where it is still attributable |
 | `NormalizeData` | Sorts the keys of every stored container, all the way down |
 | `MaskSensitiveData` | Applies `$auditRedact` (a mask) and `$auditHash` (a digest) |
 | `EncryptSensitiveData` | Applies `$auditEncrypt` and fills the `encryption` column |
@@ -982,28 +984,48 @@ cannot be narrowed behind your back.
 
 ### The filters
 
-| Method | Narrows by | Index that finds it | Index that orders it |
+| Method | Narrows by | Index that finds it | Order it arrives in, and the clock that holds |
 |---|---|---|---|
-| `for()` / `forModel()` | `subject_type`, `subject_id` | `(subject_type, subject_id, id)` | none — the subject's own entries are sorted |
-| `by()` / `byActor()` | `actor_type`, `actor_id` | `(actor_type, actor_id, id)` | none — the actor's own entries are sorted |
-| `whereEvent()` | `event` | `(event)` | none — see below |
-| `whereType()` | `audit_type` | `(audit_type, created_at)` | the same index |
-| `whereSeverity()` | `severity` | `(severity, created_at)` | the same index |
-| `forTenant()` | `tenant_id` | `(tenant_id, created_at)` | the same index |
-| `inTransaction()` | `transaction_id` | `(transaction_id)` | none — one transaction is sorted |
-| `withTrace()` | `trace_id` | `(trace_id)` | none — one trace is sorted |
-| `whereTag()` / `whereAnyTag()` | the labels an entry carries | `(tag, audit_id)` on the labels table | none |
-| `whereIp()` | `ip`, inside `context` | the JSON index migration, **if you publish it** | none |
-| `whereRoute()` | `route`, inside `context` | the JSON index migration, **if you publish it** | none |
+| `for()` / `forModel()` | `subject_type`, `subject_id` | `(subject_type, subject_id, id)` | sorted — the subject's own entries, by the ledger's clock |
+| `by()` / `byActor()` | `actor_type`, `actor_id` | `(actor_type, actor_id, id)` | sorted — the actor's own entries, by the ledger's clock |
+| `whereEvent()` | `event` | `(event)` | not sorted — see below |
+| `whereType()` | `audit_type` | `(audit_type, created_at)` | the same index, **only while the clock is the ledger's** |
+| `whereSeverity()` | `severity` | `(severity, created_at)` | the same index, **only while the clock is the ledger's** |
+| `forTenant()` | `tenant_id` | `(tenant_id, created_at)` | the same index, **only while the clock is the ledger's** |
+| `inTransaction()` | `transaction_id` | `(transaction_id)` | sorted — one transaction is |
+| `withTrace()` | `trace_id` | `(trace_id)` | sorted — one trace is |
+| `whereTag()` / `whereAnyTag()` | the labels an entry carries | `(tag, audit_id)` on the labels table | not sorted |
+| `whereRelation()` | the relation a line names | `(relation, audit_id)` on the relations table | not sorted |
+| `whereRelated()` | the record a line points at | `(related_type, related_id, audit_id)` on the relations table | not sorted |
+| `whereOperation()` | what a line did | **none — a refiner** | — |
+| `whereIp()` | `ip`, inside `context` | the JSON index migration, **if you publish it** | not sorted |
+| `whereRoute()` | `route`, inside `context` | the JSON index migration, **if you publish it** | not sorted |
 | `whereSource()` | `source` | **none — a refiner** | — |
 | `between()` | `created_at` | **none — a refiner** | — |
 | `whereFieldChanged()` | a path inside `changes` | **none — a refiner** | — |
 | `whereVersion()` | `version` | **none — a refiner** | — |
+| `after()` | a place in the walk, by `id` | the primary key | it *is* the order — the walk resumes, it does not filter |
 
 Every row of that table was measured, on SQLite, MySQL 9 and PostgreSQL 16, with the engine's own
 `EXPLAIN` over the statement the driver actually issues — and the measurement is a test, so it
 stays true. No published filter falls back to a full pass over the table without being called a
 refiner here.
+
+**The last column names a clock, not just an index.** Three of those composites end in `created_at`,
+which is the ledger's clock — when the entry was recorded. Ask for the clock of the fact instead,
+with `byOccurrence()` or through `Sentinel::timeline()`, and the index still finds the entries but
+no longer delivers them in order: the engine sorts afterwards. `Sentinel::transitions()` is the case
+with no way out, because it forces that clock and takes no argument to say otherwise.
+
+**`whereOperation()` is a refiner and the other two relation filters are not**, which looks
+inconsistent until you look at the projection: its three indexes begin with the entry, the relation
+and the related record, and none begins with the operation. Used on its own it compiles to a
+correlated `EXISTS` whose only predicate is that column, so the engine walks the trail and asks about
+each entry. Put it behind `whereRelation()` or `whereRelated()` and it costs nothing extra.
+
+**`whereType('model')` deserves the same warning `whereEvent()` and `whereRoute()` carry.** Most
+entries in an ordinary installation are of that type, so narrowing by it alone reaches an index that
+matches almost everything. It earns its keep beside another filter, not on its own.
 
 `for()` and `by()` take a model, or the type and key the entry recorded — a hard-deleted subject
 has no model left to hand over, and its trail is exactly what outlives it:
