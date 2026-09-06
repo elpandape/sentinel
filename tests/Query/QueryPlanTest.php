@@ -171,3 +171,36 @@ it('rides an index for the lifeline of one subject', function (): void {
 
     expect(readsAnIndex($plan))->toBeTrue($plan);
 });
+
+/**
+ * The projection carries three indexes and none of them begins with the operation, so narrowing by
+ * it alone leaves the trail with no predicate of its own: the engine walks the entries and asks the
+ * projection about each one. That is what the readme calls a refiner, and it is why the operation is
+ * published as one — unlike the relation and the related record, which do begin an index.
+ */
+it('reaches no index at all for a relation operation on its own, which is why it is a refiner', function (): void {
+    $plan = planFor(Sentinel::audits()->whereOperation('attach'));
+
+    expect(readsAnIndex($plan))->toBeFalse($plan);
+});
+
+/**
+ * The lifeline read the way the only first-party caller reads it. `Sentinel::transitions()` narrows
+ * by the type and then forces the clock of the fact with no way to opt out, so the composite that
+ * would have arrived sorted answers the type and leaves the order to be sorted afterwards. It is the
+ * case that decides how the readme's table names that column: the index orders the entries only
+ * while the clock is the ledger's.
+ */
+it('sorts outside the index it found when the lifeline forces the clock of the fact', function (): void {
+    $plan = planFor(Sentinel::transitions()->entries());
+
+    expect(readsAnIndex($plan))->toBeTrue($plan)
+        ->and(sortsOutsideTheIndex($plan))->toBeTrue($plan);
+});
+
+it('pays the same sort for the timeline of one tenant', function (): void {
+    $plan = planFor(Sentinel::timeline()->forTenant('tenant-7'));
+
+    expect(readsAnIndex($plan))->toBeTrue($plan)
+        ->and(sortsOutsideTheIndex($plan))->toBeTrue($plan);
+});

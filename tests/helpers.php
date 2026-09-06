@@ -1007,9 +1007,13 @@ function planFor(AuditQuery $query): string
 }
 
 /**
- * Whether the plan reaches the trail through an index. It asks about the audits table by name,
- * because a predicate can put a derived table in the plan whose own scan says nothing about how
- * the entries were found — the changed-field predicate does exactly that, over one constant row.
+ * Whether the engine sought into the trail rather than walked it. It asks about the audits table by
+ * name, because a predicate can put a derived table in the plan whose own scan says nothing about
+ * how the entries were found — the changed-field predicate does exactly that, over one constant row.
+ *
+ * The three branches ask the one question, each in its own dialect, and SQLite's is the one that
+ * needs saying: it prints SCAN for a walk and SEARCH for a seek, and it prints USING INDEX for both.
+ * Matching the index rather than the verb called a whole pass over the trail an index read.
  */
 function readsAnIndex(string $plan): bool
 {
@@ -1018,16 +1022,21 @@ function readsAnIndex(string $plan): bool
     return match (DB::connection()->getDriverName()) {
         'mysql' => ! str_contains($plan, "Table scan on {$table}"),
         'pgsql' => ! str_contains($plan, "Seq Scan on {$table}"),
-        default => str_contains($plan, 'USING INDEX') || str_contains($plan, 'USING COVERING INDEX'),
+        default => str_contains($plan, "SEARCH {$table}"),
     };
 }
 
+/**
+ * SQLite says LAST TERM OF ORDER BY when the index supplied part of the order and it sorted the
+ * rest. That is still a sort, and matching only the whole-order form reported none for every
+ * partial one.
+ */
 function sortsOutsideTheIndex(string $plan): bool
 {
     return match (DB::connection()->getDriverName()) {
         'mysql' => str_contains($plan, 'Sort:'),
         'pgsql' => str_contains($plan, 'Sort'),
-        default => str_contains($plan, 'USE TEMP B-TREE FOR ORDER BY'),
+        default => str_contains($plan, 'USE TEMP B-TREE FOR'),
     };
 }
 
