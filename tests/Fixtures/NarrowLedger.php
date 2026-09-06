@@ -23,11 +23,19 @@ final readonly class NarrowLedger implements DeclaresFilters, Ledger
     public function __construct(private Ledger $store) {}
 
     /**
+     * The assumed floor minus the period. Declaring the floor exactly would leave the refusal side
+     * of all nine of its filters unexercised, because everything this fixture rejects would be a
+     * filter published after it — and a driver that names a set narrower than the floor is allowed
+     * to, so the contract has to hold for one.
+     *
      * @return list<Filter>
      */
     public function supportedFilters(): array
     {
-        return Filter::assumed();
+        return array_values(array_filter(
+            Filter::assumed(),
+            static fn (Filter $filter): bool => $filter !== Filter::Period,
+        ));
     }
 
     public function write(AuditData $audit): Audit

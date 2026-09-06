@@ -2,6 +2,23 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## Unreleased
+
+### Breaking
+
+- **`LedgerContractTestCase` checks three more of the published filters.** The relation, the related
+  record and the relation operation arrive as rows of `publishedFilters()`, and the suite's shared
+  capture carries a relation line built through `Data\RelationLine`, so what the contract exercises
+  is the shape the package writes. A third-party driver either translates the three or names what it
+  answers through `Contracts\DeclaresFilters` and lets the contract expect a refusal. The four
+  drivers in this package already translate them; the gap being closed is in the test, not in a
+  driver. Upgrade notes: [UPGRADE.md](UPGRADE.md#v0222--v0223).
+- **The refusal of a filter inside the assumed floor is exercised for the first time.** The two
+  cases that read a period now ask whether the driver translates it first. Until now the only
+  narrow driver in the suite declared the floor exactly, so every refusal it produced was for a
+  filter published after it, and the nine filters of `Filter::assumed()` had their refusal side
+  checked by nothing.
+
 ## v0.22.2 — Defects and instruments (2026-09-04)
 
 Five defects, and the harness that was going to certify them. Nothing migrates, nothing touches the

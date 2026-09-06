@@ -8,7 +8,9 @@ use Closure;
 use DateTimeImmutable;
 use ElPandaPe\Sentinel\Contracts\Ledger;
 use ElPandaPe\Sentinel\Data\AuditData;
+use ElPandaPe\Sentinel\Data\RelationLine;
 use ElPandaPe\Sentinel\Enums\Filter;
+use ElPandaPe\Sentinel\Enums\RelationOperation;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Exceptions\LedgerException;
@@ -195,6 +197,9 @@ abstract class LedgerContractTestCase extends TestCase
             'kind of entry' => [Filter::Type, static fn (AuditQuery $query): AuditQuery => $query->whereType('transition')],
             'address' => [Filter::Ip, static fn (AuditQuery $query): AuditQuery => $query->whereIp('203.0.113.7')],
             'route' => [Filter::Route, static fn (AuditQuery $query): AuditQuery => $query->whereRoute('invoices.approve')],
+            'relation' => [Filter::Relation, static fn (AuditQuery $query): AuditQuery => $query->whereRelation('members')],
+            'related record' => [Filter::Related, static fn (AuditQuery $query): AuditQuery => $query->whereRelated('user', 7)],
+            'relation operation' => [Filter::Operation, static fn (AuditQuery $query): AuditQuery => $query->whereOperation(RelationOperation::Attach)],
         ];
     }
 
@@ -384,6 +389,10 @@ abstract class LedgerContractTestCase extends TestCase
         $ledger->write($this->auditData());
         $this->settle($ledger);
 
+        if (! $this->translates($ledger, Filter::Period)) {
+            $this->expectException(LedgerException::class);
+        }
+
         $found = $ledger->query($this->asking()->between(
             new DateTimeImmutable('2026-08-15 10:00:00'),
             new DateTimeImmutable('2026-08-20 00:00:00'),
@@ -401,6 +410,10 @@ abstract class LedgerContractTestCase extends TestCase
         $first = $ledger->write($this->narrowedAuditData());
         $second = $ledger->write($this->narrowedAuditData());
         $this->settle($ledger);
+
+        if (! $this->translates($ledger, Filter::Period)) {
+            $this->expectException(LedgerException::class);
+        }
 
         $found = $ledger->query($this->asking()
             ->for('invoice', 500)
@@ -532,6 +545,11 @@ abstract class LedgerContractTestCase extends TestCase
      * The capture the query expectations narrow to: every published filter matches it and
      * none of them matches the plain one, so a filter that quietly stopped narrowing shows up
      * as an entry nobody asked for rather than as a passing test.
+     *
+     * The relation line rides on an entry that is not of a relation type on purpose, because that
+     * is what the projection already promises: which entries have lines is asked of the lines and
+     * not of the type. Building it through RelationLine rather than by hand is what keeps this
+     * exercising the shape the package writes instead of one this file invented.
      */
     protected function narrowedAuditData(Severity $severity = Severity::Critical): AuditData
     {
@@ -552,6 +570,9 @@ abstract class LedgerContractTestCase extends TestCase
             changes: [
                 ['path' => '/total', 'op' => 'replace', 'old' => 100, 'new' => 250],
                 ['path' => '/profile/address/city', 'op' => 'replace', 'old' => 'Lima', 'new' => 'Arequipa'],
+                ...RelationLine::canonical([
+                    new RelationLine('members', RelationOperation::Attach, 'user', '7'),
+                ]),
             ],
             tags: ['billing', 'refund'],
         );

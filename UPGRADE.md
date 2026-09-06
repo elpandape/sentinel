@@ -13,6 +13,56 @@ package is a different journey with a different reader, and it has a guide of it
 
 ---
 
+## v0.22.2 → v0.22.3
+
+### `LedgerContractTestCase` holds a driver to three more of the filters it publishes
+
+This one is for authors of third-party ledgers, and it is the last break before the API freezes.
+
+`Testing\LedgerContractTestCase` ships in `src/` so a driver written outside this package can be
+held to the same chain the ones inside it are. Three published filters were never checked by any
+case in it: the relation, the related record and the relation operation. They arrive as rows of
+`publishedFilters()`.
+
+The suite's shared capture now carries a relation line as well, built through `Data\RelationLine`
+so it is the shape the package actually writes:
+
+```php
+new RelationLine('members', RelationOperation::Attach, 'user', '7')
+```
+
+Two cases that already exercised the period — `test_it_bounds_a_period_by_both_of_its_ends` and
+`test_it_narrows_to_one_subject_inside_a_period_newest_first` — now ask whether your driver
+translates it before expecting an answer, instead of assuming every driver does. If yours declares
+the period, nothing about them changes for you.
+
+**What this means for your driver.** Each case feeds the entry through the same hook as the rest: a
+driver that declares the filter has to translate it, and one that does not has to raise
+`LedgerException`. So there are two ways to go green, and both are legitimate:
+
+```php
+// Translate them — what the four drivers in this package do
+public function supportedFilters(): array
+{
+    return Filter::cases();
+}
+
+// Or name what you answer, and let the contract expect a refusal for the rest
+public function supportedFilters(): array
+{
+    return [Filter::Subject, Filter::Actor, Filter::Event, Filter::Period];
+}
+```
+
+A driver that implements no `Contracts\DeclaresFilters` at all is unaffected: it is taken to answer
+the set as it stood in `v0.9.0`, which contains none of the three. That set does not grow, and it
+never will.
+
+Nothing else changed. No migration, no schema, no `payload_version`, and every entry written before
+this release verifies unchanged.
+
+---
+
 ## v0.22.0 → v0.22.1
 
 ### `Omission` gains a reason, and a whole restore of an imported entry is refused
