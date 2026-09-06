@@ -1048,9 +1048,12 @@ refiner here.
 
 **The last column names a clock, not just an index.** Three of those composites end in `created_at`,
 which is the ledger's clock — when the entry was recorded. Ask for the clock of the fact instead,
-with `byOccurrence()` or through `Sentinel::timeline()`, and the index still finds the entries;
-whether it still delivers them in order is then the planner's call, and on the engines where it
-cannot, the sort happens afterwards. `Sentinel::transitions()->get()` is the case with no way out:
+with `byOccurrence()` or through `Sentinel::timeline()`, and the composite stops being able to do
+both jobs at once: it can find the entries and leave the order to be sorted, or the occurrence index
+can deliver the order and leave the narrowing to be filtered. Which one the planner takes is its
+call, and it differs between engines and between versions of one — what does not differ is that
+neither job falls back to a bare pass over the table. `Sentinel::transitions()->get()` is the case
+with no way out:
 it puts that clock in front and takes no argument to say otherwise. Its `entries()` hands back the
 query as it stands before the clock reaches it, which is the one to reach for when you want the
 ledger's order.

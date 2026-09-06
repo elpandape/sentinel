@@ -15,6 +15,7 @@ use function ElPandaPe\Sentinel\Tests\reachesByIndex;
 use function ElPandaPe\Sentinel\Tests\readsAnIndex;
 use function ElPandaPe\Sentinel\Tests\seedTheTrail;
 use function ElPandaPe\Sentinel\Tests\sortsOutsideTheIndex;
+use function ElPandaPe\Sentinel\Tests\usesAnIndex;
 
 beforeEach(function (): void {
     seedTheTrail();
@@ -191,11 +192,16 @@ it('cannot narrow by a relation operation without a full pass over one table or 
  * type and `get()` puts the clock of the fact in front with no way to opt out, so what is measured
  * here is entries()->byOccurrence() and not entries() alone — the second is the query before the
  * clock reaches it, and asserting against that would be measuring a statement nobody runs.
+ *
+ * What is asserted is that an index does one of the two jobs, not which. Narrowing by the type and
+ * ordering by the other clock puts two indexes in front of the planner where only one can serve, and
+ * it picks differently across engines and across versions of the same engine. The claim that
+ * survives all of them is that neither job falls back to a bare pass.
  */
-it('still reaches an index when the lifeline forces the clock of the fact', function (): void {
+it('keeps an index doing one of the two jobs when the lifeline forces the clock of the fact', function (): void {
     $plan = planFor(Sentinel::transitions()->entries()->byOccurrence());
 
-    expect(readsAnIndex($plan))->toBeTrue($plan);
+    expect(usesAnIndex($plan))->toBeTrue($plan);
 });
 
 it('pays the same sort for the timeline of one tenant', function (): void {

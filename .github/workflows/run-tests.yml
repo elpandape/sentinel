@@ -53,7 +53,11 @@ jobs:
 
   test-databases:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # A real server per engine, and the suite grows every release. Ten minutes was cancelling MySQL
+    # from v0.22.1 on and took PostgreSQL with it in v0.22.3, which reads as a red job rather than
+    # as the cap it is. It stays low enough to catch a hang: locally the two take four and nine
+    # minutes, and a runner is slower than that but not three times slower.
+    timeout-minutes: 25
     services:
       mysql:
         image: mysql:9

@@ -1110,6 +1110,29 @@ function readsAnIndex(string $plan): bool
 }
 
 /**
+ * Whether an index is doing either job — finding the entries or delivering them in order — rather
+ * than whether the engine sought. A query that narrows by one indexed column and orders by another
+ * has two indexes to choose between and only one can serve at a time, so which one the planner
+ * takes is its business and moves between versions of it: SQLite 3.53 seeks the narrowing index and
+ * sorts, 3.45 walks the ordering one and does not. Both are the same statement costing the same
+ * thing, and asserting either shape pins a planner rather than the query.
+ *
+ * Only the SQLite branch differs from readsAnIndex(). It is the one engine whose plan tells a walk
+ * of an index apart from a seek into one, which is exactly the distinction that has to be dropped
+ * here and kept there.
+ */
+function usesAnIndex(string $plan): bool
+{
+    $table = auditsTable();
+
+    return match (DB::connection()->getDriverName()) {
+        'mysql' => ! str_contains($plan, "Table scan on {$table}"),
+        'pgsql' => ! str_contains($plan, "Seq Scan on {$table}"),
+        default => str_contains($plan, 'USING INDEX') || str_contains($plan, 'USING COVERING INDEX'),
+    };
+}
+
+/**
  * SQLite says LAST TERM OF ORDER BY when the index supplied part of the order and it sorted the
  * rest. That is still a sort, and matching only the whole-order form reported none for every
  * partial one.
