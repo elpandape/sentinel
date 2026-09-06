@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.22.2-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v0.22.3-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -20,7 +20,7 @@ the state was before, what it is now — and whether the record itself can be pr
 
 ```json
 "repositories": [{ "type": "vcs", "url": "https://github.com/elpandape/sentinel" }],
-"require": { "elpandape/sentinel": "v0.22.2" }
+"require": { "elpandape/sentinel": "v0.22.3" }
 ```
 
 ```bash
@@ -90,6 +90,7 @@ migration: [MIGRATE_FROM_OWEN_IT.md](MIGRATE_FROM_OWEN_IT.md) and
 | `v0.22.0` | The command surface closed: `sentinel:install`, `sentinel:show`, one exit-code vocabulary across the ten, and a Sentinel section in `php artisan about` |
 | `v0.22.1` | A way in from other packages: `sentinel:import` from `owen-it/laravel-auditing` or `altek/accountant`, resumable and idempotent, with a guide apiece |
 | `v0.22.2` | Five defects closed — a rotation that ran twice, a page that left no access entry, a batch ceiling set for the widest engine, a frozen serialiser that lazy-loaded, two untranslated events — plus `AuditQuery::after()` and a `benchmarks/` that measures what it says |
+| `v0.22.3` | What this package is, written down: a hundred and fifty-five declarations marked `@internal` behind an arch test that holds the boundary, the four filters the table never named, the reads the access log does not cover, and every claim in this README checked against the code |
 
 Everything else is on the roadmap: the freeze.
 
@@ -1047,15 +1048,20 @@ refiner here.
 
 **The last column names a clock, not just an index.** Three of those composites end in `created_at`,
 which is the ledger's clock — when the entry was recorded. Ask for the clock of the fact instead,
-with `byOccurrence()` or through `Sentinel::timeline()`, and the index still finds the entries but
-no longer delivers them in order: the engine sorts afterwards. `Sentinel::transitions()` is the case
-with no way out, because it forces that clock and takes no argument to say otherwise.
+with `byOccurrence()` or through `Sentinel::timeline()`, and the index still finds the entries;
+whether it still delivers them in order is then the planner's call, and on the engines where it
+cannot, the sort happens afterwards. `Sentinel::transitions()->get()` is the case with no way out:
+it puts that clock in front and takes no argument to say otherwise. Its `entries()` hands back the
+query as it stands before the clock reaches it, which is the one to reach for when you want the
+ledger's order.
 
 **`whereOperation()` is a refiner and the other two relation filters are not**, which looks
 inconsistent until you look at the projection: its three indexes begin with the entry, the relation
-and the related record, and none begins with the operation. Used on its own it compiles to a
-correlated `EXISTS` whose only predicate is that column, so the engine walks the trail and asks about
-each entry. Put it behind `whereRelation()` or `whereRelated()` and it costs nothing extra.
+and the related record, and none begins with the operation. Used on its own, one of the two tables
+gets walked in full — always one, never neither — and which one is the planner's choice: SQLite walks
+the trail and seeks the projection by the entry, PostgreSQL walks both, MySQL rewrites the correlated
+`EXISTS` into a semi-join and walks the projection while seeking the trail by key. Put it behind
+`whereRelation()` or `whereRelated()` and it costs nothing extra on any of the three.
 
 **`whereType('model')` deserves the same warning `whereEvent()` and `whereRoute()` carry.** Most
 entries in an ordinary installation are of that type, so narrowing by it alone reaches an index that
@@ -1131,10 +1137,10 @@ does not line up with the one a purge works in. The two clocks come apart the mo
 being synchronous, so this is a choice and not a coincidence.
 
 If you want the clock of the fact, ask for it: `byOccurrence()` changes what a query orders by, and
-`Sentinel::timeline()` and `Sentinel::transitions()` come with it already in front. What does not
-change is which column `between()` bounds — `Sentinel::transitions()->between($from, $to)` still
-narrows by `created_at` while ordering by `occurred_at`, and that pairing is the one worth knowing
-about before you read a lifeline by date.
+`Sentinel::timeline()` and `Sentinel::transitions()->get()` come with it already in front. What does
+not change is which column `between()` bounds — `Sentinel::transitions()->between($from, $to)->get()`
+still narrows by `created_at` while ordering by `occurred_at`, and that pairing is the one worth
+knowing about before you read a lifeline by date.
 
 ### Order, and how much comes back
 
@@ -1351,8 +1357,8 @@ without them it sorts outside every index and an indexed filter in front only sh
 
 **`between()` still bounds `created_at` here.** Ordering and narrowing follow different clocks on
 purpose, so `Sentinel::timeline()->between($from, $to)` reads the entries the ledger *sealed* in that
-window and hands them back in the order they *happened*. `Sentinel::transitions()` is the same
-pairing with no way out, since it forces the clock of the fact and takes no argument to say
+window and hands them back in the order they *happened*. `Sentinel::transitions()->get()` is the same
+pairing with no way out, since it puts the clock of the fact in front and takes no argument to say
 otherwise. The [refiners](#refiners) section says why the window follows the ledger's clock.
 
 Rendering a page of a timeline resolves what the entries point at in a query per morph type rather
@@ -3531,9 +3537,10 @@ Linear, and partitioning adds roughly a fifth. **What that number measures is th
 verification**: the loop it comes from hydrates each entry and discards it, without canonicalising or
 hashing anything, and canonicalising and hashing is the whole of what verifying an entry is. It is
 the floor — the cost of getting the rows out of the engine — and the real figure is several times
-it. The harness that measures the rest lands in `v0.22.2`; the numbers it produces are republished
-with the rest of the performance audit, and until then read this row as the walk and not as
-`sentinel:verify`.
+it. `v0.22.2` built the harness that measures the rest, and it puts the difference at roughly seven
+times this row: canonicalising and hashing an entry costs between 257 and 311 µs against the walk's
+40 µs. The figures here are republished with the rest of the performance audit; until they are, read
+this row as the walk and not as `sentinel:verify`.
 
 **Reading it back.** Every published filter, over ten million entries, taking fifty:
 

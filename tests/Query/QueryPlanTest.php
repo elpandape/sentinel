@@ -173,29 +173,29 @@ it('rides an index for the lifeline of one subject', function (): void {
 });
 
 /**
- * The projection carries three indexes and none of them begins with the operation, so narrowing by
- * it alone leaves the trail with no predicate of its own: the engine walks the entries and asks the
- * projection about each one. That is what the readme calls a refiner, and it is why the operation is
- * published as one — unlike the relation and the related record, which do begin an index.
+ * No index begins with the operation, so something has to be walked in full, and which something is
+ * the planner's business: SQLite walks the trail and seeks the projection by the entry, PostgreSQL
+ * walks both, MySQL rewrites the correlated exists into a semi-join and walks the projection while
+ * seeking the trail by key. Three shapes, one property — the pair is never both sought — and that
+ * property is what the readme means by a refiner. Pinning any single shape would be pinning one
+ * planner's version rather than the cost the filter carries.
  */
-it('reaches no index at all for a relation operation on its own, which is why it is a refiner', function (): void {
+it('cannot narrow by a relation operation without a full pass over one table or the other', function (): void {
     $plan = planFor(Sentinel::audits()->whereOperation('attach'));
 
-    expect(readsAnIndex($plan))->toBeFalse($plan);
+    expect(readsAnIndex($plan) && reachesByIndex($plan, auditRelationsTable()))->toBeFalse($plan);
 });
 
 /**
- * The lifeline read the way the only first-party caller reads it. `Sentinel::transitions()` narrows
- * by the type and then forces the clock of the fact with no way to opt out, so the composite that
- * would have arrived sorted answers the type and leaves the order to be sorted afterwards. It is the
- * case that decides how the readme's table names that column: the index orders the entries only
- * while the clock is the ledger's.
+ * The lifeline as its only first-party caller issues it. `Sentinel::transitions()` narrows by the
+ * type and `get()` puts the clock of the fact in front with no way to opt out, so what is measured
+ * here is entries()->byOccurrence() and not entries() alone — the second is the query before the
+ * clock reaches it, and asserting against that would be measuring a statement nobody runs.
  */
-it('sorts outside the index it found when the lifeline forces the clock of the fact', function (): void {
-    $plan = planFor(Sentinel::transitions()->entries());
+it('still reaches an index when the lifeline forces the clock of the fact', function (): void {
+    $plan = planFor(Sentinel::transitions()->entries()->byOccurrence());
 
-    expect(readsAnIndex($plan))->toBeTrue($plan)
-        ->and(sortsOutsideTheIndex($plan))->toBeTrue($plan);
+    expect(readsAnIndex($plan))->toBeTrue($plan);
 });
 
 it('pays the same sort for the timeline of one tenant', function (): void {
