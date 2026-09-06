@@ -908,7 +908,9 @@ and keeps verifying. A **new entry** carries the same values under the new key a
 one it stands in for, so the rotation is part of the history rather than something that happened to
 it. Keep the old key on the keyring for as long as the entries it wrote matter.
 
-`php artisan sentinel:rekey` arrives in `v0.19.5`; for now the rotation is a service you call.
+`php artisan sentinel:rekey` does this over a whole trail, resumably — see
+[rotating the key](#rotating-the-key-without-rewriting-anything). The service is what it calls, and
+is there for a rotation you want to drive yourself.
 
 ### Protecting what no model owns
 
@@ -2243,7 +2245,10 @@ consumer which fields are protected and which key is current. `signature` is pub
 `integrity` block beside the hash it covers: without it an exported entry is not something a third
 party can verify, which is the whole point of signing over the hash.
 
-`capture_id` is absent because no capture writes one yet. The redaction block is `null` for every
+`capture_id` is absent on purpose, and it is not going to appear: it is correlation and idempotency
+metadata — what the ledger is asked about before a batch settles, and what the unique index refuses
+twice — deliberately outside the canonical payload the hash covers. Publishing it would put a key in
+a frozen shape that describes how the entry got written rather than what happened. The redaction block is `null` for every
 entry nobody redacted, and carries `at`, `reason` and `hash` for one that was — see
 [Redaction](#redaction). `criteria` and `affected_rows` arrived in `v0.17.0`, which is the version that produces
 them; they are `null` on every entry that is not a mass operation.
@@ -2833,7 +2838,8 @@ hole per row with nothing able to answer for any of them.
 The consequence, stated plainly: **the effective retention of a range is that of its longest-lived
 entry.** Under the shipped `integrity.stream => 'tenant'` a stream mixes logical types, so one
 seven-year entry keeps its whole window — and `'auth' => '90 days'` frees nothing in that window.
-Entry-level removal needs the tombstone, and that is a later version.
+Entry-level removal needs the [tombstone](#redaction), which empties one entry in place and leaves
+the chain standing.
 
 Two more rules fall out of the chain rather than out of preference:
 

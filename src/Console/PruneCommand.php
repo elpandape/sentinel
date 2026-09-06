@@ -150,8 +150,4 @@ final class PruneCommand extends Command
             default => 'removed',
         };
     }
-
-    /**
-     * @param  array<string, int|string>  $replace
-     */
 }

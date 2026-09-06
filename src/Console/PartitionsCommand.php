@@ -147,8 +147,4 @@ final class PartitionsCommand extends Command
 
         return $declared === null ? null : Duration::of('--retire', $declared);
     }
-
-    /**
-     * @param  array<string, int|string>  $replace
-     */
 }

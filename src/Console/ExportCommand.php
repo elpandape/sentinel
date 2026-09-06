@@ -94,8 +94,4 @@ final class ExportCommand extends Command
 
         return self::SUCCESS;
     }
-
-    /**
-     * @param  array<string, int|string>  $replace
-     */
 }

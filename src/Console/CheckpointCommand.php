@@ -88,8 +88,4 @@ final class CheckpointCommand extends Command
             ], $issued),
         );
     }
-
-    /**
-     * @param  array<string, int|string>  $replace
-     */
 }

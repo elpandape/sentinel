@@ -253,8 +253,4 @@ final class VerifyCommand extends Command
 
         return $counted === [] ? '—' : implode(', ', $counted);
     }
-
-    /**
-     * @param  array<string, int|string>  $replace
-     */
 }

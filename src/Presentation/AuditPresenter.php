@@ -15,9 +15,11 @@ use ElPandaPe\Sentinel\Transitions\TransitionBuilder;
 use Illuminate\Contracts\Translation\Translator;
 
 /**
- * A trail, in a sentence. Every string it puts on screen comes from resources/lang, including the
- * event and severity names, because "changed" is a word shown to a person and not the value the
- * column holds.
+ * A trail, in a sentence. Every string it puts on screen comes from resources/lang, the event names
+ * included, because "changed" is a word shown to a person and not the value the column holds.
+ *
+ * Severity is not among them: nothing here renders one, and neither catalogue carries a group for
+ * it. A caller that wants to show a severity has the enum and can name the levels itself.
  *
  * Impersonation is a separate line and not a clause bolted onto the plain one. The languages do
  * not agree on where "on behalf of" goes in a sentence, and a conditional concatenation would fix
