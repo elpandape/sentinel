@@ -1033,7 +1033,8 @@ an index on MySQL 9. Without it the two filters still answer, correctly, by scan
 indexed filter in front of them, the way you would with any other refiner.
 
 The reason it is not shipped as a default is the number. Measured over 200 000 writes on a table with
-the shape this package creates — thirty columns and the twelve indexes it already carries:
+the shape this package creates — forty columns and the thirteen indexes it already carries, counting
+every index that is not the primary key:
 
 | | PostgreSQL 16 | MySQL 9 |
 |---|---|---|
@@ -2231,9 +2232,14 @@ window.
 The JSON and date types come from the engine grammar: `jsonb` on PostgreSQL 16, `json` on MySQL 9,
 text on SQLite; `datetime(6)` on MySQL and `timestamp(6)` on PostgreSQL.
 
-Five tables travel beside it, each created by the version that first writes to it:
-`sentinel_audit_tags`, `sentinel_audit_relations`, `sentinel_transactions`, `sentinel_checkpoints`
-and `sentinel_archives`. The last two are worth telling apart. **The anchors can be thrown away** —
+Six tables travel beside it, each created by the version that first writes to it:
+`sentinel_audit_tags`, `sentinel_audit_relations`, `sentinel_transactions`, `sentinel_checkpoints`,
+`sentinel_archives` and `sentinel_access_log`. Every installation creates all six; the last one is
+the only one that stays empty until you ask for it, because nothing writes to it outside
+[compliance mode](#compliance-mode). It is created anyway so that turning the mode on is a
+configuration change and not a migration.
+
+The two before it are worth telling apart. **The anchors can be thrown away** —
 every root is derivable from the entries again, so losing them costs speed. **The archives cannot**:
 that table accounts for entries that are no longer in `sentinel_audits`, so losing it loses the map
 rather than a shortcut. And once a range has been [retired](#retention--pruning), the anchor covering

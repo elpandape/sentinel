@@ -18,7 +18,8 @@ return new class extends Migration
      * Both filters read inside `context`, which no index of this schema covers, so without this
      * they answer by scanning — correctly, and as refiners. What is bought here is the seek, and
      * what it costs is measured: fifteen per cent per write on PostgreSQL 16 and twenty-one on
-     * MySQL 9, over a table with the thirty columns and twelve indexes the base migration creates.
+     * MySQL 9, over a table with the forty columns and thirteen non-primary indexes the published
+     * migrations create.
      * That is why it is not loaded automatically. An installation that never asks where an entry
      * was recorded from should not pay it, and one that asks every day should not have to build
      * the index itself.
