@@ -2239,11 +2239,13 @@ the only one that stays empty until you ask for it, because nothing writes to it
 [compliance mode](#compliance-mode). It is created anyway so that turning the mode on is a
 configuration change and not a migration.
 
-The two before it are worth telling apart. **The anchors can be thrown away** —
-every root is derivable from the entries again, so losing them costs speed. **The archives cannot**:
-that table accounts for entries that are no longer in `sentinel_audits`, so losing it loses the map
-rather than a shortcut. And once a range has been [retired](#retention--pruning), the anchor covering
-it stops being a shortcut too: it is the only thing left standing behind those entries.
+The two before it are worth telling apart, and the rule for both is the same one: **a table is a
+shortcut only while the entries it stands for are still there.** `sentinel_archives` accounts for
+entries that are no longer in `sentinel_audits`, so losing it loses the map from the first retired
+range onward. `sentinel_checkpoints` is a shortcut **until the first [retirement](#retention--pruning)**
+and evidence after it: while the range is present every root is derivable from the entries again, so
+losing the anchors costs a walk; once the range is gone, the anchor covering it is the only thing
+left standing behind those entries, and the verification will not accept the absence without it.
 
 ### Engines
 

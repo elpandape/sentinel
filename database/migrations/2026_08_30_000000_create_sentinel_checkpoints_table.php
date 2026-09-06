@@ -11,8 +11,15 @@ return new class extends Migration
 {
     /**
      * An anchor over a range of one stream: the root the range folded to, signed. It holds no copy
-     * of anything in sentinel_audits, so losing this table costs speed and never evidence — the
-     * chain still verifies, only by walking every entry instead of every anchor.
+     * of anything in sentinel_audits, so while a range is still there, losing its anchor costs speed
+     * and not evidence — the chain verifies by walking every entry instead of every anchor.
+     *
+     * That stops being true the moment a range is retired, and it is worth saying here because this
+     * is where an operator reads what the table is for. Verification refuses an absence unless the
+     * manifest says the range left and the anchors reach past it, and it needs both: the manifest is
+     * unsigned, so on its own it would make "delete the rows, then write one row" a supported way of
+     * laundering a gap. The anchors are the evidence. After the first purge, dropping this table
+     * does not cost a shortcut — it costs the only thing that can still account for what is missing.
      *
      * There is no column for the anchor before it. The fold covers that root, and which anchor it
      * was is derived from the range itself, because the ranges are contiguous windows: the previous

@@ -10,13 +10,18 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * The row an anchor lives in. It is the only table of the package that can be thrown away without
- * losing anything: every root it holds is derivable from the entries again, and a stream with no
+ * The row an anchor lives in. While the range it covers is still in sentinel_audits it is a
+ * shortcut and nothing more: the root is derivable from the entries again, and a stream with no
  * anchors verifies the same way, only by reading all of it.
  *
- * That is also why it is not guarded the way Audit is. Rewriting an anchor is not falsifying
- * evidence, it is removing a shortcut — and one whose signature no longer resolves says so on the
- * next verification.
+ * Once the range is retired it is the evidence, and the only evidence. Verification refuses an
+ * absence unless the manifest accounts for it and the anchors reach past it, and the manifest is
+ * unsigned — so an anchor lost after a purge is a gap that can no longer be told from a deletion.
+ *
+ * That is why it is not guarded the way Audit is, and why that is not the same as being disposable.
+ * Nothing here is hashed into a chain, because an anchor stands outside the one it attests; what
+ * stands in for that is the signature, and one that no longer resolves says so on the next
+ * verification.
  *
  * @property string $id
  * @property string $stream
