@@ -5,6 +5,7 @@ declare(strict_types=1);
 use ElPandaPe\Sentinel\Enums\CheckpointState;
 use ElPandaPe\Sentinel\Enums\IntegrityBreak;
 use ElPandaPe\Sentinel\Tests\Fixtures\ReferenceChain;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 
 use function ElPandaPe\Sentinel\Tests\anchor;
@@ -121,4 +122,63 @@ it('does not let a manifest row excuse a range whose entries are still there and
 
     expect($verification->isIntact())->toBeFalse()
         ->and($verification->chain->reason)->toBeIn([IntegrityBreak::CheckpointMismatch, IntegrityBreak::HashMismatch]);
+});
+
+it('asks the anchors how far they reach once, however many retired ranges one walk crosses', function (): void {
+    retireEntries(ReferenceChain::STREAM, 2, 3);
+    retireEntries(ReferenceChain::STREAM, 6, 7);
+    manifest()->retired(ReferenceChain::STREAM, 2, 3, 2);
+    manifest()->retired(ReferenceChain::STREAM, 6, 7, 2);
+
+    $asked = 0;
+
+    DB::listen(function (QueryExecuted $query) use (&$asked): void {
+        if (str_contains($query->sql, checkpointsTable()) && str_contains($query->sql, 'max(')) {
+            $asked++;
+        }
+    });
+
+    $verification = verifier()->verify(ReferenceChain::STREAM);
+
+    expect($asked)->toBe(1)
+        ->and($verification->isIntact())->toBeTrue()
+        ->and($verification->archived())->toBe(4);
+});
+
+it('still steps over a retired range the anchors reach exactly to the end of', function (): void {
+    DB::table(checkpointsTable())->where('sequence_from', 5)->delete();
+    retireEntries(ReferenceChain::STREAM, 1, 4);
+    manifest()->retired(ReferenceChain::STREAM, 1, 4, 4);
+
+    $verification = verifier()->verify(ReferenceChain::STREAM);
+
+    expect($verification->isIntact())->toBeTrue()
+        ->and($verification->chain->checked)->toBe(4)
+        ->and($verification->archived())->toBe(4);
+});
+
+it('carries what a retired range covered into the report when the anchor after it starts elsewhere', function (): void {
+    retireEntries(ReferenceChain::STREAM, 1, 4);
+    manifest()->retired(ReferenceChain::STREAM, 1, 4, 4);
+    DB::table(checkpointsTable())->where('sequence_from', 5)->update(['sequence_from' => 6]);
+
+    $verification = verifier()->verifyRoots(ReferenceChain::STREAM);
+
+    expect($verification->break()?->reason)->toBe(IntegrityBreak::CheckpointMismatch)
+        ->and($verification->break()?->sequence)->toBe(6)
+        ->and($verification->break()?->checked)->toBe(1)
+        ->and($verification->covered)->toBe(4);
+});
+
+it('reports the anchor after a retired range when nothing accounts for its own entries', function (): void {
+    retireEntries(ReferenceChain::STREAM, 1, 4);
+    manifest()->retired(ReferenceChain::STREAM, 1, 4, 4);
+    retireEntries(ReferenceChain::STREAM, 5, 8);
+
+    $verification = verifier()->verifyRoots(ReferenceChain::STREAM);
+
+    expect($verification->break()?->reason)->toBe(IntegrityBreak::CheckpointMismatch)
+        ->and($verification->break()?->sequence)->toBe(5)
+        ->and($verification->break()?->checked)->toBe(1)
+        ->and($verification->covered)->toBe(4);
 });

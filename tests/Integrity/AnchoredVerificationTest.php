@@ -17,7 +17,9 @@ use Illuminate\Support\Facades\DB;
 use function ElPandaPe\Sentinel\Tests\anchor;
 use function ElPandaPe\Sentinel\Tests\auditsTable;
 use function ElPandaPe\Sentinel\Tests\checkpointsTable;
+use function ElPandaPe\Sentinel\Tests\manifest;
 use function ElPandaPe\Sentinel\Tests\redactor;
+use function ElPandaPe\Sentinel\Tests\retireEntries;
 use function ElPandaPe\Sentinel\Tests\seedTheLongChain;
 use function ElPandaPe\Sentinel\Tests\seedTheReferenceChain;
 use function ElPandaPe\Sentinel\Tests\signingWith;
@@ -261,4 +263,22 @@ it('resolves an anchor that named no key against the empty identifier', function
 
     expect(verifier()->verifyAnchors(ReferenceChain::STREAM)->anchorSignatures)
         ->toBe([SignatureState::Signed->value => 1, SignatureState::Invalid->value => 1]);
+});
+
+it('keeps the first anchor whose signature failed, not the last one to fail after it', function (): void {
+    signingWith('v1', SigningKeys::SECRET);
+    anchor(ReferenceChain::STREAM, 2);
+
+    retireEntries(ReferenceChain::STREAM, 1, 2);
+    manifest()->retired(ReferenceChain::STREAM, 1, 2, 2);
+
+    DB::table(checkpointsTable())
+        ->whereIn('sequence_from', [3, 5])
+        ->update(['signature' => base64_encode('nonesuch')]);
+
+    $verification = verifier()->verifyRoots(ReferenceChain::STREAM);
+
+    expect($verification->break()?->reason)->toBe(IntegrityBreak::SignatureMismatch)
+        ->and($verification->break()?->sequence)->toBe(3)
+        ->and($verification->break()?->checked)->toBe(1);
 });
