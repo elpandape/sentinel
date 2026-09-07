@@ -9,6 +9,7 @@ use ElPandaPe\Sentinel\Tests\Fixtures\ReferenceChain;
 use function ElPandaPe\Sentinel\Tests\anchor;
 use function ElPandaPe\Sentinel\Tests\frontiers;
 use function ElPandaPe\Sentinel\Tests\retireEntries;
+use function ElPandaPe\Sentinel\Tests\seedAudit;
 use function ElPandaPe\Sentinel\Tests\seedTheReferenceChain;
 
 beforeEach(function (): void {
@@ -99,4 +100,29 @@ it('offers nothing but the tail once the earlier windows have already gone', fun
 
     expect($frontier->isEmpty())->toBeTrue()
         ->and($frontier->hold)->toBe(RetentionHold::Tail);
+});
+
+it('names the entry retention is still holding, not the first one of its window', function () use ($later): void {
+    seedAudit(1, ['created_at' => '2020-01-01 00:00:00.000000']);
+    seedAudit(2, ['audit_type' => 'auth', 'subject_type' => '', 'created_at' => '2026-09-29 12:00:00.000000']);
+    seedAudit(3, ['created_at' => '2020-01-01 00:00:00.000000']);
+
+    anchor('global', 2);
+
+    $frontier = frontiers(['model' => '1 day', 'auth' => '10 years'])->of('global', $later);
+
+    expect($frontier->hold)->toBe(RetentionHold::Retained)
+        ->and($frontier->heldAt)->toBe(2)
+        ->and($frontier->heldBy)->toBe('auth')
+        ->and($frontier->message())->toContain('auth');
+});
+
+it('names nothing as holding a stream it is offering a window of', function () use ($later): void {
+    anchor(ReferenceChain::STREAM, 4);
+
+    $frontier = frontiers(['model' => '1 day'])->of(ReferenceChain::STREAM, $later);
+
+    expect($frontier->hold)->toBeNull()
+        ->and($frontier->heldAt)->toBe(0)
+        ->and($frontier->heldBy)->toBeEmpty();
 });

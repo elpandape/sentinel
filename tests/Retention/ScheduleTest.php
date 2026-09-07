@@ -79,3 +79,22 @@ it('names the key whose period it could not read', function (): void {
     expect(fn (): Schedule => retentionSchedule(['auth' => 'whenever']))
         ->toThrow(ConfigurationException::class, 'sentinel.retention.auth');
 });
+
+it('tells two policies apart by kind, not only by the string each one targets', function (): void {
+    Relation::morphMap(['shared' => ActingUser::class]);
+
+    $schedule = retentionSchedule([
+        'model:'.ActingUser::class => '7 years',
+        AuditedSubject::class => '7 years',
+        'shared' => '90 days',
+    ]);
+
+    expect($schedule->subjectTargets())->toBe(['shared', AuditedSubject::class])
+        ->and($schedule->typeTargets())->toBe(['shared']);
+});
+
+it('reads a numeric-looking morph alias as a string', function (): void {
+    Relation::morphMap(['123' => ActingUser::class]);
+
+    expect(retentionSchedule(['model:'.ActingUser::class => '7 years'])->subjectTargets())->toBe(['123']);
+});
