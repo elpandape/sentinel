@@ -2,9 +2,15 @@
 
 declare(strict_types=1);
 
+use ElPandaPe\Sentinel\Contracts\Buffer;
+use ElPandaPe\Sentinel\Contracts\Ledger;
+use ElPandaPe\Sentinel\Jobs\SettleAudit;
+use ElPandaPe\Sentinel\Tests\Fixtures\FailingLedger;
 use ElPandaPe\Sentinel\Tests\Fixtures\SecretiveSubject;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 
 use function ElPandaPe\Sentinel\Tests\auditsTable;
 use function ElPandaPe\Sentinel\Tests\eventPayloads;
@@ -107,4 +113,81 @@ it('names in the entry which fields it encrypted', function (): void {
     $subject = SecretiveSubject::query()->create(['secret' => SecretiveSubject::ENCRYPTED]);
 
     expect($subject->latestAudit()?->encryption)->toBe(['fields' => ['secret'], 'key_id' => 'default']);
+});
+
+it('leaves no declared value in the payload of the job that carries it to the ledger', function (): void {
+    config()->set('sentinel.mode', 'queue');
+
+    Bus::fake();
+
+    SecretiveSubject::query()->create([
+        'name' => 'Ada',
+        'status' => SecretiveSubject::EXCLUDED,
+        'email' => SecretiveSubject::REDACTED,
+        'secret' => SecretiveSubject::ENCRYPTED,
+        'price' => SecretiveSubject::HASHED,
+    ]);
+
+    $carried = serialize(Bus::dispatched(SettleAudit::class)->all());
+
+    expect($carried)->toContain('SettleAudit')
+        ->not->toContain(SecretiveSubject::EXCLUDED)
+        ->not->toContain(SecretiveSubject::REDACTED)
+        ->not->toContain(SecretiveSubject::ENCRYPTED)
+        ->not->toContain(SecretiveSubject::HASHED);
+});
+
+it('leaves no declared value in what the buffer holds until it flushes', function (): void {
+    config()->set('sentinel.mode', 'buffered');
+    config()->set('sentinel.buffer.store', 'memory');
+    config()->set('sentinel.buffer.size', 100);
+
+    SecretiveSubject::query()->create([
+        'name' => 'Ada',
+        'status' => SecretiveSubject::EXCLUDED,
+        'email' => SecretiveSubject::REDACTED,
+        'secret' => SecretiveSubject::ENCRYPTED,
+        'price' => SecretiveSubject::HASHED,
+    ]);
+
+    $held = serialize(app(Buffer::class)->take(100));
+
+    expect($held)->toContain('AuditData')
+        ->not->toContain(SecretiveSubject::EXCLUDED)
+        ->not->toContain(SecretiveSubject::REDACTED)
+        ->not->toContain(SecretiveSubject::ENCRYPTED)
+        ->not->toContain(SecretiveSubject::HASHED);
+});
+
+it('leaves no declared value in the line it logs when a write fails', function (): void {
+    app()->instance(Ledger::class, new FailingLedger);
+
+    config()->set('sentinel.on_write_failure', 'log');
+
+    $logged = '';
+
+    Log::shouldReceive('channel')->andReturnSelf();
+    Log::shouldReceive('error')->withArgs(function (string $message, array $context) use (&$logged): bool {
+        $failure = $context['exception'] ?? null;
+
+        $logged = $message
+            .json_encode(array_diff_key($context, ['exception' => null]))
+            .($failure instanceof Throwable ? $failure->getMessage() : '');
+
+        return true;
+    });
+
+    SecretiveSubject::query()->create([
+        'name' => 'Ada',
+        'status' => SecretiveSubject::EXCLUDED,
+        'email' => SecretiveSubject::REDACTED,
+        'secret' => SecretiveSubject::ENCRYPTED,
+        'price' => SecretiveSubject::HASHED,
+    ]);
+
+    expect($logged)->toContain(FailingLedger::REASON)
+        ->not->toContain(SecretiveSubject::EXCLUDED)
+        ->not->toContain(SecretiveSubject::REDACTED)
+        ->not->toContain(SecretiveSubject::ENCRYPTED)
+        ->not->toContain(SecretiveSubject::HASHED);
 });
