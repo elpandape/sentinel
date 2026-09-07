@@ -25,6 +25,7 @@ it('takes the entries of the range and leaves the rest', function (): void {
     $removed = cascade()->purge('global', 2, 4);
 
     expect($removed->audits)->toBe(3)
+        ->and($removed->transactions)->toBe(0)
         ->and(DB::table(auditsTable())->orderBy('sequence')->pluck('sequence')->all())
         ->toEqual([1, 5, 6]);
 });
@@ -125,6 +126,49 @@ it('removes a range wider than one batch in as many statements as it takes', fun
         ->and(DB::table(auditsTable())->count())->toBe(0);
 });
 
+it('honors an explicit batch of one down to the last entry of the range', function (): void {
+    Sleep::fake();
+    sentinelConfig(['prune.pause' => 1]);
+
+    $removed = cascade()->purge('global', 2, 4, 1);
+
+    expect($removed->audits)->toBe(3);
+
+    Sleep::assertSleptTimes(3);
+});
+
+it('clamps a non-positive batch to one instead of never advancing', function (): void {
+    Sleep::fake();
+    sentinelConfig(['prune.pause' => 1]);
+
+    $pauses = 0;
+
+    Sleep::whenFakingSleep(function () use (&$pauses): void {
+        if (++$pauses > 10) {
+            throw new RuntimeException('the cursor never advanced');
+        }
+    });
+
+    $removed = cascade()->purge('global', 2, 4, 0);
+
+    expect($removed->audits)->toBe(3)
+        ->and(DB::table(auditsTable())->orderBy('sequence')->pluck('sequence')->all())
+        ->toEqual([1, 5, 6]);
+});
+
+it('takes only the slice it named before a pause, so an interrupted run resumes from there', function (): void {
+    Sleep::fake();
+    sentinelConfig(['prune.pause' => 1]);
+
+    Sleep::whenFakingSleep(function (): void {
+        throw new RuntimeException('interrupted');
+    });
+
+    rescue(fn (): mixed => cascade()->purge('global', 1, 6, 2), report: false);
+
+    expect(DB::table(auditsTable())->orderBy('sequence')->pluck('sequence')->all())->toEqual([3, 4, 5, 6]);
+});
+
 it('waits between batches when it is asked to', function (): void {
     Sleep::fake();
     sentinelConfig(['prune.batch' => 2, 'prune.pause' => 1000]);
@@ -132,6 +176,23 @@ it('waits between batches when it is asked to', function (): void {
     cascade()->purge('global', 1, 6);
 
     Sleep::assertSleptTimes(3);
+});
+
+it('never sleeps when no pause is configured', function (): void {
+    Sleep::fake();
+
+    cascade()->purge('global', 1, 6);
+
+    Sleep::assertNeverSlept();
+});
+
+it('still pauses for the smallest configured wait', function (): void {
+    Sleep::fake();
+    sentinelConfig(['prune.pause' => 1]);
+
+    cascade()->purge('global', 1, 6);
+
+    Sleep::assertSleptTimes(1);
 });
 
 it('leaves the entry immutable through the model it always was', function (): void {
