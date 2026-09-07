@@ -52,8 +52,8 @@ the freeze, is in [UPGRADE.md](UPGRADE.md#v0223--v100-rc1).
   `continue-on-error` had been on it since it existed. The fifteen paths that carry a threshold are
   now enforced, one job apiece.
 - **Every module now clears the threshold its own ficha set.** `Integrity` closes at 95.98% against
-  the 95 it has owed since `v0.4.0`; `Retention` at 91.78%, `Mass` at 95.12% and `Redaction` at
-  95.24%, all against 90. What is left alive in each is written down rather than counted.
+  the 95 it has owed since `v0.4.0`; `Retention` at 91.78%, `Mass` at 95.93% and `Redaction` at 100%,
+  all against 90. What is left alive in each is written down rather than counted.
 
 ### Upgrade notes
 
