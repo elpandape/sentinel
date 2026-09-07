@@ -147,6 +147,19 @@ it('lets the application default decide when neither is named', function (): voi
     );
 });
 
+it('marks the job to wait for the commit exactly when the deferral is on', function (bool $deferred, ?bool $waits): void {
+    Bus::fake();
+
+    config()->set('sentinel.transactions.after_commit', $deferred);
+
+    new AuditedSubject()->forceFill(['name' => 'Ada'])->save();
+
+    Bus::assertDispatched(
+        SettleAudit::class,
+        static fn (SettleAudit $job): bool => $job->afterCommit === $waits,
+    );
+})->with([[true, true], [false, null]]);
+
 it('says a write did not complete once, and not once per process that saw it', function (): void {
     config()->set('queue.default', 'sync');
     config()->set('sentinel.on_write_failure', 'log');

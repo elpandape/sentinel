@@ -97,6 +97,21 @@ it('reports a batch that could not settle once, not once per entry', function ()
     expect($written)->toBeEmpty()->and($failures)->toBe(1);
 });
 
+it('names the one entry of a batch of one that could not settle', function (): void {
+    config()->set('sentinel.on_write_failure', 'log');
+    app()->instance(Ledger::class, new FailingLedger);
+
+    $named = null;
+    app(Events::class)->listen(AuditWriteFailed::class, static function (AuditWriteFailed $event) use (&$named): void {
+        $named = $event->subjectId;
+    });
+
+    $written = app(Dispatcher::class)->dispatchMany([auditData(['subject_id' => '41'])]);
+
+    expect($written)->toBeEmpty()
+        ->and($named)->toBe('41');
+});
+
 it('propagates a failed batch to the caller when the policy says to throw', function (): void {
     app()->instance(Ledger::class, new FailingLedger);
 

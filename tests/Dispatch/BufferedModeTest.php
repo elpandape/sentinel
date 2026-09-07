@@ -16,11 +16,25 @@ use Illuminate\Support\Facades\DB;
 
 use function ElPandaPe\Sentinel\Tests\auditsTable;
 use function ElPandaPe\Sentinel\Tests\httpRequest;
+use function ElPandaPe\Sentinel\Tests\seedSubjects;
 use function ElPandaPe\Sentinel\Tests\verifier;
 
 beforeEach(function (): void {
     config()->set('sentinel.mode', 'buffered');
     config()->set('sentinel.buffer.store', 'memory');
+});
+
+it('buffers a batch of one, which is the size at which a batch stops having a second entry', function (): void {
+    seedSubjects(1);
+
+    AuditedSubject::query()->auditing('individual')->update(['status' => 'archived']);
+
+    expect(app(Buffer::class)->size())->toBe(2)
+        ->and(DB::table(auditsTable())->count())->toBe(0);
+
+    app(Flusher::class)->flush();
+
+    expect(Audit::query()->count())->toBe(2);
 });
 
 it('holds the entry in the buffer instead of writing it', function (): void {
