@@ -6,10 +6,39 @@ on:
   workflow_dispatch:
 
 jobs:
+  # One job per path, and not one job for all of them. A single pass over every path takes hours —
+  # src/Integrity alone is forty minutes and src/Ledger forty-six — so the job that used to hold the
+  # whole list was killed by its own timeout inside the first path, every night, and the
+  # continue-on-error above it turned that into a green tick. A path per job gives each one a budget
+  # it fits in, lets them run at once, and makes a red name itself.
+  #
+  # These are the fifteen paths of MUTATION_PATHS that carry a threshold. Each threshold comes from
+  # the ficha of the version that introduced the module; none of them is decided here.
   mutation:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    continue-on-error: true
+    timeout-minutes: 90
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { path: src/Integrity, min: 95 }
+          - { path: src/Context, min: 95 }
+          - { path: src/Presentation, min: 95 }
+          - { path: src/Pipeline, min: 90 }
+          - { path: src/Security, min: 90 }
+          - { path: src/Diff, min: 90 }
+          - { path: src/Ledger, min: 90 }
+          - { path: src/Query, min: 90 }
+          - { path: src/Snapshot, min: 90 }
+          - { path: src/Http, min: 90 }
+          - { path: src/Dispatch, min: 90 }
+          - { path: src/Buffer, min: 90 }
+          - { path: src/Mass, min: 90 }
+          - { path: src/Retention, min: 90 }
+          - { path: src/Redaction, min: 90 }
+
+    name: mutation ${{ matrix.path }}
 
     services:
       redis:
@@ -30,36 +59,60 @@ jobs:
         run: composer update --prefer-dist --no-interaction
 
       - name: Mutation testing
-        # The same paths as MUTATION_PATHS in the Makefile, in the same order — the two lists had
-        # drifted apart for four minors while this comment claimed they matched, so they are now
-        # written to be diffed by eye.
-        #
-        # Pest does not accumulate repeated --path flags, hence one pass each.
-        # Integrity sits higher than the rest: a mutant surviving there is a verification that lies.
-        # A zero means measured and not gated, which is a position and not an omission: it is what
-        # the paths holding no decision worth a percentage get.
-        # Every path is measured before any threshold is enforced. The step runs under `bash -e`, so
-        # letting a missed minimum abort it would leave the modules queued behind that one unmeasured
-        # for as long as it stays below its threshold — which is exactly when their numbers matter.
         run: |
-          set -- "src/Integrity:95" "src/Context:95" "src/Presentation:95" "src/Pipeline:90" "src/Security:90" "src/Diff:90" "src/Ledger:90" "src/Query:90" "src/Snapshot:90" "src/Http:90" "src/Dispatch:90" "src/Buffer:90" "src/Mass:90" "src/Retention:90" "src/Redaction:90" "src/Archive:0" "src/Compliance:0" "src/Partitions:0" "src/Telemetry:0" "src/Transactions:0" "src/Transitions:0" "src/Restore:0" "src/Events:0" "src/Jobs:0" "src/Console:0" "src/Capture:0" "src/Concerns:0" "src/Support:0" "src/Models:0" "src/SentinelServiceProvider.php:0"
-          below=""
-          for entry in "$@"; do
-            path="${entry%%:*}"
-            min="${entry##*:}"
-            echo "== $path (min $min)"
+          php -d pcov.directory=$GITHUB_WORKSPACE -d 'pcov.exclude=~/(vendor|tests)/~' -d memory_limit=2G \
+            vendor/bin/pest --mutate --covered-only --path=${{ matrix.path }} --min=${{ matrix.min }}
+
+  # The rest of MUTATION_PATHS: measured, with a minimum of zero, which is a position and not an
+  # omission — they hold no decision worth a percentage. The job is blocking all the same, so a path
+  # that stops being able to run says so instead of going quiet.
+  #
+  # src/Compliance is the one path of the list that is missing here, and it is missing for a reason
+  # that is not about its tests. Its entry point runs on every boot, so every test in the suite
+  # covers it, and the runner builds its --filter from the name of every covering test: two thousand
+  # four hundred of them, two hundred kilobytes in one argument, against a limit of a hundred and
+  # twenty-eight. The subprocess cannot be spawned at all. `make mutation` names it and carries on.
+  mutation-measured:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    services:
+      redis:
+        image: redis:8-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd="redis-cli ping" --health-interval=5s --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: dom, curl, libxml, mbstring, zip, pdo, sqlite3, redis
+          coverage: pcov
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction
+
+      - name: Mutation testing
+        run: |
+          set -- src/Archive src/Partitions src/Telemetry src/Transactions src/Transitions \
+            src/Restore src/Events src/Jobs src/Console src/Capture src/Concerns src/Support \
+            src/Models src/SentinelServiceProvider.php
+          failed=""
+          for path in "$@"; do
+            echo "== $path"
             php -d pcov.directory=$GITHUB_WORKSPACE -d 'pcov.exclude=~/(vendor|tests)/~' -d memory_limit=2G \
-              vendor/bin/pest --mutate --covered-only --path=$path --min=$min || below="$below $path"
+              vendor/bin/pest --mutate --covered-only --path=$path || failed="$failed $path"
           done
-          if [ -n "$below" ]; then
-            echo "== below their threshold:$below"
+          if [ -n "$failed" ]; then
+            echo "== did not come back clean:$failed"
             exit 1
           fi
 
   mutation-databases:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
-    continue-on-error: true
+    timeout-minutes: 90
 
     services:
       mysql:

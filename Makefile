@@ -82,21 +82,30 @@ shell: ## Shell inside the container
 # pest --mutate does not accumulate repeated --path flags: one pass per path.
 MUTATION_PATHS = src/Integrity src/Context src/Presentation src/Pipeline src/Security src/Diff src/Ledger src/Query src/Snapshot src/Http src/Dispatch src/Buffer src/Mass src/Retention src/Redaction src/Archive src/Compliance src/Partitions src/Telemetry src/Transactions src/Transitions src/Restore src/Events src/Jobs src/Console src/Capture src/Concerns src/Support src/Models src/SentinelServiceProvider.php
 
-# The same paths the nightly walks, in the same order, without the thresholds: a number is
-# something a scheduled run reports, and a local pass is something you read. What is NOT here is
-# deliberate — Contracts, Exceptions, Facades, Data, Enums and Testing hold no decision to mutate,
-# and a pass over them would buy percentages of nothing at the price of the ones that matter.
+# The union of what the nightly walks, in the same order, without the thresholds: a number is
+# something a scheduled run enforces, and a local pass is something you read. The nightly splits
+# this list in three — the fifteen paths that carry a threshold, one job apiece; the rest with no
+# minimum; and src/Compliance, which is here and not there because the runner cannot spawn a
+# subprocess for it. What is NOT here at all is deliberate — Contracts, Exceptions, Facades, Data,
+# Enums and Testing hold no decision to mutate, and a pass over them would buy percentages of
+# nothing at the price of the ones that matter.
 #
 # Serial on purpose, and not for memory. Each mutant is run by relaunching pest with the
 # parent's arguments, so --parallel is inherited by a subprocess that cannot fork one and
 # dies at startup — and a non-zero exit is scored as a mutant killed. The pass ends up
 # reporting a score it did not measure: 100% where a serial run says 68%.
+# Failures are collected and named at the end rather than aborting the loop. A path that cannot even
+# start its subprocess is not a path that scored badly, and stopping at the first one leaves every
+# path behind it unmeasured — which is how a pass that had never reached its own end went unnoticed
+# for as long as the job reporting it was informative.
 mutation: ## Mutation testing over the core, one pass per path
-	@for path in $(MUTATION_PATHS); do \
+	@failed=""; \
+	for path in $(MUTATION_PATHS); do \
 		echo "== $$path"; \
 		$(PHP) php -d pcov.directory=/app -d 'pcov.exclude=~/(vendor|tests|\.cache)/~' -d memory_limit=2G \
-			vendor/bin/pest --mutate --covered-only --path=$$path || exit 1; \
-	done
+			vendor/bin/pest --mutate --covered-only --path=$$path || failed="$$failed $$path"; \
+	done; \
+	if [ -n "$$failed" ]; then echo "== did not come back clean:$$failed"; exit 1; fi
 
 dbs-up: redis-up
 	$(DC) up -d --wait mysql postgres
