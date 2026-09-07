@@ -69,6 +69,24 @@ final readonly class Criteria
             $criteria['joins'] = $joins;
         }
 
+        // A bound and an order are part of which rows a statement reached, not of what it was
+        // looking for. MySQL takes `update ... limit`, so a criteria that wrote down the where and
+        // nothing else described the whole set while affected_rows counted a slice of it — two
+        // numbers in one entry that cannot both be right.
+        $orders = $this->orders($query->orders);
+
+        if ($orders !== []) {
+            $criteria['order'] = $orders;
+        }
+
+        if (is_int($query->limit)) {
+            $criteria['limit'] = $query->limit;
+        }
+
+        if (is_int($query->offset)) {
+            $criteria['offset'] = $query->offset;
+        }
+
         if ($opaque !== []) {
             $criteria['writes'] = $opaque;
         }
@@ -245,6 +263,31 @@ final readonly class Criteria
         }
 
         return $written;
+    }
+
+    /**
+     * An order names its column and its sense, and a raw one names neither: the fragment is where a
+     * value would be, and the same rule the clauses follow applies to it.
+     *
+     * @param  array<array-key, mixed>|null  $orders
+     * @return list<array<string, string>>
+     */
+    private function orders(?array $orders): array
+    {
+        return array_values(array_map($this->order(...), array_filter($orders ?? [], is_array(...))));
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $order
+     * @return array<string, string>
+     */
+    private function order(array $order): array
+    {
+        $column = $this->text($order, 'column');
+
+        return $column === null
+            ? ['type' => 'raw']
+            : ['column' => $column, 'direction' => $this->text($order, 'direction') ?? 'asc'];
     }
 
     /**

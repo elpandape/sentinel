@@ -233,3 +233,42 @@ it('tells a not-like from the like it negates', function (): void {
         ['type' => 'like', 'boolean' => 'and', 'column' => 'name', 'not' => true, 'value' => '%ada%'],
     ]);
 });
+
+it('writes down the bound a statement was given, because it decides which rows it reached', function (): void {
+    $criteria = massCriteria(static fn (Builder $query): Builder => $query
+        ->where('active', true)
+        ->orderBy('id')
+        ->limit(10));
+
+    expect($criteria['limit'] ?? null)->toBe(10)
+        ->and($criteria['order'] ?? null)->toBe([['column' => 'id', 'direction' => 'asc']])
+        ->and($criteria)->not->toHaveKey('offset');
+});
+
+it('writes down the offset of a bound as well as the bound', function (): void {
+    $criteria = massCriteria(static fn (Builder $query): Builder => $query->offset(20)->limit(10));
+
+    expect($criteria['offset'] ?? null)->toBe(20)
+        ->and($criteria['limit'] ?? null)->toBe(10);
+});
+
+it('keeps the sense of a descending order, which decides which end of the set was taken', function (): void {
+    $criteria = massCriteria(static fn (Builder $query): Builder => $query->orderByDesc('price')->limit(1));
+
+    expect($criteria['order'] ?? null)->toBe([['column' => 'price', 'direction' => 'desc']]);
+});
+
+it('records a raw order as its shape and never as its body', function (): void {
+    $criteria = massCriteria(static fn (Builder $query): Builder => $query
+        ->orderByRaw('field(status, ?, ?)', ['draft', 'published']));
+
+    expect($criteria['order'] ?? null)->toBe([['type' => 'raw']]);
+});
+
+it('writes no bound and no order for a statement that was given neither', function (): void {
+    $criteria = massCriteria(static fn (Builder $query): Builder => $query->where('active', true));
+
+    expect($criteria)->not->toHaveKey('limit')
+        ->not->toHaveKey('offset')
+        ->not->toHaveKey('order');
+});
