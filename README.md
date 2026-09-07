@@ -3190,6 +3190,8 @@ That covers every terminal the Query API publishes, and the command that reads t
 | `paginate()` | Yes — the page, with its size and offset |
 | `compare()` | Yes, as the `get()` it performs |
 | `sentinel:export` | Yes, as the `get()` it performs |
+| `sentinel:show --subject=` | Yes, as the `get()` it performs |
+| `Sentinel::transitions()` | Yes, as the `get()` the query underneath performs |
 
 **What it does not cover.** The record is written where the Query API hands entries back, so a read
 that never goes through it leaves none. There are three such paths, and they are lines drawn on
@@ -3200,10 +3202,11 @@ purpose rather than gaps:
   hydrated, including every row the verifier, the presenter and the exporter hydrate on their way to
   doing something else. What compliance mode promises is a record of the trail being *queried*, and
   a relation on your own model is not that.
-- **`sentinel:show` and `sentinel:redact`** find one entry by its identifier through the ledger
+- **`sentinel:show <id>` and `sentinel:redact`** find one entry by its identifier through the ledger
   rather than through a query. Redaction leaves its own evidence regardless — it is an entry of its
   own, and under this mode it cannot be ordered anonymously — but *looking* at one entry by id does
-  not leave a row.
+  not leave a row. The command's other form, `sentinel:show --subject=`, reads a life through the
+  Query API and is recorded like any other read: it is the route and not the command that decides.
 - **`Sentinel::verifyIntegrity()`, `verifyAnchors()`, `verifyRoots()` and `verifyEverything()`** walk
   entries in order to hash them and drop them. They read to prove rather than to disclose, and
   nothing they read reaches a caller.
