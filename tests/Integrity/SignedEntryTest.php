@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Enums\SignatureState;
 use ElPandaPe\Sentinel\Models\Audit;
+use ElPandaPe\Sentinel\Tests\Fixtures\EncryptedSubject;
 use ElPandaPe\Sentinel\Tests\Fixtures\SigningKeys;
 use Illuminate\Support\Facades\DB;
 
 use function ElPandaPe\Sentinel\Tests\auditData;
+use function ElPandaPe\Sentinel\Tests\auditsOf;
 use function ElPandaPe\Sentinel\Tests\auditsTable;
 use function ElPandaPe\Sentinel\Tests\ledger;
 use function ElPandaPe\Sentinel\Tests\signingWith;
@@ -105,12 +107,25 @@ it('signs every entry of a batch', function (): void {
     }
 });
 
+/**
+ * The reason to hash over ciphertext, stated as the test it is owed: an auditor who cannot decrypt
+ * can still prove the row was not touched.
+ *
+ * It captures through a model rather than writing to the ledger, and that is the whole point.
+ * Encryption happens in the pipeline stage, and the ledger is downstream of it — a write straight to
+ * the ledger copies whatever `encryption` the caller handed over and encrypts nothing, so an entry
+ * built that way is signed plaintext wearing the name of this test. The first expectation exists to
+ * make that failure loud rather than green: it asserts the entry really is encrypted before the
+ * second one asserts it verifies without the key.
+ */
 it('verifies a signed entry with encrypted fields while holding no encryption key', function (): void {
-    config()->set('sentinel.security.encryption.fields', ['secret']);
-
     signingWith('v1', SigningKeys::SECRET);
 
-    $audit = ledger()->write(auditData(['after' => ['secret' => 'the plaintext']]));
+    $subject = EncryptedSubject::query()->create(['secret' => 'the plaintext']);
+    $audit = auditsOf($subject)->firstOrFail();
+
+    expect($audit->encryption)->toBe(['fields' => ['secret'], 'key_id' => 'default'])
+        ->and($audit->after['secret'] ?? null)->not->toBe('the plaintext');
 
     // The auditor who verifies is not the operator who decrypts: no key is reachable from here on.
     config()->set('sentinel.security.encryption.keys', []);
@@ -121,4 +136,28 @@ it('verifies a signed entry with encrypted fields while holding no encryption ke
 
     expect($reread->verifyIntegrity())->toBeTrue()
         ->and($reread->verifySignature())->toBe(SignatureState::Signed);
+});
+
+/**
+ * The other half of "reports a signature stripped of the key that made it as unresolvable": an entry
+ * that recorded no key identifier is asked about under the empty one, and an installation that
+ * configures a key there gets a real verdict rather than a refusal. Unresolvable and invalid are the
+ * two answers the report keeps apart, and which one an entry gets cannot depend on the fallback
+ * happening to name an identifier nobody configured.
+ */
+it('resolves an entry that named no key against the empty identifier', function (): void {
+    signingWith('v1', SigningKeys::SECRET);
+
+    $audit = ledger()->write(auditData());
+
+    config()->set('sentinel.integrity.signature.keys', [
+        'v1' => SigningKeys::SECRET,
+        '' => SigningKeys::ROTATED_SECRET,
+    ]);
+
+    app()->forgetScopedInstances();
+
+    DB::table(auditsTable())->where('id', $audit->id)->update(['signature_key_id' => null]);
+
+    expect(Audit::query()->findOrFail($audit->id)->verifySignature())->toBe(SignatureState::Invalid);
 });

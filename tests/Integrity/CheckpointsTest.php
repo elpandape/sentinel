@@ -12,12 +12,15 @@ use Illuminate\Support\Facades\DB;
 use function ElPandaPe\Sentinel\Tests\anchor;
 use function ElPandaPe\Sentinel\Tests\anchorAheadOf;
 use function ElPandaPe\Sentinel\Tests\auditsTable;
+use function ElPandaPe\Sentinel\Tests\checkpointRow;
 use function ElPandaPe\Sentinel\Tests\checkpoints;
+use function ElPandaPe\Sentinel\Tests\checkpointsTable;
 use function ElPandaPe\Sentinel\Tests\fold;
 use function ElPandaPe\Sentinel\Tests\referenceHashes;
 use function ElPandaPe\Sentinel\Tests\seedTheReferenceChain;
 use function ElPandaPe\Sentinel\Tests\signerRing;
 use function ElPandaPe\Sentinel\Tests\signingWith;
+use function ElPandaPe\Sentinel\Tests\statementsDuring;
 
 beforeEach(function (): void {
     seedTheReferenceChain();
@@ -119,4 +122,68 @@ it('hands back the last anchor of a stream, and nothing for a stream with none',
 
     expect(checkpoints()->last(ReferenceChain::STREAM)?->to)->toBe(8)
         ->and(checkpoints()->last(ReferenceChain::FORK))->toBeNull();
+});
+
+/**
+ * The two boundaries of the race, said as two tests, because a range that only ever asserts the
+ * happy count cannot tell a retry budget of three from one of four.
+ */
+it('still lands the window after losing the race twice in a row', function (): void {
+    anchorAheadOf(ReferenceChain::STREAM, 2);
+
+    expect(anchor(ReferenceChain::STREAM, 4))->toHaveCount(2);
+});
+
+it('gives up exactly at the third loss, never trying a fourth it never promised', function (): void {
+    anchorAheadOf(ReferenceChain::STREAM, 3);
+
+    expect(fn (): array => anchor(ReferenceChain::STREAM, 4))
+        ->toThrow(UniqueConstraintViolationException::class);
+});
+
+it('hands back how far the anchors reach as a number, and zero before there are any', function (): void {
+    expect(checkpoints()->reach(ReferenceChain::FORK))->toBe(0);
+
+    anchor(ReferenceChain::STREAM, 4);
+
+    expect(checkpoints()->reach(ReferenceChain::STREAM))->toBe(8);
+});
+
+it('hands back the root the anchor before this range folded to', function (): void {
+    $anchors = anchor(ReferenceChain::STREAM, 1);
+
+    expect(checkpoints()->rootBefore(ReferenceChain::STREAM, 2))->toBe($anchors[0]->rootHash);
+});
+
+/**
+ * The first range has nothing before it, and the anchors are not asked. A row fabricated where a
+ * zeroth window would end is the only way to tell "answered null" from "never looked".
+ */
+it('never asks the anchors for a root before the very first range', function (): void {
+    DB::table(checkpointsTable())->insert(checkpointRow([
+        'stream' => ReferenceChain::STREAM,
+        'sequence_from' => 0,
+        'sequence_to' => 0,
+    ]));
+
+    expect(checkpoints()->rootBefore(ReferenceChain::STREAM, 1))->toBeNull();
+});
+
+it('anchors the first window as soon as it fills, not one entry short of it', function (): void {
+    expect(anchor(ReferenceChain::FORK, 1))->toHaveCount(2);
+});
+
+/**
+ * The reason the question is asked without a lock and without a transaction: on every write of a
+ * window but the one that completes it the answer is no, and opening a transaction to hear that
+ * would put the price of anchoring on every write instead of on one in every window.
+ */
+it('never opens a transaction just to hear that the next window still is not there', function (): void {
+    config()->set('sentinel.integrity.checkpoints.every', 4);
+
+    $statements = statementsDuring(function (): void {
+        checkpoints()->issue(ReferenceChain::FORK);
+    });
+
+    expect($statements)->toBeLessThanOrEqual(2);
 });

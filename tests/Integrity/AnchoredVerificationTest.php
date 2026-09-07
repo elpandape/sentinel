@@ -121,10 +121,12 @@ it('refuses a chain of anchors with a hole in it', function (): void {
 
     DB::table(checkpointsTable())->where('sequence_from', 1)->delete();
 
-    $break = verifier()->verifyAnchors(ReferenceChain::STREAM)->break();
+    $verification = verifier()->verifyAnchors(ReferenceChain::STREAM);
+    $break = $verification->break();
 
     expect($break?->reason)->toBe(IntegrityBreak::CheckpointMismatch)
-        ->and($break?->sequence)->toBe(5);
+        ->and($break?->sequence)->toBe(5)
+        ->and($verification->covered)->toBe(0);
 });
 
 it('tallies what every anchor signature says', function (): void {
@@ -235,4 +237,28 @@ it('counts a redaction in the tail, which a walk that read it would have counted
     redactor()->redact(Sentinel::audits()->take(8)->get()->last(), 'erasure request', new Reference('member', '77'));
 
     expect(verifier()->verifyAnchors(ReferenceChain::STREAM)->redacted())->toBe(1);
+});
+
+/**
+ * An anchor that recorded no key identifier is asked about under the empty one, and the empty one is
+ * a key like any other: an installation that configures it gets a real signer back, not a refusal.
+ * Falling back to any other identifier would answer "unknown key" for a signature that a configured
+ * key can perfectly well judge — and "unknown" and "invalid" are the two verdicts a report exists to
+ * keep apart.
+ */
+it('resolves an anchor that named no key against the empty identifier', function (): void {
+    signingWith('v1', SigningKeys::SECRET);
+    anchor(ReferenceChain::STREAM, 4);
+
+    config()->set('sentinel.integrity.signature.keys', [
+        'v1' => SigningKeys::SECRET,
+        '' => SigningKeys::ROTATED_SECRET,
+    ]);
+
+    app()->forgetScopedInstances();
+
+    DB::table(checkpointsTable())->where('sequence_from', 5)->update(['key_id' => null]);
+
+    expect(verifier()->verifyAnchors(ReferenceChain::STREAM)->anchorSignatures)
+        ->toBe([SignatureState::Signed->value => 1, SignatureState::Invalid->value => 1]);
 });
