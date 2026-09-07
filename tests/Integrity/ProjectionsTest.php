@@ -46,7 +46,8 @@ it('reports a line whose row somebody deleted', function (): void {
 
     expect($result?->reason)->toBe(IntegrityBreak::ProjectionMismatch)
         ->and($result?->auditId)->toBe($audit->id)
-        ->and($result?->sequence)->toBe($audit->sequence);
+        ->and($result?->sequence)->toBe($audit->sequence)
+        ->and($result?->checked)->toBe(2);
 });
 
 it('reports a row that belongs to no line at all', function (): void {
@@ -186,5 +187,65 @@ it('stops at the first batch that disagrees instead of reading the rest', functi
         batch: 2,
     );
 
-    expect($batched->verify('global')?->auditId)->toBe($audit->id);
+    $result = $batched->verify('global');
+
+    expect($result?->auditId)->toBe($audit->id)
+        ->and($result?->checked)->toBe(2);
+});
+
+/**
+ * The three columns of a line the report had no case for. It had one for the record a line points
+ * at, and none for what the relation is called, what was done to it, or what type the record is —
+ * so a projection could have disagreed with its entry on any of the three and answered that
+ * everything agreed.
+ */
+it('reports a relation name the index disagrees on', function (): void {
+    $audit = auditsOf($this->team)->first();
+
+    DB::table(auditRelationsTable())->where('audit_id', $audit->id)->update(['relation' => 'strangers']);
+
+    expect(projections()->verify('global')?->reason)->toBe(IntegrityBreak::ProjectionMismatch);
+});
+
+it('reports an operation the index disagrees on', function (): void {
+    $audit = auditsOf($this->team)->first();
+
+    DB::table(auditRelationsTable())->where('audit_id', $audit->id)->update(['operation' => 'detach']);
+
+    expect(projections()->verify('global')?->reason)->toBe(IntegrityBreak::ProjectionMismatch);
+});
+
+it('reports a related type the index disagrees on', function (): void {
+    $audit = auditsOf($this->team)->first();
+
+    DB::table(auditRelationsTable())->where('audit_id', $audit->id)->update(['related_type' => 'impostor']);
+
+    expect(projections()->verify('global')?->reason)->toBe(IntegrityBreak::ProjectionMismatch);
+});
+
+/**
+ * The table carries no key of its own, so a duplicated row is a divergence the count has to catch:
+ * the entry lists the line once and the index holds it twice, and a comparison that only asked
+ * whether each line appears would call that agreement.
+ */
+it('reports a row the index kept twice for a line the entry lists once', function (): void {
+    $audit = auditsOf($this->team)->first();
+
+    $row = DB::table(auditRelationsTable())->where('audit_id', $audit->id)->first();
+
+    DB::table(auditRelationsTable())->insert((array) $row);
+
+    expect(projections()->verify('global')?->reason)->toBe(IntegrityBreak::ProjectionMismatch);
+});
+
+it('keeps walking past a full batch that has nothing to report', function (): void {
+    $batched = new Projections(
+        app(Ledger::class),
+        app(AuditRelation::class),
+        app(RelationProjection::class),
+        app(Dispatcher::class),
+        batch: 2,
+    );
+
+    expect($batched->verify('global'))->toBeNull();
 });
