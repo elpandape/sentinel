@@ -168,3 +168,20 @@ it('leaves a trail naming the actor, the reason and the entry it redacted', func
         ->and($trail?->metadata['redaction']['audit_id'] ?? null)->toBe($written->id)
         ->and($trail?->metadata['redaction']['stream'] ?? null)->toBe($written->stream);
 });
+
+/**
+ * A known limitation of 1.0, pinned here so it cannot drift without saying so. The trail is written
+ * through the pipeline, and the stage that resolves context assigns every promoted column on every
+ * pass — which is what lets it clear a column whose signal is gone. A resolver that answers nothing
+ * and one that answers null arrive as the same empty array, so the stage cannot tell a value copied
+ * on purpose from one left over. Telling them apart needs the resolver contract to say which of the
+ * two it meant, and that contract is frozen.
+ */
+it('resolves the tenant of a redaction trail from the run rather than from the entry it redacts', function (): void {
+    $written = ledger()->write(auditData(['before' => ['a' => 1], 'tenant_id' => 'acme']));
+
+    $tombstone = redactor()->redact(Audit::query()->findOrFail($written->id), 'GDPR erasure 4711', new Reference('member', '77'));
+
+    expect($written->tenant_id)->toBe('acme')
+        ->and($tombstone->trail?->tenant_id)->toBeNull();
+});

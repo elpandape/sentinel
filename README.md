@@ -3200,6 +3200,15 @@ tampering.
   completed everywhere, and does not pretend to.
 - **Finding every batch that holds one person.** `sentinel_archives` is indexed by stream and range,
   never by subject, so an erasure request over someone's whole history is answered range by range.
+- **The tenant of the trail entry a redaction leaves is the run's, not the redacted entry's.** The
+  trail is written through the pipeline, and the stage that resolves context assigns every promoted
+  column on every pass — which is what lets it clear a column whose signal is gone. A resolver that
+  answers nothing and one that answers null reach it as the same empty array, so it cannot tell a
+  value copied on purpose from one left over. Under a console run with no tenancy resolver active,
+  the trail entry carries no tenant while the entry it redacts does. It is chained, hashed and
+  verifiable like any other; what it under-reports is that one column. Telling the two apart needs
+  `Contracts\Resolver` to say which of them it meant, and that contract is frozen: it is a `1.x`
+  addition or a `2.0`. `sentinel:rekey` is not affected — a rotation writes straight to the ledger.
 
 Redaction is also not masking. `security.redaction.*` in the config masks values **as they are
 captured**, before an entry is ever sealed; `Redactor` destroys the contents of an entry that was
