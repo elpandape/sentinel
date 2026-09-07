@@ -164,5 +164,7 @@ it('leaves a trail naming the actor, the reason and the entry it redacted', func
         ->and($trail?->actor_type)->toBe('member')
         ->and($trail?->actor_id)->toBe('77')
         ->and($trail?->metadata['redaction']['reason'] ?? null)->toBe('GDPR erasure 4711')
-        ->and($trail?->metadata['redaction']['sequence'] ?? null)->toBe($written->sequence);
+        ->and($trail?->metadata['redaction']['sequence'] ?? null)->toBe($written->sequence)
+        ->and($trail?->metadata['redaction']['audit_id'] ?? null)->toBe($written->id)
+        ->and($trail?->metadata['redaction']['stream'] ?? null)->toBe($written->stream);
 });

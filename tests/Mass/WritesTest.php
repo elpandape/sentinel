@@ -21,9 +21,12 @@ it('names a column set from an expression and never its formula', function (): v
 });
 
 it('keeps the literal columns of an update that also writes an expression', function (): void {
-    $writes = Writes::of(['active' => false, 'score' => DB::raw('score + 1')]);
+    $writes = Writes::of(['active' => false, 'score' => DB::raw('score + 1'), 'zone' => 'north']);
 
-    expect($writes->changes)->toBe([['path' => '/active', 'op' => 'replace', 'new' => false]])
+    expect($writes->changes)->toBe([
+        ['path' => '/active', 'op' => 'replace', 'new' => false],
+        ['path' => '/zone', 'op' => 'replace', 'new' => 'north'],
+    ])
         ->and($writes->opaque)->toBe(['score']);
 });
 
