@@ -14,9 +14,14 @@ jobs:
   #
   # These are the fifteen paths of MUTATION_PATHS that carry a threshold. Each threshold comes from
   # the ficha of the version that introduced the module; none of them is decided here.
+  #
+  # The cap is measured on this runner and not derived from a local pass: src/Ledger, the longest of
+  # the fifteen, took 77m45s on the first real run. A runner is about 1.6x slower than the reference
+  # machine, so a cap set from a local duration is wrong by that factor — which is how the previous
+  # one came to be thirty minutes for a walk of hours.
   mutation:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     strategy:
       fail-fast: false
@@ -74,9 +79,11 @@ jobs:
   # a limit of a hundred and twenty-eight. The subprocess cannot be spawned at all. It is a ceiling
   # that grows with the suite rather than a property of these three, so a fourth will join them.
   # `make mutation` walks all thirty, names the ones that could not come back, and carries on.
+  # 118m20s on the first real run, against a cap of 120. Twelve paths in one job is what makes it the
+  # longest of the three, and the cap is set where a path added later still fits.
   mutation-measured:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
 
     services:
       redis:
@@ -111,9 +118,11 @@ jobs:
             exit 1
           fi
 
+  # Measured rather than guessed, again: the first run under a ninety-minute cap was killed with 285
+  # of the 501 mutants scored, which puts the walk at about two hours and a half including setup.
   mutation-databases:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180
 
     services:
       mysql:
