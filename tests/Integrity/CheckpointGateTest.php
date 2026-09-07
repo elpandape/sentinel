@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Integrity\CheckpointGate;
 use Illuminate\Database\Connection;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
 use function ElPandaPe\Sentinel\Tests\checkpointRow;
@@ -58,3 +59,15 @@ it('takes no advisory lock on the engines that do not have one', function (strin
 
     expect(new CheckpointGate($connection, checkpointsTable())->tail('alpha')->sequence)->toBe(0);
 })->with(['mysql', 'sqlite']);
+
+it('reads a stored tail as the integer sequence it stands for, and as none when it is no number', function (mixed $stored, int $sequence): void {
+    $anchors = Mockery::mock(Builder::class);
+    $anchors->shouldReceive('select', 'where', 'orderByDesc', 'limit', 'lockForUpdate')->andReturnSelf();
+    $anchors->shouldReceive('first')->andReturn((object) ['sequence_to' => $stored, 'root_hash' => null]);
+
+    $connection = Mockery::mock(Connection::class);
+    $connection->shouldReceive('getDriverName')->andReturn('sqlite');
+    $connection->shouldReceive('table')->andReturn($anchors);
+
+    expect(new CheckpointGate($connection, checkpointsTable())->tail('alpha')->sequence)->toBe($sequence);
+})->with([['8', 8], [null, 0]]);

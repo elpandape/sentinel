@@ -20,6 +20,7 @@ use function ElPandaPe\Sentinel\Tests\auditRelationsTable;
 use function ElPandaPe\Sentinel\Tests\auditsOf;
 use function ElPandaPe\Sentinel\Tests\ledger;
 use function ElPandaPe\Sentinel\Tests\projections;
+use function ElPandaPe\Sentinel\Tests\redactor;
 use function ElPandaPe\Sentinel\Tests\verifier;
 
 beforeEach(function (): void {
@@ -248,4 +249,61 @@ it('keeps walking past a full batch that has nothing to report', function (): vo
     );
 
     expect($batched->verify('global'))->toBeNull();
+});
+
+it('reads the pivot a line carried before the change as much as the one it carried after', function (): void {
+    ledger()->write(auditData(['changes' => [[
+        'relation' => 'members',
+        'operation' => 'update',
+        'related_type' => Member::class,
+        'related_id' => '1',
+        'pivot_before' => ['role' => 'member'],
+        'pivot_after' => ['role' => 'lead'],
+    ]]]));
+
+    expect(projections()->verify('global'))->toBeNull();
+});
+
+it('reports a pivot-before somebody edited in the index and not in the entry', function (): void {
+    $audit = ledger()->write(auditData(['changes' => [[
+        'relation' => 'members',
+        'operation' => 'update',
+        'related_type' => Member::class,
+        'related_id' => '1',
+        'pivot_before' => ['role' => 'member'],
+        'pivot_after' => ['role' => 'lead'],
+    ]]]));
+
+    DB::table(auditRelationsTable())
+        ->where('audit_id', $audit->id)
+        ->update(['pivot_before' => json_encode(['role' => 'owner'], JSON_THROW_ON_ERROR)]);
+
+    expect(projections()->verify('global')?->reason)->toBe(IntegrityBreak::ProjectionMismatch);
+});
+
+it('compares the lines of one entry whatever order the index stored them in', function (): void {
+    $audit = ledger()->write(auditData(['changes' => [
+        ['relation' => 'members', 'operation' => 'attach', 'related_type' => Member::class, 'related_id' => '1'],
+        ['relation' => 'members', 'operation' => 'attach', 'related_type' => Member::class, 'related_id' => '2'],
+    ]]));
+
+    $rows = DB::table(auditRelationsTable())->where('audit_id', $audit->id)->get()->all();
+
+    DB::table(auditRelationsTable())->where('audit_id', $audit->id)->delete();
+    DB::table(auditRelationsTable())->insert(array_map(
+        static fn (object $row): array => (array) $row,
+        array_reverse($rows),
+    ));
+
+    expect(projections()->verify('global'))->toBeNull();
+});
+
+it('keeps comparing the rest of a batch after skipping a redacted entry', function (): void {
+    $audits = auditsOf($this->team);
+
+    redactor()->redact($audits->first(), 'subject access request');
+
+    DB::table(auditRelationsTable())->where('audit_id', $audits->last()->id)->delete();
+
+    expect(projections()->verify('global')?->auditId)->toBe($audits->last()->id);
 });
