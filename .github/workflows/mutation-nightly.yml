@@ -67,11 +67,13 @@ jobs:
   # omission — they hold no decision worth a percentage. The job is blocking all the same, so a path
   # that stops being able to run says so instead of going quiet.
   #
-  # src/Compliance is the one path of the list that is missing here, and it is missing for a reason
-  # that is not about its tests. Its entry point runs on every boot, so every test in the suite
-  # covers it, and the runner builds its --filter from the name of every covering test: two thousand
-  # four hundred of them, two hundred kilobytes in one argument, against a limit of a hundred and
-  # twenty-eight. The subprocess cannot be spawned at all. `make mutation` names it and carries on.
+  # Three paths of the list are missing here, and the reason is not about their tests. Each holds a
+  # file that runs on every boot — Compliance\Requirements, Support\Config and the provider itself —
+  # so every test in the suite covers it, and the runner builds its --filter from the name of every
+  # covering test: two thousand four hundred of them, two hundred kilobytes in one argument, against
+  # a limit of a hundred and twenty-eight. The subprocess cannot be spawned at all. It is a ceiling
+  # that grows with the suite rather than a property of these three, so a fourth will join them.
+  # `make mutation` walks all thirty, names the ones that could not come back, and carries on.
   mutation-measured:
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -97,8 +99,7 @@ jobs:
       - name: Mutation testing
         run: |
           set -- src/Archive src/Partitions src/Telemetry src/Transactions src/Transitions \
-            src/Restore src/Events src/Jobs src/Console src/Capture src/Concerns src/Support \
-            src/Models src/SentinelServiceProvider.php
+            src/Restore src/Events src/Jobs src/Console src/Capture src/Concerns src/Models
           failed=""
           for path in "$@"; do
             echo "== $path"
