@@ -6,6 +6,7 @@ use Carbon\CarbonImmutable;
 use ElPandaPe\Sentinel\Archive\Batch;
 use ElPandaPe\Sentinel\Enums\PruneAction;
 use ElPandaPe\Sentinel\Models\AuditArchive;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
@@ -76,14 +77,35 @@ it('saves the name of an operation instead of destroying it with its entries', f
     ageEntries('global', 5, 8, '2020-01-01 00:00:00.000000');
     anchor('global', 4);
 
+    $asked = [];
+
+    DB::listen(function (QueryExecuted $query) use (&$asked): void {
+        if (str_starts_with($query->sql, 'select') && str_contains($query->sql, transactionsTable())) {
+            $asked[] = $query->bindings;
+        }
+    });
+
     pruner()->prune(frontiers(['model' => '1 year'])->of('global', $now), PruneAction::Archive, false);
 
     $archive = AuditArchive::query()->firstOrFail();
     $body = gzdecode(Storage::disk('cold')->get($archive->path));
 
-    expect(DB::table(transactionsTable())->count())->toBe(0)
+    expect($asked)->toBe([[$operation]])
+        ->and(DB::table(transactionsTable())->count())->toBe(0)
         ->and($body)->toContain('billing.run')
         ->and(iterator_to_array(Batch::entriesIn($body)))->toHaveCount(4);
+});
+
+it('asks nothing of the transactions table for a window that carries no operation', function (): void {
+    $asked = false;
+
+    DB::listen(function (QueryExecuted $query) use (&$asked): void {
+        $asked = $asked || str_contains($query->sql, transactionsTable());
+    });
+
+    archiver()->archive('global', 5, 8);
+
+    expect($asked)->toBeFalse();
 });
 
 it('carries the labels of the entries it wrote out', function () use ($now): void {

@@ -70,6 +70,7 @@ it('refuses to be the thing that destroys the evidence of a tampering', function
 
     expect($pruning->succeeded())->toBeFalse()
         ->and($pruning->break?->reason)->toBe(IntegrityBreak::CheckpointMismatch)
+        ->and($pruning->break?->checked)->toBe(0)
         ->and(DB::table(auditsTable())->count())->toBe(12);
 });
 
@@ -78,5 +79,6 @@ it('publishes how fast it went, and nothing when it went nowhere', function () u
     $still = pruner()->prune(frontiers(['model' => '900 years'])->of('global', $now), PruneAction::Delete, false);
 
     expect($moved->rate())->toBeGreaterThan(0.0)
+        ->and($moved->seconds)->toBeLessThan(5.0)
         ->and($still->rate())->toBeNull();
 });
