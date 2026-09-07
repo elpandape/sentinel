@@ -42,6 +42,14 @@ it('falls back to the global chain when the entry carries no subject', function 
     expect(stream(['integrity.stream' => 'subject_type'])->resolve(auditData()))->toBe('global');
 });
 
+it('reads a numeric-looking morph alias as the string a chain is named by', function (): void {
+    Relation::enforceMorphMap(['123' => AuditableSubject::class]);
+
+    expect(stream(['integrity.stream' => 'subject_type'])
+        ->resolve(auditData(['subject_type' => AuditableSubject::class])))
+        ->toBe('type:123');
+});
+
 it('refuses a class that exists but answers to no resolver contract', function (): void {
     stream(['integrity.stream' => AuditableSubject::class])->resolve(auditData());
 })->throws(ConfigurationException::class, 'integrity.stream');

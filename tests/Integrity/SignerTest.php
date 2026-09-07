@@ -28,6 +28,13 @@ it('never verifies a signature someone altered', function (Signer $signer): void
     expect($signer->verify(hashToSign(), $altered))->toBeFalse();
 })->with(signers());
 
+it('refuses a signature padded with a character that is not base64, rather than cleaning it up', function (Signer $signer): void {
+    $signature = $signer->sign(hashToSign());
+    $padded = substr($signature, 0, 4).'*'.substr($signature, 4);
+
+    expect($signer->verify(hashToSign(), $padded))->toBeFalse();
+})->with(signers());
+
 it('names the key it used', function (Signer $signer): void {
     expect($signer->keyId())->not->toBeEmpty();
 })->with(signers());

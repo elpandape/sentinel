@@ -19,6 +19,12 @@ it('names the construction alongside the digest it folds with', function (): voi
         ->and(Fold::name('sha512'))->toBe('fold-sha512');
 });
 
+it('reads a construction of its own by its whole name, separator included', function (): void {
+    expect(Fold::digestOf('fold-sha256'))->toBe('sha256')
+        ->and(Fold::digestOf('foldsha256'))->toBeNull()
+        ->and(Fold::digestOf('merkle-sha256'))->toBeNull();
+});
+
 it('folds a range into the root it froze', function (): void {
     expect(fold()->root(ReferenceChain::STREAM, 1, 4, null, 'sha256', referenceHashes(ReferenceChain::STREAM, 1, 4)))
         ->toBe(ReferenceChain::ROOT_1_4);
