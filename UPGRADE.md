@@ -4,12 +4,55 @@ Every version that changes a published contract, a driver's behaviour or the sch
 here, with the before and the after. Versions that only add are covered by the
 [CHANGELOG](CHANGELOG.md).
 
-Sentinel is in its `0.x` cycle: only the last minor receives fixes, and there are no backports
-before `1.0.0`.
+Sentinel is in its release-candidate cycle. The API froze at `v1.0.0-rc.1`, so from that tag only
+bugfixes and documentation land; what it would take to break the freeze is written in that tag's
+section below. Only the latest release receives fixes, and there are no backports before `1.0.0`.
 
 **This page covers moving between versions of Sentinel and nothing else.** Coming from another audit
 package is a different journey with a different reader, and it has a guide of its own per source:
 [MIGRATE_FROM_OWEN_IT.md](MIGRATE_FROM_OWEN_IT.md) and [MIGRATE_FROM_ALTEK.md](MIGRATE_FROM_ALTEK.md).
+
+---
+
+## v0.22.3 → v1.0.0-rc.1
+
+Nothing breaks, nothing migrates, and `payload_version` stays at `1`: every entry written before
+this release verifies unchanged, and an installation upgrading to it has no step to take beyond the
+`composer.json` line. What changes is the commitment.
+
+### Install by name, and say that you accept a candidate
+
+Until this tag the package was installed from its repository. It is on Packagist now:
+
+```bash
+composer require elpandape/sentinel:^1.0@RC
+```
+
+Composer will not resolve a release candidate under the default stability, so the `@RC` is not
+optional — it is how you say, for this package alone, that you accept one. `"minimum-stability":
+"RC"` does the same thing for **every** package you require, which is almost never what is meant.
+
+If your `composer.json` still carries the `vcs` repository entry, it can go: leaving it in means
+Composer keeps asking a repository the package no longer needs.
+
+### The API is frozen, and the rule for breaking it is written down
+
+Before this tag, the `0.x` rule applied: a minor was allowed to break a published contract, and
+several did. From here on it is not.
+
+Between `v1.0.0-rc.1` and `v1.0.0`, only bugfixes and documentation land. If something has to break,
+one question decides it: **does the change correct something incorrect, insecure or unverifiable, or
+only something uncomfortable?** Correctness, security and integrity break the freeze, land, and are
+numbered `rc.2` with the feedback period starting again from zero. Ergonomics and naming wait for a
+`1.x` if they fit additively and for `2.0` if they do not.
+
+A breaking change between the last `rc.N` and `v1.0.0` is the one route that is closed. Every break
+after the freeze costs its own release candidate.
+
+What is inside the freeze and what is outside it is the table in
+[the README](README.md#the-frozen-api). The short version: what the README documents is frozen, and
+everything marked `@internal` is not — a boundary an arch test holds rather than a promise this page
+makes.
 
 ---
 

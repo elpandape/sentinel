@@ -2,6 +2,63 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v1.0.0-rc.1 — The freeze (2026-09-07)
+
+The API stops moving. From this tag the surface the README documents is the contract of 1.0, and
+between here and `v1.0.0` only bugfixes and documentation land. Nothing migrates, nothing touches
+the chain, `payload_version` stays at `1`, and every entry written before this release verifies
+unchanged.
+
+A frozen target is what makes the rest of this release possible. Three checks that cannot be run
+against something that is still moving were run against it, and their results stopped being reports
+and became conditions of release: mutation testing as a gate, the walk of a sensitive value to every
+boundary it crosses, and a test per read path the access log covers and per path it deliberately
+does not.
+
+The package is on Packagist. A release candidate needs saying so — `composer require
+elpandape/sentinel:^1.0@RC` — and the reason, along with the rule for what it would take to break
+the freeze, is in [UPGRADE.md](UPGRADE.md#v0223--v100-rc1).
+
+### Added
+
+- **The freeze, written down.** [The frozen API](README.md#the-frozen-api) says what is covered and
+  what is not, and states the rule for breaking it before there is any pressure to: correctness,
+  security and integrity break the freeze and cost an `rc.2`; ergonomics and naming wait for a `1.x`
+  or a `2.0`. What is not allowed is a break between the last candidate and `v1.0.0`.
+- **A test per read path under compliance mode.** Every terminal the access log covers and every
+  path it does not now has one, rather than a paragraph claiming it.
+- **The sweep for a value in the clear reaches the boundaries it never reached.** The payload of the
+  job that carries an entry to the ledger, what the buffer holds until it flushes, and the one line
+  this package writes to a log when a write fails — exception message included, because a driver
+  renders its bindings into it.
+- **A key never leaves as a key.** An entry carries the identifier of the key that wrote it and
+  never the key; the two exceptions that hold a value while failing name what they can and never the
+  value itself.
+
+### Fixed
+
+- **The criteria of a mass operation records the bound and the order it was given.** MySQL takes
+  `update ... limit`, and a criteria that wrote down the clauses and nothing else described the
+  whole set beside an `affected_rows` counting a slice of it. `limit`, `offset` and `order` are now
+  written down, with a raw order recorded as its shape and never as its body. Additive: no key that
+  existed changes, and nothing that carries a value is added.
+- **`sentinel:show` has two routes and the README named one.** Reading a life with `--subject` goes
+  through the Query API and is recorded like any other read; reading one entry by its identifier is
+  not. The table now says which is which.
+
+### Changed
+
+- **Mutation testing is a gate.** The nightly job reported numbers nobody had read, because
+  `continue-on-error` had been on it since it existed. The fifteen paths that carry a threshold are
+  now enforced, one job apiece.
+- **Every module now clears the threshold its own ficha set.** `Integrity` closes at 95.98% against
+  the 95 it has owed since `v0.4.0`; `Retention` at 91.78%, `Mass` at 95.12% and `Redaction` at
+  95.24%, all against 90. What is left alive in each is written down rather than counted.
+
+### Upgrade notes
+
+Installing by name and the rule for breaking the freeze: [UPGRADE.md](UPGRADE.md#v0223--v100-rc1).
+
 ## v0.22.3 — The public surface (2026-09-06)
 
 What this package is, written down. Nothing migrates, nothing touches the chain, `payload_version`

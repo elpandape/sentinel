@@ -3,7 +3,7 @@
 > Ledger-first audit & integrity engine for Laravel.
 > **Know what happened. Know who did it. Prove the record.**
 
-[![Version](https://img.shields.io/badge/version-v0.22.3-blue)](https://github.com/elpandape/sentinel/releases)
+[![Version](https://img.shields.io/badge/version-v1.0.0--rc.1-blue)](https://github.com/elpandape/sentinel/releases)
 [![PHP](https://img.shields.io/badge/php-8.4%2B-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-13-ff2d20)](https://laravel.com/)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](#development)
@@ -13,14 +13,23 @@ Sentinel is not an activity log. Its unit is the **audit record**: an append-onl
 what changed, who changed it, on whose behalf, from where, inside which business transaction, what
 the state was before, what it is now — and whether the record itself can be proven untampered.
 
-> **Status: alpha (0.x).** The public API may change between minor versions until `v1.0.0`.
-> Not yet on Packagist — install from the repository while the 0.x cycle runs.
+> **Status: release candidate.** The public API is **frozen** at this tag: between here and
+> `v1.0.0` only bugfixes and documentation land. What is frozen, and what would have to happen for
+> it to move, is written down in [The frozen API](#the-frozen-api).
 
 ## Installation
 
+```bash
+composer require elpandape/sentinel:^1.0@RC
+```
+
+A release candidate is not a stable release, so Composer will not install it unless you say so. The
+`@RC` above is the narrow way to say it — it applies to this package and to nothing else in your
+project. The other way is `"minimum-stability": "RC"` with `"prefer-stable": true`, which relaxes it
+for every package you require, and is the wrong tool unless that is what you meant.
+
 ```json
-"repositories": [{ "type": "vcs", "url": "https://github.com/elpandape/sentinel" }],
-"require": { "elpandape/sentinel": "v0.22.3" }
+"require": { "elpandape/sentinel": "^1.0@RC" }
 ```
 
 ```bash
@@ -91,8 +100,51 @@ migration: [MIGRATE_FROM_OWEN_IT.md](MIGRATE_FROM_OWEN_IT.md) and
 | `v0.22.1` | A way in from other packages: `sentinel:import` from `owen-it/laravel-auditing` or `altek/accountant`, resumable and idempotent, with a guide apiece |
 | `v0.22.2` | Five defects closed — a rotation that ran twice, a page that left no access entry, a batch ceiling set for the widest engine, a frozen serialiser that lazy-loaded, two untranslated events — plus `AuditQuery::after()` and a `benchmarks/` that measures what it says |
 | `v0.22.3` | What this package is, written down: a hundred and fifty-five declarations marked `@internal` behind an arch test that holds the boundary, the four filters the table never named, the reads the access log does not cover, and every claim in this README checked against the code |
+| `v1.0.0-rc.1` | The API stops moving, and the three checks that need a still target run against it: mutation as a gate rather than a report, the walk of a sensitive value to every boundary it crosses, and a test per read path the access log covers and per path it does not |
 
-Everything else is on the roadmap: the freeze.
+Everything else is on the roadmap: `v1.0.0`.
+
+## The frozen API
+
+From `v1.0.0-rc.1` the public surface stops moving. Between this tag and `v1.0.0` only bugfixes and
+documentation land, and after `v1.0.0` the ordinary rules of semantic versioning apply to everything
+in this list.
+
+**What is frozen**
+
+| Surface | What that covers |
+|---|---|
+| `Sentinel` facade | Every method the facade publishes, and the shape of what each returns |
+| `Auditable` trait | The trait, the declarations a model makes with it (`$auditExclude`, `$auditRedact`, `$auditEncrypt`, `$auditHash`, and the rest), and the relation and scope it adds |
+| `Contracts\` | The interfaces `v0.22.3` left unmarked: the extension points a consumer implements |
+| `Data\AuditData` · `Models\Audit` | Their public properties, their casts, and `toArray()` |
+| Query API | `AuditQuery` and `TransitionQuery`, their filters and their three terminals |
+| `Restore\RestoreResult` · `Redaction\Tombstone` · the verification results | The shapes a caller reads an outcome from |
+| Events | The eleven lifecycle events and the properties each one carries |
+| Artisan commands | The eleven commands, their options and their exit codes |
+| `config/sentinel.php` | Every key, its default and what it accepts |
+| The serialised entry | Frozen since [`v0.15.0`](#whats-available), and only ever added to |
+
+**What is not.** Everything marked `@internal`. The rule is an invariant rather than a count, and it
+is the invariant that has a test: every declaration this package ships is either in the table above
+or carries the marker, and one that is neither fails the build. That is what makes the boundary
+readable from the code instead of from a number in this file that would be wrong a version later.
+Internal is where the work of a future version happens, and reaching into it from outside is
+reaching into something that is allowed to move under you.
+
+**What it takes to break it.** One question, and it is asked before the change rather than after:
+**does the change correct something incorrect, insecure or unverifiable, or only something
+uncomfortable?**
+
+- **Correctness, security or integrity** — the freeze breaks, the fix lands, the release is numbered
+  `rc.2`, and the feedback period starts again from zero. A candidate nobody has tested since the
+  change is not a candidate.
+- **Ergonomics or naming** — it waits. It goes into a `1.x` if it fits additively, and into `2.0` if
+  it does not, with the reason recorded either way.
+
+What is not allowed is the third route: a breaking change between the last `rc.N` and `v1.0.0`. Every
+break after the freeze costs its own release candidate, which is the price that keeps the first
+stable release from lying about its own freeze.
 
 `v0.4.0` is the version that starts auditing: a model with the trait writes its own chained entries.
 `v0.5.0` is the one that answers what changed, instead of leaving you two states to compare.
