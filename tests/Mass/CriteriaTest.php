@@ -135,7 +135,8 @@ it('writes an enum by its value and a date by the format the snapshots use', fun
         ->where('published_at', '<', new DateTimeImmutable('2026-08-29 10:00:00', new DateTimeZone('UTC'))));
 
     expect(array_column(massWheres($criteria), 'value'))
-        ->toBe(['published', '2026-08-29T10:00:00.000000+00:00']);
+        ->toBe(['published', '2026-08-29T10:00:00.000000+00:00'])
+        ->and(array_column(massWheres($criteria), 'operator'))->toBe(['=', '<']);
 });
 
 it('falls back on the shape alone when a column comparison compares expressions', function (): void {
@@ -208,4 +209,27 @@ it('serialises the criteria of a query the package never touched', function (): 
     $query = DB::table('fixture_audited_subjects')->where('name', 'Ada');
 
     expect(new Criteria(sentinelConfig())->of($query))->toHaveKey('wheres');
+});
+
+it('falls back on the shape alone when a comparison compares an expression', function (): void {
+    $criteria = massCriteria(static fn (Builder $query): Builder => $query
+        ->where(DB::raw('lower(name)'), '=', 'ada'));
+
+    expect(massWheres($criteria))->toBe([['type' => 'basic', 'boolean' => 'and']]);
+});
+
+it('writes a like clause as its column, its sense and its value', function (): void {
+    $criteria = massCriteria(static fn (Builder $query): Builder => $query->whereLike('name', '%ada%'));
+
+    expect(massWheres($criteria))->toBe([
+        ['type' => 'like', 'boolean' => 'and', 'column' => 'name', 'not' => false, 'value' => '%ada%'],
+    ]);
+});
+
+it('tells a not-like from the like it negates', function (): void {
+    $criteria = massCriteria(static fn (Builder $query): Builder => $query->whereNotLike('name', '%ada%'));
+
+    expect(massWheres($criteria))->toBe([
+        ['type' => 'like', 'boolean' => 'and', 'column' => 'name', 'not' => true, 'value' => '%ada%'],
+    ]);
 });

@@ -384,3 +384,18 @@ it('records nothing for an upsert while Sentinel is switched off', function (): 
     expect(massEntries())->toBeEmpty()
         ->and(AuditedSubject::query()->count())->toBe(1);
 });
+
+it('counts a delete the engine did not answer with a row count as none at all', function (): void {
+    $query = AuditedSubject::query();
+    $query->onDelete(static fn (): bool => true);
+
+    expect($query->auditing()->delete())->toBe(0)
+        ->and(Audit::query()->count())->toBe(0);
+});
+
+it('wraps a single row and a lone unique key exactly as it wraps a batch of them', function (): void {
+    AuditedSubject::query()->auditing()->upsert(['id' => 1, 'name' => 'Ada'], 'id', ['name']);
+
+    expect(withSortedKeys(massEntries()[0]->criteria ?? []))
+        ->toBe(withSortedKeys(['columns' => ['id', 'name'], 'unique_by' => ['id'], 'update' => ['name'], 'rows' => 1]));
+});
