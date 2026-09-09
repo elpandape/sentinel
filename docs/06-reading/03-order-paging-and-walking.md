@@ -286,6 +286,21 @@ resumes it, and the command prints the identifier to resume behind when it finis
 meant: the cursor narrows first and the offset is then applied *inside* what is left, so
 `after($id)->paginate(50, 2)` skips fifty entries beyond the cursor. Pick one.
 
+`byOccurrence()` composes just as quietly, and it is the one combination that loses entries instead
+of repeating them. The cursor is a place on the identifier axis; `byOccurrence()` orders on the other
+one. While writing is synchronous the two agree and nothing shows. Under `queue`, `buffered`, an
+import or a backdated capture they come apart, and resuming behind an entry skips everything minted
+before it that happened after it:
+
+```php
+// 'last' was written first, so it holds the lower identifier; 'first' happened earlier.
+Sentinel::timeline()->get()->pluck('event');                   // ['first', 'last']
+Sentinel::timeline()->after($firstId)->get()->pluck('event');  // [] — 'last' sits behind the cursor
+```
+
+Walk with `Sentinel::audits()`, whose order is the cursor's own axis, and sort the result on
+`occurred_at` in your own code — or page a window fixed with `between()`.
+
 Finally, `Filter::After` is a declared filter like any other, and it is **not** in
 `Filter::assumed()` — the nine filters a driver is credited with when it does not implement
 `Contracts\DeclaresFilters`. A driver written against the original contract refuses `after()` as you
@@ -441,6 +456,7 @@ Two more facts about the same mechanism:
 | `$page->total` is undefined | `AuditPage` carries `entries`, `page`, `perPage`, `hasMore` and nothing else | Use `hasMore`; there is deliberately no count |
 | `AuditResource::collection($page)` renders a bare JSON array with no `meta` / `links` | `AuditPage` is not a Laravel paginator | Wrap `$page->entries` and build the envelope yourself |
 | `Sentinel::timeline()->between(...)` returns entries whose `occurred_at` is outside the window | `between()` bounds `created_at`; `byOccurrence()` changes only the ordering | Read it as *sealed in this window, ordered by when it happened* |
+| A cursor walk under `byOccurrence()` or `Sentinel::timeline()` never reaches an entry you can see in the table | `after()` is a place on `id`; the order is `occurred_at`, and the two axes come apart the moment writing is not synchronous | Walk with `Sentinel::audits()` and sort in your own code, or page a window fixed with `between()` |
 | `LedgerException` naming `after()` on a third-party driver | `Filter::After` is not in `Filter::assumed()` | Implement `Contracts\DeclaresFilters` and name `Filter::After` |
 | A compliance-mode walk never finishes | Each page appends one `access` entry to the tail; at `perPage = 1` the tail grows as fast as the walk | Bound with `between()` fixed before the walk, and page in hundreds, not ones |
 | `sentinel:verify --from=1 --to=100` exits `INVALID` | A sequence range is a question about one chain | Pass `--stream` alongside `--from` / `--to` |

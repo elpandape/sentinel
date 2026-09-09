@@ -157,8 +157,12 @@ configured header (`resolvers.request.header`, default `X-Request-Id`), honours 
 ### Paging a timeline
 
 `paginate()` and `after()` behave exactly as they do on any other read — one call to the ledger, no
-total, and a cursor that is `id > ?` in **both** directions. Do not combine `after()` with `latest()`
-expecting a backwards walk. See [Order, paging and walking](03-order-paging-and-walking.md).
+total, and a cursor that is `id > ?` in **both** directions. Which is the catch here: the cursor
+walks the identifier axis while a timeline orders on the clock of the fact, so a resumed walk skips
+any entry minted before the cursor and dated after it. Page a timeline with `paginate()`, or
+cursor-walk `Sentinel::audits()` and sort the result yourself. Do not combine `after()` with
+`latest()` expecting a backwards walk either. See
+[Order, paging and walking](03-order-paging-and-walking.md).
 
 ---
 
