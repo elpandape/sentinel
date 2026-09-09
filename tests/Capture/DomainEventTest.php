@@ -223,15 +223,17 @@ it('takes a name of exactly the width the column holds', function (): void {
     expect(Audit::query()->firstOrFail()->verifyIntegrity())->toBeTrue();
 });
 
-/**
- * A known limitation of 1.0, pinned here so it cannot drift without saying so. The guard is the
- * width of the column and nothing else, so a name that says nothing is recorded as readily as one
- * that does. Refusing it is a call that works today refusing to work tomorrow, which is a break.
- */
-it('takes a name with nothing in it, because only the width is guarded', function (): void {
-    Sentinel::event('')->record();
+it('refuses a name with nothing in it, at the call that would have written it', function (): void {
+    expect(fn (): mixed => Sentinel::event(''))
+        ->toThrow(ConfigurationException::class, 'nothing in it')
+        ->and(fn (): mixed => Sentinel::event('   '))
+        ->toThrow(ConfigurationException::class, 'nothing in it');
+});
 
-    expect(Audit::query()->firstOrFail()->event)->toBeString()->toBeEmpty();
+it('keeps the spaces inside a name that says something', function (): void {
+    Sentinel::event('invoice approved')->record();
+
+    expect(Audit::query()->firstOrFail()->event)->toBe('invoice approved');
 });
 
 it('refuses a subject with no key rather than naming a type nobody can look up', function (): void {

@@ -35,6 +35,9 @@ final class PendingEvent
      * already sealed a chain. Worse than the labels, in fact — the name is inside the canonical
      * payload, so an engine that truncates instead of raising leaves an entry whose stored hash
      * covers a value the row no longer holds, and it never verifies again.
+     *
+     * The other end is guarded too. A name with nothing in it is an entry that says nothing
+     * happened, and that is not something a trail records.
      */
     public const int MAX_NAME_LENGTH = 64;
 
@@ -62,6 +65,10 @@ final class PendingEvent
         private readonly Recorder $recorder,
         private readonly Config $config,
     ) {
+        if (trim($name) === '') {
+            throw ConfigurationException::eventEmpty();
+        }
+
         if (mb_strlen($name) > self::MAX_NAME_LENGTH) {
             throw ConfigurationException::eventTooLong($name, self::MAX_NAME_LENGTH);
         }

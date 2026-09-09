@@ -44,6 +44,11 @@ final class ConfigurationException extends InvalidArgumentException
         ));
     }
 
+    public static function eventEmpty(): self
+    {
+        return new self('Sentinel was given an event name with nothing in it. The name is what the entry says happened, and a trail does not record that nothing did: give the event a name, or record nothing.');
+    }
+
     public static function eventTooLong(string $event, int $limit): self
     {
         return new self(sprintf(
