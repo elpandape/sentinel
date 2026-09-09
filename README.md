@@ -20,34 +20,34 @@
 
 ---
 
-## 📖 Table of Contents
+## Table of Contents
 
-- [✨ Features](#-features)
-- [📋 Requirements](#-requirements)
-- [🚀 Installation](#-installation)
-- [⚡ Quick Start](#-quick-start)
-- [📚 Documentation](#-documentation)
-- [📥 What Gets Audited](#-what-gets-audited)
-- [📸 Snapshots & Diffs](#-snapshots--diffs)
-- [🧭 Context & Actors](#-context--actors)
-- [🛡️ Protecting Sensitive Data](#-protecting-sensitive-data)
-- [🔎 Querying the Trail](#-querying-the-trail)
-- [🔗 Relationships](#-relationships)
-- [📦 Mass Operations](#-mass-operations)
-- [🧾 Transactions, Events & Transitions](#-transactions-events--transitions)
-- [↩️ Restoring State](#️-restoring-state)
-- [🔐 Integrity, Signing & Anchors](#-integrity-signing--anchors)
-- [♻️ Retention, Archiving & Redaction](#️-retention-archiving--redaction)
-- [📋 Compliance Mode](#-compliance-mode)
-- [⚙️ Performance Modes](#️-performance-modes)
-- [🐘 Engines & Scale](#-engines--scale)
-- [🖥️ Artisan Commands](#️-artisan-commands)
-- [🧩 Ledger Drivers](#-ledger-drivers)
-- [🔧 Configuration](#-configuration)
-- [🔄 Migrating from Another Package](#-migrating-from-another-package)
-- [📦 Stability](#-stability)
-- [🧪 Development](#-development)
-- [👤 Credits & License](#-credits--license)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Documentation](#documentation)
+- [What Gets Audited](#what-gets-audited)
+- [Snapshots & Diffs](#snapshots--diffs)
+- [Context & Actors](#context--actors)
+- [Protecting Sensitive Data](#protecting-sensitive-data)
+- [Querying the Trail](#querying-the-trail)
+- [Relationships](#relationships)
+- [Mass Operations](#mass-operations)
+- [Transactions, Events & Transitions](#transactions-events--transitions)
+- [Restoring State](#restoring-state)
+- [Integrity, Signing & Anchors](#integrity-signing--anchors)
+- [Retention, Archiving & Redaction](#retention-archiving--redaction)
+- [Compliance Mode](#compliance-mode)
+- [Performance Modes](#performance-modes)
+- [Engines & Scale](#engines--scale)
+- [Artisan Commands](#artisan-commands)
+- [Ledger Drivers](#ledger-drivers)
+- [Configuration](#configuration)
+- [Migrating from Another Package](#migrating-from-another-package)
+- [Stability](#stability)
+- [Development](#development)
+- [Credits & License](#credits--license)
 
 ---
 
@@ -56,36 +56,36 @@ what changed, who changed it, on whose behalf, from where, inside which business
 the state was before, what it is now — and whether the record itself can be proven untampered.
 
 > **Status: release candidate.** The public API is **frozen** at this tag: between here and
-> `v1.0.0` only bugfixes and documentation land. See [Stability](#-stability).
+> `v1.0.0` only bugfixes and documentation land. See [Stability](#stability).
 
 ---
 
-## ✨ Features
+## Features
 
 | Feature | Description |
 |---|---|
-| 📸 **Full snapshots** | Every entry carries the complete state before and after — not just the delta. |
-| 🔀 **Structured diffs** | `$audit->diff()` answers *what changed*, with RFC 6902 JSON Patch import and export. |
-| 🔗 **Relationship auditing** | The six pivot operations recorded with zero changes to your code. No other package in this space covers it. |
-| 📦 **Mass operations** | `Model::where(...)->auditing()->update(...)` audits the statement Eloquent fires no event for. Opt-in per query, free when unused. |
-| 🧭 **Execution context** | Actor, impersonator, tenant, request, trace, session, source, host, job and command — ten resolvers, all replaceable. |
-| 🔐 **Tamper-evident chain** | Every entry links to the one before it. Unconditional, no configuration, verifiable by someone holding none of your keys. |
-| ✍️ **Signatures & anchors** | HMAC or OpenSSL over the hash, plus signed roots that keep verification cheap and survive pruning. |
-| 🛡️ **Field-level protection** | Exclude, mask, encrypt or hash a field — four mechanisms with four different promises, all documented. |
-| 🔎 **Query API** | Twenty-one filters over the ledger contract, so a driver over something that is not a table answers the same question. |
-| ↩️ **Restore engine** | `$audit->restore()` puts the record back — and appends an entry saying it did. |
-| ♻️ **Retention & cold archiving** | Prune by policy, archive to NDJSON on any disk, rehydrate a batch exactly as it left. |
-| 🪦 **Redaction** | Destroy the contents of an entry while its position, its hash and its link stay intact. |
-| 📋 **Compliance mode** | Refuses to boot without signatures and anchors, logs every read, and names its own blind spots. |
-| ⚙️ **Performance modes** | `sync`, `queue` or `buffered` — with the loss window of each written down rather than implied. |
-| 🐘 **Three engines** | PostgreSQL 16, MySQL 9 and SQLite, run on every push. Partitioned migrations shipped for two of them. |
-| 🧩 **Ledger drivers** | A published contract with a runnable conformance suite, shipped as production code. |
-| 📡 **W3C Trace Context** | Read, propagated across the queue, and handed to an OpenTelemetry SDK when one is registered. |
-| 🔄 **Migration path** | `sentinel:import` from `owen-it/laravel-auditing` or `altek/accountant`, resumable and idempotent. |
+| **Full snapshots** | Every entry carries the complete state before and after — not just the delta. |
+| **Structured diffs** | `$audit->diff()` answers *what changed*, with RFC 6902 JSON Patch import and export. |
+| **Relationship auditing** | The six pivot operations recorded with zero changes to your code. No other package in this space covers it. |
+| **Mass operations** | `Model::where(...)->auditing()->update(...)` audits the statement Eloquent fires no event for. Opt-in per query, free when unused. |
+| **Execution context** | Actor, impersonator, tenant, request, trace, session, source, host, job and command — ten resolvers, all replaceable. |
+| **Tamper-evident chain** | Every entry links to the one before it. Unconditional, no configuration, verifiable by someone holding none of your keys. |
+| **Signatures & anchors** | HMAC or OpenSSL over the hash, plus signed roots that keep verification cheap and survive pruning. |
+| **Field-level protection** | Exclude, mask, encrypt or hash a field — four mechanisms with four different promises, all documented. |
+| **Query API** | Twenty-one filters over the ledger contract, so a driver over something that is not a table answers the same question. |
+| **Restore engine** | `$audit->restore()` puts the record back — and appends an entry saying it did. |
+| **Retention & cold archiving** | Prune by policy, archive to NDJSON on any disk, rehydrate a batch exactly as it left. |
+| **Redaction** | Destroy the contents of an entry while its position, its hash and its link stay intact. |
+| **Compliance mode** | Refuses to boot without signatures and anchors, logs every read, and names its own blind spots. |
+| **Performance modes** | `sync`, `queue` or `buffered` — with the loss window of each written down rather than implied. |
+| **Three engines** | PostgreSQL 16, MySQL 9 and SQLite, run on every push. Partitioned migrations shipped for two of them. |
+| **Ledger drivers** | A published contract with a runnable conformance suite, shipped as production code. |
+| **W3C Trace Context** | Read, propagated across the queue, and handed to an OpenTelemetry SDK when one is registered. |
+| **Migration path** | `sentinel:import` from `owen-it/laravel-auditing` or `altek/accountant`, resumable and idempotent. |
 
 ---
 
-## 📋 Requirements
+## Requirements
 
 | Requirement | Version |
 |---|---|
@@ -94,12 +94,12 @@ the state was before, what it is now — and whether the record itself can be pr
 | Extensions | `ext-mbstring`, `ext-openssl` (required) · `ext-zlib` (gzip archive codec) |
 | Engines | PostgreSQL 16 · MySQL 9 · SQLite 3.45+ — run on every push |
 
-> ⚠️ **MariaDB is refused by name, not guessed at.** `whereFieldChanged()` has no dialect for it, so
+> **MariaDB is refused by name, not guessed at.** `whereFieldChanged()` has no dialect for it, so
 > the package declines instead of answering with something that might not mean the same thing.
 
 ---
 
-## 🚀 Installation
+## Installation
 
 ```bash
 composer require elpandape/sentinel:^1.0@RC
@@ -132,7 +132,7 @@ class Invoice extends Model
 
 ---
 
-## ⚡ Quick Start
+## Quick Start
 
 ```php
 use ElPandaPe\Sentinel\Facades\Sentinel;
@@ -172,7 +172,7 @@ Sentinel::withContext(['reason' => 'Approved by finance'], function () {
 });
 ```
 
-> ⚠️ **`withoutAuditing()` is the one that survives an exception.** It restores the previous state in
+> **`withoutAuditing()` is the one that survives an exception.** It restores the previous state in
 > a `finally`, so it nests and cannot leak. `pause()` sets a flag and nothing takes it back down:
 > throw between a `pause()` and its `resume()` and auditing stays off for the rest of the request,
 > silently, with the entries that were supposed to be written simply absent.
@@ -182,34 +182,34 @@ Sentinel::withContext(['reason' => 'Approved by finance'], function () {
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 The full documentation lives in [`docs/`](docs/). This README is the overview;
 that tree is the manual.
 
 | Section | What it covers |
 |---|---|
-| 🧠 [Concepts](docs/01-concepts/) | What Sentinel is and is not · the audit record · the write path · the integrity model · architecture · glossary |
-| 🚀 [Getting started](docs/02-getting-started/) | Installation · your first audit · what a model declares · turning auditing off · choosing your setup |
-| 📥 [Capture](docs/03-capture/) | What gets audited · snapshots · diffs · relationships · mass operations · transactions · custom and auth events · state transitions |
-| 🧭 [Context](docs/04-context/) | Execution context · the ten resolvers · actor and impersonation · multi-tenancy · queues and commands · distributed tracing · writing a resolver |
-| 🛡️ [Pipeline & security](docs/05-pipeline-and-security/) | The write pipeline · protecting sensitive data · encryption and the keyring · hashing · writing a masker · discarding entries |
-| 🔎 [Reading the trail](docs/06-reading/) | The Query API · filters · order and paging · field history · the timeline · labels · serialization · restoring state |
-| 🔐 [Integrity](docs/07-integrity/) | The hash chain · streams · canonicalization · signing · checkpoints and anchors · verification · the verification playbook |
-| ♻️ [Lifecycle](docs/08-lifecycle/) | Retention and pruning · cold archiving · rehydration · redaction and tombstones · compliance mode · export and rekey |
-| ⚙️ [Operations](docs/09-operations/) | Performance modes · the buffered mode · queues · events · failure policy · commands · scheduling · monitoring |
-| 🐘 [Database engines](docs/10-database-engines/) | Choosing an engine · PostgreSQL · MySQL · SQLite · indexes and JSON · partitioning · a database of its own · scaling |
-| 🧩 [Extending](docs/11-extending/) | The Ledger contract · shipped drivers · writing a driver · the contract test suite · fanout · swapping components · testing your integration |
-| 🔄 [Migrating in](docs/12-migrating/) | From owen-it/laravel-auditing · from altek/accountant · the import runbook |
-| ✅ [Best practices](docs/13-best-practices/) | Do and don't · anti-patterns · security checklist · production readiness |
-| 📚 [Reference](docs/99-reference/) | The facade · configuration · schema · enums · events · exceptions · exit codes · serialization · API stability |
+| [Concepts](docs/01-concepts/) | What Sentinel is and is not · the audit record · the write path · the integrity model · architecture · glossary |
+| [Getting started](docs/02-getting-started/) | Installation · your first audit · what a model declares · turning auditing off · choosing your setup |
+| [Capture](docs/03-capture/) | What gets audited · snapshots · diffs · relationships · mass operations · transactions · custom and auth events · state transitions |
+| [Context](docs/04-context/) | Execution context · the ten resolvers · actor and impersonation · multi-tenancy · queues and commands · distributed tracing · writing a resolver |
+| [Pipeline & security](docs/05-pipeline-and-security/) | The write pipeline · protecting sensitive data · encryption and the keyring · hashing · writing a masker · discarding entries |
+| [Reading the trail](docs/06-reading/) | The Query API · filters · order and paging · field history · the timeline · labels · serialization · restoring state |
+| [Integrity](docs/07-integrity/) | The hash chain · streams · canonicalization · signing · checkpoints and anchors · verification · the verification playbook |
+| [Lifecycle](docs/08-lifecycle/) | Retention and pruning · cold archiving · rehydration · redaction and tombstones · compliance mode · export and rekey |
+| [Operations](docs/09-operations/) | Performance modes · the buffered mode · queues · events · failure policy · commands · scheduling · monitoring |
+| [Database engines](docs/10-database-engines/) | Choosing an engine · PostgreSQL · MySQL · SQLite · indexes and JSON · partitioning · a database of its own · scaling |
+| [Extending](docs/11-extending/) | The Ledger contract · shipped drivers · writing a driver · the contract test suite · fanout · swapping components · testing your integration |
+| [Migrating in](docs/12-migrating/) | From owen-it/laravel-auditing · from altek/accountant · the import runbook |
+| [Best practices](docs/13-best-practices/) | Do and don't · anti-patterns · security checklist · production readiness |
+| [Reference](docs/99-reference/) | The facade · configuration · schema · enums · events · exceptions · exit codes · serialization · API stability |
 
-> 💡 **New here?** Read [What Sentinel is (and is not)](docs/01-concepts/01-what-sentinel-is.md)
+> **New here?** Read [What Sentinel is (and is not)](docs/01-concepts/01-what-sentinel-is.md)
 > first. It includes an honest section on when *not* to adopt this package.
 
 ---
 
-## 📥 What Gets Audited
+## What Gets Audited
 
 Adding the trait covers the five Eloquent events: `created`, `updated`, `deleted`, `restored` and
 `forceDeleted`. A soft delete, a real delete and a restore are told apart, and each gets its own
@@ -224,9 +224,9 @@ class Invoice extends Model
 }
 ```
 
-> 📌 **Eloquent fires no model event for `Builder::update()` or `Builder::delete()`.** That is a
+> **Eloquent fires no model event for `Builder::update()` or `Builder::delete()`.** That is a
 > limitation of the framework, not of this package, and every auditing package in this ecosystem
-> documents it. Sentinel's answer is [mass operations](#-mass-operations) — opt-in per query.
+> documents it. Sentinel's answer is [mass operations](#mass-operations) — opt-in per query.
 
 An update that changed nothing writes nothing: the `FilterUnchanged` stage discards it before the
 ledger assigns a sequence, so the chain gets no gap.
@@ -236,7 +236,7 @@ ledger assigns a sequence, so the chain gets no gap.
 
 ---
 
-## 📸 Snapshots & Diffs
+## Snapshots & Diffs
 
 Every entry carries the **complete state**, not just the delta. The diff is derived, so you get both
 without storing both twice.
@@ -255,7 +255,7 @@ Hidden attributes are audited by default — auditing is what the package is for
 `snapshots.include_hidden` when a hidden attribute is something you deliberately never want on
 record.
 
-> 📌 **Two audits, one comparison.** `$audit->comparedTo($other)` and
+> **Two audits, one comparison.** `$audit->comparedTo($other)` and
 > `Sentinel::audits()->for($invoice)->compare(3, 7)` both answer *what is different between these
 > two versions*, without replaying everything in between.
 
@@ -263,7 +263,7 @@ record.
 
 ---
 
-## 🧭 Context & Actors
+## Context & Actors
 
 Ten resolvers fill in the circumstances an entry was written under. Every one of them is replaceable
 by a class of yours, in config, with no subclassing.
@@ -289,7 +289,7 @@ by a class of yours, in config, with no subclassing.
 ],
 ```
 
-> ⚠️ **Wire the tenant resolver before the first entry is written.** The tenant is the default stream
+> **Wire the tenant resolver before the first entry is written.** The tenant is the default stream
 > scope, so turning one on partitions the chain — a decision that does not apply retroactively to a
 > trail that already exists.
 
@@ -299,17 +299,17 @@ by a class of yours, in config, with no subclassing.
 
 ---
 
-## 🛡️ Protecting Sensitive Data
+## Protecting Sensitive Data
 
 Four mechanisms, four different promises. Picking the wrong one is the most common security mistake
 made with an audit trail.
 
 | Mechanism | Recoverable | Comparable | What it is for |
 |---|---|---|---|
-| `$auditExclude` | ❌ never captured | ❌ | The value must not exist in the trail at all |
-| `$auditRedact` | ❌ | ❌ | The value is masked as it is written |
-| `$auditEncrypt` | ✅ with the key | ❌ | You will need to read it back |
-| `$auditHash` | ❌ | ✅ | You only ever ask *is this the same value* |
+| `$auditExclude` | No — never captured | No | The value must not exist in the trail at all |
+| `$auditRedact` | No | No | The value is masked as it is written |
+| `$auditEncrypt` | Yes, with the key | No | You will need to read it back |
+| `$auditHash` | No | Yes | You only ever ask *is this the same value* |
 
 ```php
 class Patient extends Model
@@ -327,40 +327,10 @@ Model declarations and the config-level lists in `security.*` **add up** — the
 config list is the only way to name a key no model owns: an address, a console argument, a context
 field.
 
-> 🔒 **The chain hashes the ciphertext, not the plaintext.** That is what lets an external auditor
+> **The chain hashes the ciphertext, not the plaintext.** That is what lets an external auditor
 > verify the whole trail while holding none of your encryption keys. It also means an encrypted field
 > is opaque to verification: the chain proves the row was not altered, not that the plaintext is what
 > you think it is.
-
-### Best Practices
-
-✅ **Do** — pick exactly **one** treatment per field: exclude when the value must not exist, redact when a human must recognise it, hash when only *did it change* matters, encrypt when it has to come back:
-
-```php
-protected array $auditExclude = ['remember_token'];
-protected array $auditRedact  = ['email'];
-protected array $auditHash    = ['card_number'];
-protected array $auditEncrypt = ['national_id'];
-```
-
-❌ **Don't** — name a field in two lists. The stages run in order and the second sees the first one's output, so the plaintext is unrecoverable even to the key holder:
-
-```php
-protected array $auditRedact  = ['national_id'];
-protected array $auditEncrypt = ['national_id'];   // encrypts the mask, not the value
-```
-
-✅ **Do** — encrypt anything a restore may need. `Restore\Planner` decrypts with the `key_id` the *entry* recorded, so yesterday's key still restores while it stays on the ring:
-
-```php
-protected array $auditEncrypt = ['iban'];
-```
-
-❌ **Don't** — redact or hash a field you may want back. The planner refuses both outright, with `Omission::RedactedField` and `Omission::HashedField`:
-
-```php
-protected array $auditHash = ['iban'];   // $audit->restore() will skip this field forever
-```
 
 → [Protecting sensitive data](docs/05-pipeline-and-security/02-protecting-sensitive-data.md) ·
 [Encryption and the keyring](docs/05-pipeline-and-security/03-encryption-and-the-keyring.md) ·
@@ -368,7 +338,7 @@ protected array $auditHash = ['iban'];   // $audit->restore() will skip this fie
 
 ---
 
-## 🔎 Querying the Trail
+## Querying the Trail
 
 `Sentinel::audits()` is the way in. It reads through the ledger contract, so a driver over something
 that is not a table answers the same query.
@@ -392,53 +362,13 @@ Sentinel::audits()
 Twenty-one filters ship, including `whereIp()` and `whereRoute()` — the two that live inside the
 context JSON — plus the three relation filters and `whereVersion()`.
 
-> 📌 **`get()` refuses above 500 rather than truncating.** A prefix shaped exactly like a complete
+> **`get()` refuses above 500 rather than truncating.** A prefix shaped exactly like a complete
 > answer is the one mistake a trail cannot afford, so the read throws instead. Use `take()`,
 > `paginate()` or `after()` to walk it.
 
-> 💡 **There is deliberately no `total()`.** Counting an append-only table of ten million rows is a
+> **There is deliberately no `total()`.** Counting an append-only table of ten million rows is a
 > table scan every time it is asked, and nobody needs the number badly enough to pay for it on every
 > page render.
-
-### Best Practices
-
-✅ **Do** — bound every read you cannot prove is small. `take()` asks for a prefix on purpose; `paginate()` costs one call to the ledger:
-
-```php
-$page = Sentinel::audits()->for($invoice)->latest()->paginate(50);
-```
-
-❌ **Don't** — rely on a bare `get()`. It throws `QueryException::unbounded` once the filter matches more than 500 entries — refusing rather than handing back a prefix shaped like a complete answer:
-
-```php
-Sentinel::audits()->whereType('model')->get();   // QueryException::unbounded
-```
-
-✅ **Do** — put an indexed filter in front of a refiner. `whereSource()`, `between()`, `whereFieldChanged()`, `whereVersion()` and `whereOperation()` reach no index of their own:
-
-```php
-Sentinel::audits()->for($patient)->whereFieldChanged('diagnosis')->take(100)->get();
-```
-
-❌ **Don't** — run a refiner alone on a large table:
-
-```php
-Sentinel::audits()->whereFieldChanged('email')->take(100)->get();   // a full pass on MySQL and PostgreSQL
-```
-
-✅ **Do** — walk a whole trail from a background process with `after()`, which compiles to `id > ?` and costs the same at any depth. Guard the first pass — `after()` is not nullable:
-
-```php
-$query  = Sentinel::audits()->whereType('model')->take(1000);
-$batch  = ($cursor === null ? $query : $query->after($cursor))->get();
-$cursor = $batch->last()?->id ?? $cursor;
-```
-
-❌ **Don't** — combine `after()` with `latest()` expecting a backwards cursor. The predicate stays `>` in both directions; only the `ORDER BY` reverses:
-
-```php
-Sentinel::audits()->latest()->after($cursor)->get();   // entries newer than the cursor, newest first
-```
 
 → [The Query API](docs/06-reading/01-the-query-api.md) ·
 [Filters reference](docs/06-reading/02-filters-reference.md) ·
@@ -446,7 +376,7 @@ Sentinel::audits()->latest()->after($cursor)->get();   // entries newer than the
 
 ---
 
-## 🔗 Relationships
+## Relationships
 
 A pivot table changing under you is something Eloquent barely announces and no other package in this
 ecosystem records. Sentinel covers the six pivot operations with no changes to your code.
@@ -478,7 +408,7 @@ class Invoice extends Model
 }
 ```
 
-> 📌 **The relation projection is an index, not the evidence.** `sentinel_audit_relations` exists so
+> **The relation projection is an index, not the evidence.** `sentinel_audit_relations` exists so
 > you can ask questions quickly; the entry in `sentinel_audits` is what is hashed and what an auditor
 > reads.
 
@@ -486,7 +416,7 @@ class Invoice extends Model
 
 ---
 
-## 📦 Mass Operations
+## Mass Operations
 
 The blind spot every auditing package in this ecosystem documents as a limitation — closed, and
 costing nothing until a query asks for it.
@@ -508,41 +438,15 @@ Invoice::where('created_at', '<', $cutoff)->auditing('individual')->delete();
 The criteria are recorded **without their values** past a sample bound: a `whereIn` over five
 thousand identifiers records the count and a sample, never the list.
 
-> ⚠️ **`affected_rows` means what your engine says it means.** MySQL counts rows *changed*, not rows
+> **`affected_rows` means what your engine says it means.** MySQL counts rows *changed*, not rows
 > *matched*, unless configured otherwise. It is stored unnormalised on purpose — normalising it would
 > be inventing a number no engine reported.
-
-### Best Practices
-
-✅ **Do** — opt in per query for the statements Eloquent fires no model event for:
-
-```php
-Invoice::query()->where('status', 'draft')->auditing()->update(['status' => 'void']);
-```
-
-❌ **Don't** — look for a flag that audits every mass update globally. There is none, by design, and a statement that does not ask is silently unaudited:
-
-```php
-Invoice::query()->where('status', 'draft')->update(['status' => 'void']);   // no entry, no warning
-```
-
-✅ **Do** — stay on the default `summary` mode unless you need each row's real `before`. It is the only mode whose cost does not grow with the size of the set:
-
-```php
-Invoice::query()->whereIn('id', $thousands)->auditing()->update(['status' => 'void']);
-```
-
-❌ **Don't** — reach for `individual` on an unbounded set. It writes one entry per row, with a snapshot apiece:
-
-```php
-Invoice::query()->auditing('individual')->update(['status' => 'void']);   // one entry per row in the table
-```
 
 → [Mass operations](docs/03-capture/05-mass-operations.md)
 
 ---
 
-## 🧾 Transactions, Events & Transitions
+## Transactions, Events & Transitions
 
 Three ways to record a fact that no single model change describes.
 
@@ -570,7 +474,7 @@ Sentinel::transitions()->for($invoice)->get();   // the lifeline, with time spen
 Set `transactions.after_commit` and entries wait for the database commit, so a rollback leaves no
 record of what never happened.
 
-> 📌 **A transaction correlates; it does not atomise.** `Sentinel::transaction()` opens no database
+> **A transaction correlates; it does not atomise.** `Sentinel::transaction()` opens no database
 > transaction. Wrap it in `DB::transaction()` yourself when you want both — keeping the two decisions
 > separate is deliberate.
 
@@ -580,7 +484,7 @@ record of what never happened.
 
 ---
 
-## ↩️ Restoring State
+## Restoring State
 
 ```php
 $result = $audit->restore();                    // the whole record
@@ -594,7 +498,7 @@ $result->reason('total');     // why this key is not in applied
 $result->entry;               // the entry the restoration itself wrote
 ```
 
-> 📌 **A restore is a write, and it is audited like one.** It appends an entry describing the
+> **A restore is a write, and it is audited like one.** It appends an entry describing the
 > restoration. It never deletes, rewrites or reorders what came before — that is the append-only
 > invariant, and it has no override.
 
@@ -605,7 +509,7 @@ whole-record restored, because altek never wrote a `before` to restore from.
 
 ---
 
-## 🔐 Integrity, Signing & Anchors
+## Integrity, Signing & Anchors
 
 **Chaining is unconditional.** Every entry links to the one before it in its stream, with no switch
 and no configuration. What is optional is signing it and anchoring it.
@@ -630,55 +534,14 @@ php artisan sentinel:verify --stream=global
 ],
 ```
 
-> 🔒 **What it proves, stated plainly.** The chain detects an edit, a reorder or a removal after the
+> **What it proves, stated plainly.** The chain detects an edit, a reorder or a removal after the
 > fact. A signature binds the chain to whoever holds the key. An anchor makes verification cheap and
 > keeps the evidence after the entries are pruned. **None of it defends against a compromised
 > application at capture time** — someone with application access produces a perfectly intact,
 > perfectly signed chain of false statements. That tier is out of scope and is not claimed anywhere.
 
-> 📌 **`keys` verifies, `private_key` signs.** Under `openssl` the verifying half is what an external
+> **`keys` verifies, `private_key` signs.** Under `openssl` the verifying half is what an external
 > auditor is given, and holding it is not enough to sign anything.
-
-### Best Practices
-
-✅ **Do** — decide `integrity.stream` **before there is data**. It ships as `tenant`, which behaves like `global` until a tenant actually resolves:
-
-```php
-'integrity' => ['stream' => 'global'],   // a single-tenant install that wants one chain
-```
-
-❌ **Don't** — change it on an installation with history and expect the chain to follow. Old rows keep their old stream inside their hash prefix, so you get two independent chains, not one continued:
-
-```php
-'integrity' => ['stream' => 'subject_type'],   // on a live trail: the history forks here
-```
-
-✅ **Do** — rotate a signing key by moving `key_id` while leaving the old key in `keys`. Every row records the key that signed it:
-
-```php
-'signature' => [
-    'key_id' => 'v2',
-    'keys'   => ['v1' => env('SENTINEL_SIGNING_PUBLIC_V1'), 'v2' => env('SENTINEL_SIGNING_PUBLIC_V2')],
-],
-```
-
-❌ **Don't** — remove a retired key, or read a range reported `anchored` as verified. `verifyAnchors()` opens no anchored entry; only `--depth=entries` rehashes:
-
-```bash
-php artisan sentinel:verify --depth=anchors    # proves the anchors hold, not what the entries say
-```
-
-✅ **Do** — run the **first** `sentinel:checkpoint` by hand, off the schedule, and only then schedule it:
-
-```bash
-php artisan sentinel:checkpoint    # over a pre-existing trail this is one read of the whole thing
-```
-
-❌ **Don't** — put it straight on a schedule over history that predates anchoring. There is no `--limit`:
-
-```php
-Schedule::command('sentinel:checkpoint')->hourly();   // fine — after the first run, never before
-```
 
 → [The hash chain](docs/07-integrity/01-the-hash-chain.md) ·
 [Signing](docs/07-integrity/04-signing.md) ·
@@ -687,7 +550,7 @@ Schedule::command('sentinel:checkpoint')->hourly();   // fine — after the firs
 
 ---
 
-## ♻️ Retention, Archiving & Redaction
+## Retention, Archiving & Redaction
 
 ```php
 // config/sentinel.php
@@ -710,39 +573,11 @@ included.
 Redaction destroys the contents of an entry while its position, its hash and its link stay — so the
 chain still verifies around the hole, and the hole is visible.
 
-> ⚠️ **Pruning does not reclaim disk space, and it says so.** Removing rows from an append-only table
+> **Pruning does not reclaim disk space, and it says so.** Removing rows from an append-only table
 > leaves the pages behind. Reclaiming them is an engine operation, documented per engine.
 
-> 📌 **The unit of retention is the anchored window, not the entry.** The effective retention of a
+> **The unit of retention is the anchored window, not the entry.** The effective retention of a
 > range is that of its longest-lived entry. Anything no policy names is kept forever.
-
-### Best Practices
-
-✅ **Do** — anchor before you prune, and keep `sentinel_checkpoints` backed up alongside the entries. After the first retirement the anchor is the only evidence left behind a purged range:
-
-```php
-Schedule::command('sentinel:checkpoint')->hourly();
-Schedule::command('sentinel:prune')->dailyAt('03:00');
-```
-
-❌ **Don't** — expect a prune to free anything on a stream nobody anchored. The unit of retention is the anchored window, not the entry:
-
-```bash
-php artisan sentinel:prune    # releases nothing while the stream has no anchors
-```
-
-✅ **Do** — prune with `--action=archive`, the default: the batch is written, read back and rehashed before a single row is removed:
-
-```bash
-php artisan sentinel:prune --dry-run
-php artisan sentinel:prune --action=archive
-```
-
-❌ **Don't** — expect a prune to reclaim disk space. InnoDB does not return freed pages and PostgreSQL needs its own pass:
-
-```bash
-php artisan sentinel:prune     # rows go; the file does not shrink until you say so
-```
 
 → [Retention and pruning](docs/08-lifecycle/01-retention-and-pruning.md) ·
 [Cold archiving](docs/08-lifecycle/02-cold-archiving.md) ·
@@ -750,7 +585,7 @@ php artisan sentinel:prune     # rows go; the file does not shrink until you say
 
 ---
 
-## 📋 Compliance Mode
+## Compliance Mode
 
 ```php
 // config/sentinel.php
@@ -766,7 +601,7 @@ php artisan sentinel:export --format=ndjson --tenant=acme --disk=s3 --path=audit
 php artisan sentinel:rekey
 ```
 
-> ⚠️ **Sentinel certifies nothing.** It ships technical primitives — a chain, signatures, anchors,
+> **Sentinel certifies nothing.** It ships technical primitives — a chain, signatures, anchors,
 > tombstones, an access record. Whether a given regime is satisfied by them is a question for your
 > auditor, and the documentation names the blind spots rather than hiding them.
 
@@ -775,7 +610,7 @@ php artisan sentinel:rekey
 
 ---
 
-## ⚙️ Performance Modes
+## Performance Modes
 
 ```php
 'mode' => env('SENTINEL_MODE', 'sync'),   // sync | queue | buffered
@@ -792,47 +627,21 @@ work — under the other two the request has returned before the ledger is touch
 *request* about twice as fast and the *system* slightly slower, so it is rarely the answer to
 "auditing is slow"; measure what is actually slow first.
 
-> ⚠️ **Write down the buffered mode's loss window before you ship it.** It is bounded only by
+> **Write down the buffered mode's loss window before you ship it.** It is bounded only by
 > `buffer.size` and `buffer.flush_interval`, nothing in PHP watches the clock between requests, and
 > **the chain cannot detect the loss** — a trail with a hole looks exactly like a trail of a system
 > where nothing happened.
 
-> 📌 **Under an asynchronous mode, `created_at` stops being the order things happened in.** Order
+> **Under an asynchronous mode, `created_at` stops being the order things happened in.** Order
 > comes from `(stream, sequence)`; `occurred_at` records when the fact happened. A retry is not a
 > second entry: `capture_id` makes settlement idempotent.
-
-### Best Practices
-
-✅ **Do** — stay on `sync` until request latency is a measured problem. It is the only mode where the caller can still be told the write did not work:
-
-```php
-'mode' => env('SENTINEL_MODE', 'sync'),
-```
-
-❌ **Don't** — reach for `buffered` because it benchmarks fastest. What a process dies holding never reached the ledger, and the chain provably cannot tell you that it did:
-
-```php
-'mode' => 'buffered',   // shipped with no scheduled flush and no BufferFlushFailed listener
-```
-
-✅ **Do** — schedule `sentinel:flush` under `buffered`. It is the only thing that puts a real ceiling on the loss window, because nothing in PHP watches the clock between requests:
-
-```php
-Schedule::command('sentinel:flush')->everyMinute();
-```
-
-❌ **Don't** — leave a query ordering by the ledger's clock before switching to an asynchronous mode. It keeps working and quietly starts answering a different question:
-
-```php
-Sentinel::audits()->for($invoice)->latest()->get();   // settle order, not the order things happened
-```
 
 → [Performance modes](docs/09-operations/01-performance-modes.md) ·
 [The buffered mode](docs/09-operations/02-the-buffered-mode.md)
 
 ---
 
-## 🐘 Engines & Scale
+## Engines & Scale
 
 | Engine | Run on every push | What the emitted SQL needs |
 |---|---|---|
@@ -859,37 +668,9 @@ php artisan vendor:publish --tag=sentinel-migrations
 php artisan sentinel:partitions --table=audits --ahead=3
 ```
 
-> 🐘 **SQLite has a ceiling, and it is not a version.** `SQLITE_MAX_VARIABLE_NUMBER` is a
+> **SQLite has a ceiling, and it is not a version.** `SQLITE_MAX_VARIABLE_NUMBER` is a
 > compile-time constant of `libsqlite3` and bounds how many placeholders one statement may carry. The
 > package batches to fit the *narrowest* of the three engines rather than the widest.
-
-### Best Practices
-
-✅ **Do** — choose the engine before the first entry is written. Moving a trail between engines once a chain exists is an export, an import and a verification, not a `mysqldump`:
-
-```php
-'database' => ['connection' => 'pgsql_audit'],   // its own connection, decided up front
-```
-
-❌ **Don't** — assume MariaDB is MySQL. It is refused by name rather than guessed at:
-
-```php
-// LedgerException: Sentinel has no field predicate for the [mariadb] engine.
-Sentinel::audits()->whereFieldChanged('total')->get();
-```
-
-✅ **Do** — publish the partitioned migration **instead of** the base one when you already know the table will be large. Converting a populated table later is a staged migration:
-
-```bash
-php artisan vendor:publish --tag=sentinel-migrations
-# then replace the create migration with database/stubs/partitioned/pgsql-range/
-```
-
-❌ **Don't** — partition and then forget to keep partitions supplied. A table that runs out of them stops accepting writes:
-
-```php
-Schedule::command('sentinel:partitions --ahead=3')->daily();
-```
 
 → [Choosing an engine](docs/10-database-engines/01-choosing-an-engine.md) ·
 [Partitioning](docs/10-database-engines/06-partitioning.md) ·
@@ -897,7 +678,7 @@ Schedule::command('sentinel:partitions --ahead=3')->daily();
 
 ---
 
-## 🖥️ Artisan Commands
+## Artisan Commands
 
 | Command | What it does |
 |---|---|
@@ -916,7 +697,7 @@ Schedule::command('sentinel:partitions --ahead=3')->daily();
 All eleven share one exit-code vocabulary, so a cron can branch on the result rather than parse the
 output. `php artisan about` carries a Sentinel section.
 
-> ⚠️ **The package registers nothing on your scheduler.** Anchoring, pruning, flushing and partition
+> **The package registers nothing on your scheduler.** Anchoring, pruning, flushing and partition
 > maintenance are commands *your application* schedules. A team that assumes otherwise silently gets
 > none of them.
 
@@ -926,7 +707,7 @@ output. `php artisan about` carries a Sentinel section.
 
 ---
 
-## 🧩 Ledger Drivers
+## Ledger Drivers
 
 Five drivers ship: `database`, `memory`, `null`, `archive` and `fanout`. The contract is published,
 and so is the conformance suite that proves an implementation of it — as production code, inside the
@@ -957,7 +738,7 @@ final class ElasticLedgerTest extends LedgerContractTestCase
 }
 ```
 
-> 📌 **`memory` is a reference implementation and a test double, never a store.** `archive` is a
+> **`memory` is a reference implementation and a test double, never a store.** `archive` is a
 > destination and must never be `ledger.default`.
 
 → [The Ledger contract](docs/11-extending/01-the-ledger-contract.md) ·
@@ -966,7 +747,7 @@ final class ElasticLedgerTest extends LedgerContractTestCase
 
 ---
 
-## 🔧 Configuration
+## Configuration
 
 `config/sentinel.php` ships every section the package uses, with the optional ones turned off. Read
 it once and you know what is there.
@@ -975,11 +756,11 @@ it once and you know what is there.
 installation.** A prefix and one key per table; change either and every query, migration and command
 follows, because nothing in the package writes a table name literally.
 
-> 📌 **Every key also has a default in code.** Laravel merges a published config file one level deep,
+> **Every key also has a default in code.** Laravel merges a published config file one level deep,
 > so an installation that published `sentinel.php` before a subtree existed would otherwise silently
 > win over the package and end up with nothing configured at all.
 
-> 📌 **A driver subtree that ships empty takes no options.** `database`, `memory` and `null` get an
+> **A driver subtree that ships empty takes no options.** `database`, `memory` and `null` get an
 > empty array each — the shape of a driver with nothing to configure, not an invitation. Anything put
 > in one is ignored without a word.
 
@@ -988,7 +769,7 @@ follows, because nothing in the package writes a table name literally.
 
 ---
 
-## 🔄 Migrating from Another Package
+## Migrating from Another Package
 
 A history written by `owen-it/laravel-auditing` or `altek/accountant` has a way in. Start with the
 dry run, which is the documented route and not a suggestion:
@@ -998,7 +779,7 @@ php artisan sentinel:import --from=owenit --dry-run
 php artisan sentinel:import --from=owenit
 ```
 
-> ⚠️ **The chain starts at the import.** What the other package recorded before it has no link,
+> **The chain starts at the import.** What the other package recorded before it has no link,
 > because nobody hashed those rows as they were written. Sentinel could fabricate one backwards and
 > does not: that would be a proof nobody touched data this package never saw. Your trail is provable
 > from the import forward, and honest about the part before it.
@@ -1009,17 +790,17 @@ php artisan sentinel:import --from=owenit
 
 ---
 
-## 📦 Stability
+## Stability
 
 From `v1.0.0-rc.1` the public surface stops moving. Between this tag and `v1.0.0` only bugfixes and
 documentation land; after `v1.0.0` the ordinary rules of semantic versioning apply.
 
-**✅ Frozen** — the `Sentinel` facade · the `Auditable` trait and every declaration a model makes with
+**Frozen** — the `Sentinel` facade · the `Auditable` trait and every declaration a model makes with
 it · `Contracts\` · `Data\AuditData` and `Models\Audit` including `toArray()` · the Query API ·
 `RestoreResult`, `Tombstone` and the verification results · the eleven events · the eleven commands
 and their exit codes · every key in `config/sentinel.php` · the serialised entry.
 
-**⚠️ Not frozen** — everything marked `@internal`. The rule is an invariant, not a count: every
+**Not frozen** — everything marked `@internal`. The rule is an invariant, not a count: every
 declaration this package ships is either in the frozen list or carries the marker, and one that is
 neither fails the build.
 
@@ -1028,14 +809,14 @@ incorrect, insecure or unverifiable, or only something uncomfortable? Correctnes
 integrity breaks the freeze, and the release is renumbered `rc.2` with the feedback period starting
 again from zero. Ergonomics waits for a `1.x` or a `2.0`.
 
-> 🔐 **Stricter than semver.** Anything touching `sequence`, `hash`, `previous_hash` or the canonical
+> **Stricter than semver.** Anything touching `sequence`, `hash`, `previous_hash` or the canonical
 > payload bumps `payload_version` and ships a backwards-compatibility test.
 
 → [API stability](docs/99-reference/09-api-stability.md)
 
 ---
 
-## 🧪 Development
+## Development
 
 No local PHP or Composer needed — everything runs through Docker:
 
@@ -1059,7 +840,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request, and
 
 ---
 
-## 👤 Credits & License
+## Credits & License
 
 Built by [Carlos Mayorga](https://carlosmayorga.me/).
 
