@@ -24,6 +24,21 @@ it('reads the trail in the order things happened, not the order they were record
         ->and(Sentinel::audits()->get()->pluck('event')->all())->toBe(['last', 'first', 'middle']);
 });
 
+/**
+ * A known limitation of 1.0, pinned here so it cannot drift without saying so. The cursor is the
+ * identifier and the order is the clock of the fact, and the two agree only while writing is
+ * synchronous. Where they disagree, resuming behind an entry skips whatever was minted before it
+ * and happened after it. Composing a cursor out of both axes would change what after() means.
+ */
+it('walks past an entry minted before the cursor and dated after it', function (): void {
+    $ledger = app(DatabaseLedger::class);
+    $ledger->write(auditData(['event' => 'last', 'occurred_at' => new DateTimeImmutable('2026-08-26 12:00:00')]));
+    $first = $ledger->write(auditData(['event' => 'first', 'occurred_at' => new DateTimeImmutable('2026-08-26 10:00:00')]));
+
+    expect(Sentinel::timeline()->get()->pluck('event')->all())->toBe(['first', 'last'])
+        ->and(Sentinel::timeline()->after($first->id)->get()->pluck('event')->all())->toBeEmpty();
+});
+
 it('breaks a tie on the identifier, which sorts by the instant it was minted', function (): void {
     foreach ([frozenUlid('AAA1'), frozenUlid('AAA2')] as $index => $id) {
         insertAudit([
