@@ -146,6 +146,23 @@ it('waits on the default connection for an entry that names no subject', functio
         ->and(Audit::query()->firstOrFail()->subject_type)->toBeNull();
 });
 
+/**
+ * A known limitation of 1.0, pinned here so it cannot drift without saying so. The deferral hangs
+ * off the subject's connection, and an entry naming no subject has no subject to ask: it waits on
+ * the application's default connection, which a transaction opened on any other never reaches.
+ */
+it('waits on nothing when the transaction was opened on a connection the entry never names', function (): void {
+    config()->set('database.connections.reporting', ['driver' => 'sqlite', 'database' => ':memory:']);
+
+    rescue(static fn (): mixed => DB::connection('reporting')->transaction(static function (): void {
+        Sentinel::event('payment.approved')->record();
+
+        throw new RuntimeException('undo');
+    }), report: false);
+
+    expect(Audit::query()->where('event', 'payment.approved')->count())->toBe(1);
+});
+
 it('behaves exactly as before outside any transaction', function (): void {
     $audit = AuditedSubject::query()->create(['name' => 'plain'])->latestAudit();
 
