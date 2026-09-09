@@ -175,7 +175,10 @@ Nineteen rows cover seventeen of the nineteen `Enums\Filter` cases:
 The two remaining cases get dedicated tests, because neither is a property of an entry:
 `Filter::Period` in `it_bounds_a_period_by_both_of_its_ends` and
 `it_narrows_to_one_subject_inside_a_period_newest_first`; `Filter::After` in
-`it_resumes_a_walk_after_the_entry_it_was_given` and `it_answers_nothing_after_the_last_entry_it_holds`.
+`it_resumes_a_walk_after_the_entry_it_was_given`, `it_answers_nothing_after_the_last_entry_it_holds`
+and `it_orders_by_the_identifier_behind_a_cursor_even_where_its_clock_disagrees` — the last one
+crosses `created_at` against the identifier the way two concurrent writers do, and holds a driver to
+the identifier as the whole order behind a cursor, not the tie-break.
 
 **Every one of them is held to one of two answers, never to neither.** If your driver declares the
 filter through `Contracts\DeclaresFilters`, the case asserts the result set. If it does not, the case

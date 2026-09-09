@@ -218,6 +218,12 @@ By identifier, never by clock. The identifier is the axis because it is total, i
 every composite index the table carries, and a ULID sorts by the instant it was minted — where two
 entries sharing a clock reading do not order against each other at all.
 
+And by identifier is how the walk is **ordered**: behind a cursor the read is sorted on `id` alone,
+not on `created_at, id`. It is the only axis a cursor cut from `id` is exact on. The two agree while
+one process writes; two workers writing in the same millisecond order one way by `created_at`,
+which carries microseconds, and the other way by ULID, which does not — and a walk ordered by the
+clock would resume behind the wrong neighbour and skip one for good.
+
 Because the predicate is a *place*, a cursor pass costs the same at any depth. An offset pass does
 not.
 
@@ -276,30 +282,31 @@ resumes it, and the command prints the identifier to resume behind when it finis
 
 ### What a cursor cannot do
 
-> ⚠️ **Warning.** `after()` means `id > cursor` **in both directions**. Under `latest()` the
-> predicate does not flip: you get the entries *newer* than the cursor, handed back newest first,
-> which is not the continuation of a backwards walk. There is no `before()`. To walk backwards,
-> either page with `paginate()->latest()` and accept the offset cost, or walk forwards and reverse in
-> your own code.
+> ⚠️ **Warning.** There is no `before()`, and `after()` refuses `latest()`: a cursor is cut from
+> the identifier and walks along it, forwards. Combining the two throws
+> `QueryException::cursorOffItsAxis()`, whichever was asked for first. To walk backwards, either
+> page with `paginate()->latest()` and accept the offset cost, or walk forwards and reverse in your
+> own code.
 
 `after()` and `paginate()` also compose without complaining, and the result is almost never what was
 meant: the cursor narrows first and the offset is then applied *inside* what is left, so
 `after($id)->paginate(50, 2)` skips fifty entries beyond the cursor. Pick one.
 
-`byOccurrence()` composes just as quietly, and it is the one combination that loses entries instead
-of repeating them. The cursor is a place on the identifier axis; `byOccurrence()` orders on the other
-one. While writing is synchronous the two agree and nothing shows. Under `queue`, `buffered`, an
-import or a backdated capture they come apart, and resuming behind an entry skips everything minted
-before it that happened after it:
+`byOccurrence()` is refused for the same reason, and it is the combination that mattered most:
+ordered by the clock of the fact, a resumed walk skipped whatever was minted before the cursor and
+happened after it — under `queue`, `buffered`, an import or a backdated capture, exactly where that
+order is wanted. `Sentinel::timeline()` carries that clock by default and refuses a cursor too. To
+walk in occurrence order, walk by the cursor and sort each batch on `occurred_at` in your own code,
+or page a window fixed with `between()`.
 
 ```php
-// 'last' was written first, so it holds the lower identifier; 'first' happened earlier.
-Sentinel::timeline()->get()->pluck('event');                   // ['first', 'last']
-Sentinel::timeline()->after($firstId)->get()->pluck('event');  // [] — 'last' sits behind the cursor
+Sentinel::timeline()->after($id);                                        // QueryException::cursorOffItsAxis()
+Sentinel::audits()->after($id)->take(500)->get()->sortBy('occurred_at'); // walk by id, order the batch by the fact
 ```
 
-Walk with `Sentinel::audits()`, whose order is the cursor's own axis, and sort the result on
-`occurred_at` in your own code — or page a window fixed with `between()`.
+Before `v1.0.0-rc.2` both combinations were accepted and walked the wrong axis, and the ordinary
+walk was ordered by `created_at, id`, which skipped an entry at a page boundary whenever two workers
+had written in the same millisecond.
 
 Finally, `Filter::After` is a declared filter like any other, and it is **not** in
 `Filter::assumed()` — the nine filters a driver is credited with when it does not implement
@@ -450,13 +457,13 @@ Two more facts about the same mechanism:
 | Symptom | Cause | Fix |
 |---|---|---|
 | `QueryException`: *"This filter matches at least 500 entries…"* | An uncapped `get()` filled its 501-row probe | Narrow the filter, `take($n)` a prefix on purpose, or `paginate()` |
-| A backwards walk keeps handing back entries you already processed | `after()` is `id > ?` in **both** directions; under `latest()` it returns entries newer than the cursor | Walk forwards with `after()`; page with `paginate()` if you must go backwards |
+| A backwards walk keeps handing back entries you already processed | You are on a release before `v1.0.0-rc.2`, where `after()` under `latest()` returned entries newer than the cursor, newest first | From that candidate on the combination throws. Walk forwards with `after()`; page with `paginate()` if you must go backwards |
 | A `latest()` offset walk shows the same entry on two consecutive pages | Under `latest()` new entries land at the head, shifting every offset by one per write | Fix the window with `between()` before the walk, or walk oldest-first with a cursor |
 | `after($id)->paginate(50, 2)` silently skips 50 entries beyond the cursor | `after` and `offset` are independent criteria and both apply | Use a cursor **or** an offset, never both |
 | `$page->total` is undefined | `AuditPage` carries `entries`, `page`, `perPage`, `hasMore` and nothing else | Use `hasMore`; there is deliberately no count |
 | `AuditResource::collection($page)` renders a bare JSON array with no `meta` / `links` | `AuditPage` is not a Laravel paginator | Wrap `$page->entries` and build the envelope yourself |
 | `Sentinel::timeline()->between(...)` returns entries whose `occurred_at` is outside the window | `between()` bounds `created_at`; `byOccurrence()` changes only the ordering | Read it as *sealed in this window, ordered by when it happened* |
-| A cursor walk under `byOccurrence()` or `Sentinel::timeline()` never reaches an entry you can see in the table | `after()` is a place on `id`; the order is `occurred_at`, and the two axes come apart the moment writing is not synchronous | Walk with `Sentinel::audits()` and sort in your own code, or page a window fixed with `between()` |
+| `QueryException::cursorOffItsAxis()` from `after()`, `byOccurrence()` or `latest()` | A cursor is cut from `id` and walks along it; a clock order would skip entries at a page boundary | Walk in the default order and sort each batch in your own code, or page a window fixed with `between()` |
 | `LedgerException` naming `after()` on a third-party driver | `Filter::After` is not in `Filter::assumed()` | Implement `Contracts\DeclaresFilters` and name `Filter::After` |
 | A compliance-mode walk never finishes | Each page appends one `access` entry to the tail; at `perPage = 1` the tail grows as fast as the walk | Bound with `between()` fixed before the walk, and page in hundreds, not ones |
 | `sentinel:verify --from=1 --to=100` exits `INVALID` | A sequence range is a question about one chain | Pass `--stream` alongside `--from` / `--to` |

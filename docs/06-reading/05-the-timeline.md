@@ -156,13 +156,12 @@ configured header (`resolvers.request.header`, default `X-Request-Id`), honours 
 
 ### Paging a timeline
 
-`paginate()` and `after()` behave exactly as they do on any other read — one call to the ledger, no
-total, and a cursor that is `id > ?` in **both** directions. Which is the catch here: the cursor
-walks the identifier axis while a timeline orders on the clock of the fact, so a resumed walk skips
-any entry minted before the cursor and dated after it. Page a timeline with `paginate()`, or
-cursor-walk `Sentinel::audits()` and sort the result yourself. Do not combine `after()` with
-`latest()` expecting a backwards walk either. See
-[Order, paging and walking](03-order-paging-and-walking.md).
+`paginate()` behaves exactly as it does on any other read — one call to the ledger, no total.
+`after()` does not apply: a cursor is cut from the identifier and walks along it, while a timeline
+orders on the clock of the fact, and a walk on one axis resumed with a place on the other skips
+entries. `Sentinel::timeline()->after($id)` throws `QueryException::cursorOffItsAxis()`. Page a
+timeline with `paginate()`, or cursor-walk `Sentinel::audits()` and sort each batch on `occurred_at`
+yourself. See [Order, paging and walking](03-order-paging-and-walking.md).
 
 ---
 
@@ -393,7 +392,7 @@ What the example is doing on purpose:
 | `timeline()->between($from, $to)` returns entries whose `occurred_at` is outside the window | `between()` bounds `created_at`, always. Narrowing and ordering follow different clocks on purpose. | Accept it, or filter the collection on `occurred_at` after the read. There is no filter on the fact's clock. |
 | A timeline of one tenant is slow and the plan shows a sort | `(tenant_id, created_at)` ends in the wrong clock, so the tenant filter finds by index and the order is sorted afterwards. | Narrow further, page with `paginate()`, or accept the sort over a bounded page. |
 | An unnarrowed timeline is fast on SQLite in tests and slow on MySQL in production | SQLite commits to `(occurred_at, id)`; MySQL and PostgreSQL are cost-based and only take it once the table is large. | Do not benchmark plans on SQLite. Run `make test-dbs`, and narrow by subject where you can. |
-| `after($cursor)` under `latest()` returns entries *newer* than the cursor | The cursor compiles to `id > ?` in both directions; only the `order by` is reversed. | Walk forwards with `after()`, or use `paginate()` for a backwards walk. |
+| `after($cursor)` on a timeline throws `QueryException::cursorOffItsAxis()` | The cursor is cut from `id` and the timeline orders on `occurred_at`; resuming one on the other skipped entries, silently, before `v1.0.0-rc.2` | Page with `paginate()`, or walk `Sentinel::audits()` by cursor and sort each batch yourself |
 | `$entry->subject` is null on a timeline line | The recorded type names no class — the model was dropped, or a morph alias was retired. `loadReferences()` leaves it unresolved rather than fatal. | Render from `subject_type` + `subject_id`, which the entry always has. That is what `AuditPresenter` does. |
 | A `LazyLoadingViolationException` while rendering a feed | `loadReferences()` resolves `tags`, `subject` and `actor` only — not `impersonator`, not `transaction`, not `relations`. | Load them yourself: `$page->entries->load('transaction')`. |
 | `AuditResource::collection($page)` produces a bare array with no `meta` or `links` | `Query\AuditPage` implements `Countable` and `IteratorAggregate`, not Laravel's paginator contract, so no pagination envelope is built. | Wrap `$page->entries`, and put `page`, `perPage` and `hasMore` in the envelope yourself. |

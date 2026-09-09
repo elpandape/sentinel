@@ -449,7 +449,7 @@ it('verifies its own signature and refuses a hash it did not sign', function ():
 |---|---|
 | A hash you computed by hand | The digest is taken over the canonical payload of the frozen column list, with the salt derived from `APP_KEY`. Reproducing it in a test means reimplementing `Integrity\JsonCanonicalizer` and `Integrity\Hasher`, and the copy rots on the first change to either. Assert `verifyIntegrity()` instead |
 | A `sequence` as a literal, past the first entry | It is dense and monotonic **per stream**, and any other test that writes to the same stream in the same case moves it. Assert the shape — `[1, 2, 3]` for a chain you wrote yourself in that test — never `sequence === 7` |
-| Ordering by `created_at` | Two entries in one request can share a clock reading. The trail orders by `id`, a ULID, which is total; `latest()` and `after()` are built on it for that reason |
+| Ordering by `created_at` | Two entries in one request can share a clock reading. The trail breaks the tie on `id`, a ULID, which is total, and a cursor walks by it alone |
 | `previous_hash` against a value you kept | You are asserting that the ledger did what the ledger did. `verifyIntegrity()` is the assertion, and it is one line |
 | `payload_version` as a constant you copied | It is load-bearing: a change to the canonical payload bumps it and ships a compatibility test. Reading it back is fine; pinning it in your suite makes your suite fail on an upgrade that was designed to be safe |
 | Column names, table names, or the JSON layout of `changes` | `tables.prefix` and `tables.audits` move them. Go through `Sentinel::audits()` and `Models\Audit`, which read the config |

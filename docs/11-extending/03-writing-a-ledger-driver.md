@@ -336,12 +336,13 @@ The ordering is fixed by the contract suite and every driver must produce it:
 | Direction | Ascending, unless `$query->newestFirst` |
 | Tie-break | The entry identifier, in the same direction — a ULID sorts by the instant it was minted, so two entries stamped in the same microsecond still come back in write order |
 | Window | `$query->offset` is applied **before** `$query->limit` |
-| Cursor | `$query->after` narrows to identifiers greater than the cursor |
+| Cursor | `$query->after` narrows to identifiers greater than the cursor **and orders by the identifier alone**; the query never sets it beside `byOccurrence` or `newestFirst` |
 
-> ⚠️ **Warning.** `after()` combined with `latest()` narrows by `id > cursor` while walking
-> newest-first, on `DatabaseLedger` and `ArrayQuery` alike. Nothing in the contract suite covers the
-> combination and it is unlikely to be what a caller meant. Do not build a resumable descending walk
-> on it.
+> ⚠️ **Warning.** Behind a cursor the identifier is the whole order, not the tie-break. The contract
+> suite asserts it with two entries whose `created_at` runs against their identifiers: a driver that
+> keeps ordering by its clock there passes every other case and skips an entry at a page boundary in
+> production. `AuditQuery` refuses `after()` beside `latest()` or `byOccurrence()`, so a driver never
+> sees that combination.
 
 `Query\AuditQuery::get()` refuses rather than truncating once more than `DEFAULT_LIMIT` (500) entries
 match — the probe and the reasoning are in

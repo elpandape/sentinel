@@ -70,10 +70,11 @@ the companion table's migration.
 | `whereRelated($related, $id = null)` | a line's `related_type` + `related_id` | `Related` | `(related_type, related_id, audit_id)` |
 | `whereIp(string $ip)` | `context->ip` | `Ip` | **none shipped** — see [below](#the-two-that-live-inside-the-context) |
 | `whereRoute(string $route)` | `context->route` | `Route` | **none shipped** — see [below](#the-two-that-live-inside-the-context) |
-| `after(string $id)` | `id > ?` | `After` | the primary key |
+| `after(string $id)` | `id > ?`, ordered by `id` alone | `After` | the primary key |
 
 `after()` is in this table but is not a criterion about what an entry *is* — it is a place in a walk.
-It compiles to `where('id', '>', $after)` unconditionally, in both directions. See
+It compiles to `where('id', '>', $after)` and orders by `id` alone; `byOccurrence()` and `latest()`
+are refused beside it, whichever was asked for first. See
 [Order, paging and walking](03-order-paging-and-walking.md).
 
 Two methods change the order and are **not** `Filter` cases at all, so no driver can refuse them:
@@ -337,6 +338,7 @@ English, not a translated string.
 | `whereFieldChanged()` | `QueryException::noField()` | a path whose pointer resolves to `''` |
 | `whereOperation()` | `QueryException::unknownOperation()` | a string that is not `attach`, `detach` or `update` |
 | `after()` | `QueryException::noCursor()` | `''` |
+| `after()` · `byOccurrence()` · `latest()` | `QueryException::cursorOffItsAxis()` | a cursor beside an order by clock, whichever was asked for first |
 | any filter | `LedgerException::cannotFilterBy()` | the driver does not declare it — **as you call it** |
 | `whereFieldChanged()` · `whereIp()` · `whereRoute()` | `LedgerException::cannotTranslateOn()` | the engine has no dialect — **when the read executes** |
 

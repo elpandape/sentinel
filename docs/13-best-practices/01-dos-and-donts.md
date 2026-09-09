@@ -431,12 +431,12 @@ $batch  = ($cursor === null ? $query : $query->after($cursor))->get();
 $cursor = $batch->last()?->id ?? $cursor;
 ```
 
-❌ **Don't** — combine `after()` with `latest()` expecting a backwards cursor. The predicate stays `>`
-in both directions; only the `ORDER BY` reverses, so you get entries *newer* than the cursor, newest
-first.
+❌ **Don't** — combine `after()` with `latest()` or `byOccurrence()`. A cursor is cut from the
+identifier and walks along it, forwards; beside a clock order it throws
+`QueryException::cursorOffItsAxis()`, whichever was asked for first.
 
 ```php
-Sentinel::audits()->latest()->after($cursor)->get();   // not the continuation of a backwards walk
+Sentinel::audits()->latest()->after($cursor)->get();   // throws — a cursor is not a backwards walk
 ```
 
 ✅ **Do** — call `loadReferences()` before rendering a page, and write the three-way check on

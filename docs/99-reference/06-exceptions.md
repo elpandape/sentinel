@@ -94,6 +94,7 @@ say what it needs to say.
 | `streamTooLong($name)` | A resolved stream name exceeds 64 characters | Shorten the stream strategy's output |
 | `streamEmpty()` | A stream strategy resolved to `''` | Every entry belongs to a named chain |
 | `eventTooLong($event, $limit)` | `Sentinel::event()` was given a name over 64 characters | Shorten the name |
+| `eventEmpty()` | `Sentinel::event()` was given a name with nothing in it, spaces included | Give the event a name |
 | `tagTooLong($tag, $limit)` | A label exceeds the column | Shorten the label; it is never truncated |
 | `unreadableTransition($column, $property)` | A `$auditTransitions` column is also in `$auditExclude` / `$auditRedact` / `$auditHash` / `$auditEncrypt` | Pick one |
 | `omittedTransition($column)` | A transition column is left out of `$auditInclude` | Add it to the include list |
@@ -161,6 +162,7 @@ Fourteen constructors covering the read side, the reference parser and stream en
 | `noType()` | `whereType('')` |
 | `unbounded($limit)` | `get()` matched more than `AuditQuery::DEFAULT_LIMIT` (500) entries |
 | `noCursor()` | `after('')` |
+| `cursorOffItsAxis()` | `after()` beside `byOccurrence()` or `latest()`, whichever came first |
 | `unreachableLimit($limit)` | `take(0)` or a negative limit |
 | `unreachablePage($perPage, $page)` | `paginate()` with a non-positive page or size |
 | `cannotEnumerateStreams($ledger)` | A ledger that is not `Contracts\EnumeratesStreams` asked for every stream |
@@ -462,7 +464,7 @@ guard.
 |---|---|
 | Application boot | `ComplianceException::incomplete()`, from the provider's `boot()` |
 | The first time the ledger or the buffer is resolved | `ConfigurationException::coldLedgerAsDefault()` and the ledger/buffer driver `unknown()` checks. Both bindings are `scoped`, so this is the first capture or read of a scope, not boot |
-| At the call, before anything is written | `ConfigurationException::eventTooLong()`, `QueryException::unsavedModel()`, `ComparisonException`, `QueryException` on the read side, `LedgerException` |
+| At the call, before anything is written | `ConfigurationException::eventTooLong()` and `eventEmpty()`, `QueryException::unsavedModel()`, `ComparisonException`, `QueryException` on the read side, `LedgerException` |
 | On the write path, per entry | `ConfigurationException` (stream, labels, model declarations, severity), `SnapshotException`, `CanonicalizationException`, `EncryptionException`, `SignatureException` |
 | At the ledger boundary | `DispatchException`, `DiscardException`, `ImmutableAuditException` |
 | Only when a write has already failed | `ConfigurationException::unknown('on_write_failure', …)` |

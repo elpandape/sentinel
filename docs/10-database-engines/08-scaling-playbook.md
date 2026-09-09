@@ -266,8 +266,9 @@ do {
 } while ($batch->count() === 1000);
 ```
 
-See [Order, paging and walking](../06-reading/03-order-paging-and-walking.md). Do not combine
-`after()` with `latest()`: the predicate is `id > cursor` in both directions.
+See [Order, paging and walking](../06-reading/03-order-paging-and-walking.md). `after()` refuses
+`latest()` and `byOccurrence()`: a cursor is cut from the identifier and walks along it, in that
+order alone.
 
 ### Publish the JSON index only if you actually use it
 

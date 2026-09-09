@@ -116,9 +116,11 @@ inside the entry's hashed payload, so removing a row from either leaves `verifyI
 ## The order is part of the index
 
 Every read of the trail is ordered by a clock and then by the entry's ULID —
-`created_at, id` by default, `occurred_at, id` under `byOccurrence()` (`Ledger\DatabaseLedger::query()`).
-That tie-break is why the shipped composites *end* in `id` or in a clock: an index that finds the
-rows but cannot deliver them in that order leaves the engine sorting whatever it matched.
+`created_at, id` by default, `occurred_at, id` under `byOccurrence()` — except behind a cursor,
+where it is `id` alone (`Ledger\DatabaseLedger::query()`). That tie-break is why the shipped
+composites *end* in `id` or in a clock: an index that finds the rows but cannot deliver them in that
+order leaves the engine sorting whatever it matched. A cursor walk that is also narrowed sorts its
+page on the primary key; it is bounded by `take()`, so that sort is one page at a time.
 
 The two occurrence indexes exist for exactly that reason. Their migration says it plainly: measured
 over two hundred thousand entries, ordering by `occurred_at` sorted outside every index on all three

@@ -284,7 +284,7 @@ Every criterion is checked against the driver's declared filter set **as the met
 
 | Method | Narrows by | `Enums\Filter` case | Throws |
 |---|---|---|---|
-| `after(string $id)` | Position: `id > $id`, a resumable cursor | `After` | `QueryException::noCursor` on `''` |
+| `after(string $id)` | Position: `id > $id`, a resumable cursor ordered by `id` alone | `After` | `QueryException::noCursor` on `''`; `cursorOffItsAxis` beside `byOccurrence()` or `latest()` |
 | `between(DateTimeInterface $from, DateTimeInterface $to)` | `created_at`, both ends inclusive — never `occurred_at` | `Period` | `QueryException::backwardsPeriod` |
 | `by(object\|string $actor, int\|string\|null $id = null)` — alias `byActor()` | Who did it | `Actor` | `QueryException::unsavedModel` · `missingKey` · `unreferenceable` |
 | `for(object\|string $subject, int\|string\|null $id = null)` — alias `forModel()` | Whom it was about | `Subject` | same as `by()` |
@@ -522,11 +522,12 @@ $query = Sentinel::audits()->whereType('model')->take(1000);
 $batch = ($cursor === null ? $query : $query->after($cursor))->get();
 ```
 
-❌ **Don't** — combine `after()` with `latest()` expecting a backwards cursor. The predicate is
-`id > cursor` in both directions, so you get entries *newer* than the cursor, in newest-first order.
+❌ **Don't** — combine `after()` with `latest()` or `byOccurrence()`. A cursor is cut from the
+identifier and walks along it, forwards; beside a clock order it throws
+`QueryException::cursorOffItsAxis()`, whichever was asked for first.
 
 ```php
-Sentinel::audits()->latest()->after($cursor)->get();   // not the continuation of a backwards walk
+Sentinel::audits()->latest()->after($cursor)->get();   // throws — a cursor is not a backwards walk
 ```
 
 ✅ **Do** — read `Sentinel::config()` when you need a setting, so a wrong type fails loudly in one

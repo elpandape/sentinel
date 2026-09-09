@@ -136,13 +136,18 @@ See [Protecting sensitive data](../05-pipeline-and-security/02-protecting-sensit
 ## The 64-character name cap
 
 `PendingEvent::MAX_NAME_LENGTH` is 64 characters, and the name is checked in the constructor — at the
-`Sentinel::event()` call, before any modifier and long before the write:
+`Sentinel::event()` call, before any modifier and long before the write. A name with nothing in it
+is refused at the same place: an entry whose event says nothing happened is not something a trail
+records.
 
 ```php
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
 
 Sentinel::event(str_repeat('a', 65));  // throws ConfigurationException::eventTooLong()
 Sentinel::event(str_repeat('a', 64));  // fine — the full width of the column
+Sentinel::event('');                   // throws ConfigurationException::eventEmpty()
+Sentinel::event('   ');                // the same: nothing but spaces is nothing
+Sentinel::event('invoice approved');   // fine — spaces inside a name that says something stay
 ```
 
 The check is at the call rather than at the ledger because the event name is inside the **canonical
@@ -386,7 +391,7 @@ reasoning behind the refusal are in
 | No entry appears and no error is raised | The chain was built but `record()` was never called | End every `Sentinel::event(...)` chain with `->record()` |
 | `record()` returns `null`, so you assume the entry was discarded | It returns `void`; there is nothing to inspect | Listen for `Audited` (capture side) or `AuditCreated` (ledger side) |
 | Two entries for one fact | `record()` was called twice on the same builder; it is not idempotent and the builder is not consumed | Build a fresh chain per fact |
-| `ConfigurationException` at `Sentinel::event()`, before any modifier | The name is longer than 64 characters; the constructor refuses it | Shorten the name — it is inside the hashed payload and cannot be truncated |
+| `ConfigurationException` at `Sentinel::event()`, before any modifier | The name is longer than 64 characters, or has nothing in it | Shorten the name — it is inside the hashed payload and cannot be truncated — or give the event a name |
 | `QueryException` from `->subject()` | The model has no key yet (never saved) | Save the model first, or leave the entry subjectless |
 | `Sentinel::filter()` policy decides on the wrong person | You are on a release before `v1.0.0-rc.2`, where `->actor()` was reapplied after the pipeline and a policy saw the resolved actor | Upgrade: from that candidate on a policy sees the actor you named |
 | `impersonator_type` is null on an entry you expected it on | `->actor()` clears the resolved impersonator by design | Omit `->actor()` and let the context engine resolve both |
