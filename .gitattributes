@@ -12,6 +12,11 @@
 #
 # So do the migration guides and stubs/. A guide is written for the reader coming from another
 # package, and the Rector stub it tells them to copy has to be there in vendor/ when they do.
+#
+# docs/ ships for the same reason the README does: it is written for the consumer, not the
+# contributor, and the question it answers — what does this option cost me, what does this command
+# not touch — is asked from inside a project that already has the package installed, often with no
+# network in front of it. It is text, and the line is who the file is for.
 
 /.github export-ignore
 /docker export-ignore

@@ -10,7 +10,7 @@ composer.lock
 /.junie/
 /.mcp.json
 /.bg-shell/
-/docs/
+/knowledge/
 /AGENTS.md
 /CLAUDE.md
 /skills-lock.json
