@@ -20,6 +20,7 @@ use ElPandaPe\Sentinel\Console\RedactCommand;
 use ElPandaPe\Sentinel\Console\RekeyCommand;
 use ElPandaPe\Sentinel\Console\ShowCommand;
 use ElPandaPe\Sentinel\Console\VerifyCommand;
+use ElPandaPe\Sentinel\Context\Attributions;
 use ElPandaPe\Sentinel\Context\ContextEngine;
 use ElPandaPe\Sentinel\Context\ExecutionContext;
 use ElPandaPe\Sentinel\Context\Runtime;
@@ -120,6 +121,7 @@ final class SentinelServiceProvider extends ServiceProvider
         ));
 
         // Scoped: execution context and recording state belong to one request or job, not to the worker.
+        $this->app->scoped(Attributions::class);
         $this->app->scoped(Columns::class);
         $this->app->scoped(ContextEngine::class);
         $this->app->scoped(Discard::class);

@@ -78,6 +78,9 @@ $internalDeclarations = [
     'resolved from the container and named by nobody' => [
         'Context/Identity', 'SentinelServiceProvider',
     ],
+    'what a capture states about its own context, passed hand to hand inside the package' => [
+        'Context/Attribution', 'Context/Attributions',
+    ],
 ];
 
 $expected = static function () use ($internalNamespaces, $internalDeclarations): Closure {
