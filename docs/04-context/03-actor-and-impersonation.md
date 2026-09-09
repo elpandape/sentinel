@@ -301,17 +301,20 @@ cannot be recorded honestly:
 ### What happens to the entry, in order
 
 1. The capture builds the `AuditData` and hands the named actor to `Capture\Recorder::record()`.
-2. The **pipeline runs**, and `Pipeline\Stages\ResolveContext` overwrites `actor_type`/`actor_id`
-   with whatever the resolvers found — because the engine assigns every promoted column on every
-   pass, deliberately.
-3. `Recorder::attribute()` then writes the named actor back **after** the pipeline, and clears
-   `impersonator_type` and `impersonator_id` at the same time.
+2. The **pipeline runs**, and `Pipeline\Stages\ResolveContext` assigns `actor_type`/`actor_id`
+   from whatever the resolvers found — the engine assigns every promoted column on every pass,
+   deliberately — and then applies the named actor over it, clearing `impersonator_type` and
+   `impersonator_id` at the same time. Every stage after it, every policy and every `Auditing`
+   listener sees the named actor.
+3. The recorder applies the named actor once more **after** the pipeline. On the shipped stage list
+   it changes nothing; it is there for a published `config/sentinel.php` whose `pipeline` left
+   `ResolveContext` out, so the entry is attributed as named even then.
 
-Step 3 has two consequences you will meet:
+Step 2 has two consequences you will meet:
 
-- **A policy sees the resolved actor, not the named one.** `EnforcePolicies` is the last pipeline
-  stage, and the swap happens after it. A policy that decides on the basis of who acted is deciding
-  on the basis of the authenticated user. See
+- **A policy sees the named actor.** `EnforcePolicies` is the last pipeline stage and the actor was
+  applied at the second, so a policy that decides on the basis of who acted is deciding on the actor
+  the entry will carry. Before `v1.0.0-rc.2` it saw the authenticated user instead. See
   [Discarding entries](../05-pipeline-and-security/06-discarding-entries.md).
 - **The impersonator is cleared, always.** Whoever the session resolved was standing in for the
   actor the engine resolved, not for the one you have just named. Pairing them would state a

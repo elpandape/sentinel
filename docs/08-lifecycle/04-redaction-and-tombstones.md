@@ -267,29 +267,29 @@ Enumerated, because every one of these has been mistaken for a bug:
 | **Your own tables** | Redaction empties an audit entry. The record the entry is about is yours to deal with |
 | **A subject axis in the manifest** | `sentinel_archives` is indexed by `(stream, sequence_from)` and `(stream, sequence_to)` and never by subject, so an erasure over one person's history is answered range by range |
 
-### What a redaction trail does not carry across tenants
+### What a redaction trail carries across tenants
 
 The trail entry goes through the normal write pipeline, and the context stage assigns **every**
 promoted column on every pass — `actor_*`, `impersonator_*`, `tenant_id`, `request_id`, `trace_id`,
-`span_id`, `source` — so that a second pass leaves none of the first one's residue. A resolver that
-answers nothing and one that answers null arrive identically, so the stage cannot copy the redacted
-entry's tenant even though the redaction hands it over.
+`span_id`, `source` — so that a second pass leaves none of the first one's residue. What the
+redaction states outright is applied over that: the actor it was given, and **the tenant of the
+entry it redacted**, null included.
 
-The consequence, in plain terms: **the trail carries the run's tenant, not the redacted entry's.**
+The consequence, in plain terms: **the trail carries the redacted entry's tenant, not the run's.**
 
 ```php
 $entry->tenant_id;              // 'acme'
-$tombstone->trail?->tenant_id;  // null, under a console run with no tenancy resolver
+$tombstone->trail?->tenant_id;  // 'acme' — from a console run with no tenancy resolver too
 ```
 
 And with `integrity.stream = 'tenant'`, the stream is derived from `tenant_id`, so the trail lands
-in `global` while the entry it is about lives in `tenant:acme` — two different chains. Telling an
-empty resolver from a null one needs a change to the frozen `Contracts\Resolver`, so this is a known
-limitation, not a bug in flight.
+on `tenant:acme`, beside the entry it is about. An entry that had no tenant gets a trail with none,
+on `global`, whichever tenant happens to be active. The rest of the trail's context — actor,
+request, source, trace — describes the run that redacted, which is what those columns are for.
 
-> 💡 **Tip.** Redact from inside the tenant context you want on the trail — the same scope your
-> application sets for an ordinary request — and the trail lands beside the entry. See
-> [Multi-tenancy](../04-context/04-multi-tenancy.md).
+Before `v1.0.0-rc.2` the trail carried the run's tenant, and a console redaction of an `acme` entry
+left its trail on `global`. Entries those releases wrote keep what they recorded: history is
+append-only and nothing moves them. See [Multi-tenancy](../04-context/04-multi-tenancy.md).
 
 ---
 
@@ -449,7 +449,7 @@ call, and the reasons are structural rather than missing effort:
 | `verifyIntegrity()` returns `false` on an entry you redacted on purpose | The bool means "reproduces the hash it carries"; a tombstone reproduces `redacted_hash`, which no signature covers | Ask `verifyContent()` — three states, not two. Keep the bool for the question it has always answered |
 | `sentinel:verify` reports `0 redacted` on a stream that has a tombstone | `verifyAnchors()` / `verifyRoots()` never open an entry; an anchored range folds the `hash` column, which a tombstone keeps | Use the entries depth, or `Sentinel::verifyEverything()->redacted()` |
 | `$tombstone->trail` is `null` after a successful redaction | The entry has not settled in this process: `after_commit` inside an open transaction, or queue/buffer dispatch | Query `Audit::query()->where('source_audit_id', $entry->id)` after the commit or the worker run |
-| The trail entry has no tenant, or lands in `global` while the entry is in `tenant:acme` | The context stage assigns every promoted column from the **run**, and cannot tell an empty resolver from a null one | Redact from inside the tenant context you want recorded |
+| The trail entry has no tenant, or lands in `global` while the entry is in `tenant:acme` | The trail was written by a release before `v1.0.0-rc.2`, which took the trail's tenant from the run | Nothing moves it: history is append-only. From that candidate on, the trail carries the redacted entry's tenant |
 | `--dry-run` says "Would destroy" but the real run refuses | The dry run returns before the archived / retired / unverifiable guards | Check `redacted_at` and the manifest yourself, or just run it and read the refusal |
 | A second `sentinel:redact` with no `--actor` under compliance mode does not throw | Idempotency is the first branch; the guards follow it | Nothing to fix — the entry was already redacted and no second trail was written |
 | `RedactionException::unverifiable` on an entry you need to erase | The row no longer reproduces its own hash | Investigate the alteration. The package refuses to put a declared redaction where an alarm should be |

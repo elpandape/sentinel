@@ -68,12 +68,12 @@ The nine promoted names are `actor_type`, `actor_id`, `impersonator_type`, `impe
   filled. `['job' => null]` writes a dead key into the JSON that nobody can tell apart from a fact
   that genuinely was null.
 
-> 📌 **Note.** That last limitation is structural, not an oversight. The contract cannot express the
-> difference between "I have nothing to say" and "the answer is null", which is why a redaction run
-> writes a trail entry carrying the *run's* tenant rather than the redacted entry's. Fixing it would
-> mean changing `Contracts\Resolver`, and that interface is frozen for 1.x —
-> `tests/Contracts/ContractsTest.php` pins it to exactly one method. See
-> [API stability](../99-reference/09-api-stability.md).
+> 📌 **Note.** That last limitation is structural, not an oversight: the engine treats an absent key
+> and a null one alike, on purpose, so that a column whose signal is gone is cleared. What a capture
+> knows outright and no resolver can — the actor it names, the tenant a redaction trail acts for —
+> does not travel through a resolver at all. The same stage applies it over the resolved columns,
+> which is how a redaction trail keeps the tenant of the entry it redacts without the contract
+> having to say "I mean null". See [Actor and impersonation](03-actor-and-impersonation.md).
 
 ---
 

@@ -339,49 +339,46 @@ In compliance mode the export is a read like any other, so it writes an access e
 **the exporting run's** tenant, while the tenant that was asked for is recorded inside the logged
 query shape. See [Compliance mode](../08-lifecycle/05-compliance-mode.md).
 
-### Redaction, and what the trail does not carry across tenants
+### Redaction, and what the trail carries across tenants
 
 `sentinel:redact` takes an entry id, not a tenant. Erasing one person's history in one tenant means
 finding their entries and redacting each one.
 
-The sharp edge is the trail. A redaction empties the entry's content columns in place and then
-writes a **new** entry describing the redaction. That trail entry goes through the pipeline like any
-other, and `ResolveContext` assigns every promoted column on every pass — so:
+The trail is the part to know about. A redaction empties the entry's content columns in place and
+then writes a **new** entry describing the redaction. That trail entry goes through the pipeline
+like any other, and `ResolveContext` assigns every promoted column on every pass — and then applies
+what the redaction states outright, which is **the tenant of the entry it redacts**:
 
-> ⚠️ **Warning.** The redaction trail entry carries **the tenant of the run that redacted**, not the
-> tenant of the entry it redacts. Redact an `acme` entry from a console command with no tenancy
-> active, and the trail entry has `tenant_id = null` and lands on the `global` chain, while the
-> tombstone it describes sits on `tenant:acme`. The suite fixes this behaviour:
-> *"resolves the tenant of a redaction trail from the run rather than from the entry it redacts"*
-> in `tests/Redaction/RedactorTest.php`.
+> 📌 **Note.** The redaction trail entry carries the tenant of the entry it redacts, not the tenant
+> of the run that redacted. Redact an `acme` entry from a console command with no tenancy active, and
+> the trail entry has `tenant_id = 'acme'` and lands on `tenant:acme`, beside the tombstone it
+> describes. An entry with no tenant gets a trail with none, on `global`, whichever tenant is active.
+> The suite fixes both: *"keeps the tenant of the entry it redacted on the trail, from a run that
+> resolves none"* and *"leaves the trail of a tenantless entry tenantless, whichever tenant is
+> active"* in `tests/Redaction/RedactorTest.php`.
 
-Nothing is broken by this. The trail entry is chained, hashed and signed like any other and both
-chains verify. It simply under-reports that one column, and a query for *everything that happened to
-tenant acme* will not return the record of the erasure. The cause is structural: `Contracts\Resolver`
-returns an array, and an empty array and an array of nulls are indistinguishable to the engine, so
-the resolver cannot say "I mean null" as against "I have nothing" — and that contract is frozen.
-
-The fix is operational, not a patch: **make the tenant current for the duration of the redaction
-run**, so the resolver answers with it.
+So a query for *everything that happened to tenant acme* returns the record of the erasure, and
+nothing about the run needs arranging beforehand:
 
 ```php
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Redaction\Redactor;
 use ElPandaPe\Sentinel\Support\Reference;
 
-Tenant::find('acme')->makeCurrent();          // your tenancy package, not Sentinel's
-
 app(Redactor::class)->redact(
     Audit::query()->findOrFail($id),
     'GDPR erasure request',
     new Reference('user', '7'),
-);
+);   // the trail lands on the entry's chain, whatever tenant this process has current
 ```
 
-For contrast: `Security\Rekeyer` writes its entry straight to the ledger and deliberately **not**
+Before `v1.0.0-rc.2` the trail carried the run's tenant, and the fix was operational — make the
+tenant current for the length of the redaction. Trails those releases wrote keep what they recorded.
+
+For comparison: `Security\Rekeyer` writes its entry straight to the ledger and deliberately **not**
 through the pipeline — its values are already encrypted and running them through again would encrypt
-ciphertext — so a rekey entry keeps `tenant_id` copied from the entry it stands in for. Same package,
-opposite outcome, for a reason you can read in each class.
+ciphertext — so a rekey entry keeps `tenant_id` copied from the entry it stands in for. Same outcome
+by a different route, for a reason you can read in each class.
 
 See [Redaction and tombstones](../08-lifecycle/04-redaction-and-tombstones.md) and
 [Export and rekey](../08-lifecycle/06-export-and-rekey.md).

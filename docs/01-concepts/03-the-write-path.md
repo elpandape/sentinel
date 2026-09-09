@@ -134,10 +134,12 @@ listener in the clear that the ledger will not also hold. Returning `false` stop
 the reason `cancelled`. `subject_type` and `subject_id` are restored in a `finally` afterwards — a
 listener may change what the entry says about itself, never what it is about.
 
-**6 — `Recorder::attribute()` puts a caller-named actor back.** `ResolveContext` reassigns the
-actor columns on every pass, so an actor named explicitly at the call site is re-applied after the
-pipeline. The impersonator columns are cleared with it: whoever the session resolved was standing
-in for the actor resolved alongside them, not for the one just named.
+**6 — What the capture named goes on the entry a second time.** `ResolveContext` already applied
+it inside the pipeline: an actor named at the call site, with the impersonator columns cleared —
+whoever the session resolved was standing in for the actor resolved alongside them, not for the one
+just named — and, for a redaction trail, the tenant of the entry it redacts. The recorder applies it
+once more here, for a published stage list that left `ResolveContext` out: the entry is attributed
+as named all the same, and only what the pipeline got to see is different.
 
 **7 — `Dispatch\Dispatcher::dispatch()` decides where and when.** It asks the *subject's*
 connection — not the audit connection — whether a transaction is open. With
@@ -378,7 +380,7 @@ in [The buffered mode](../09-operations/02-the-buffered-mode.md).
 | An `updated` produced no entry at all and no exception | `FilterUnchanged` discarded it: the diff was empty, because only excluded columns or only timestamps moved. | Listen for `AuditDiscarded` (reason `unchanged`), or declare the pipeline without `FilterUnchanged` if you want those entries. |
 | `AuditDiscarded` names your stage with reason `unspecified` | The stage returned `null` without calling `Discard::because()`. | Call `because('…')` before returning `null`; the string is what an operator reads. |
 | `DiscardException` thrown from an `AuditCreated` listener | Discarding is legal only while the pipeline pass is open; by `AuditCreated` the sequence exists. | Refuse in a stage, in a `Sentinel::filter()` policy, or by returning `false` from `Auditing`. |
-| An entry's actor is the resolved session user, not the one passed at the call site | `ResolveContext` reassigns the actor columns on every pass; `Recorder::attribute()` re-applies an explicitly named actor afterwards, and only on the `Recorder::record()` path. | Name the actor through the capture API (`Sentinel::event(…)->actor($user)`), not by mutating `AuditData` in a stage placed before `ResolveContext`. |
+| An entry's actor is the resolved session user, not the one passed at the call site | The actor was named by mutating `AuditData` in a stage placed before `ResolveContext`, which reassigns the actor columns on every pass | Name the actor through the capture API (`Sentinel::event(…)->actor($user)`): `ResolveContext` applies it itself, and the recorder once more after the pipeline |
 | Nothing was written and the transaction "succeeded" | The deferred hand-over never ran because the transaction rolled back — by design, and silently. | Nothing to fix. If you need the entry regardless, `transactions.after_commit = false` asks the ledger to keep claiming facts a rollback undid. |
 | `verifyIntegrity()` reports the chain intact although entries are missing | A discarded, refused or buffer-lost entry consumed no sequence, so there is no gap. | Detect loss out of band: `BufferFlushFailed`, `AuditWriteFailed`, the `sentinel:flush` count and exit code. |
 | Two entries for the same fact after a retry | The retrying code generated a fresh `capture_id` instead of carrying the one it already had. | Retry under the identifier the capture already had; the unique index only refuses a *repeated* id. |

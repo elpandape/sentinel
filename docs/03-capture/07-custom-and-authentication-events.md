@@ -112,10 +112,9 @@ an entry pairing the two would claim a delegation that never happened. Say nothi
 actor keeps its resolved impersonator. See
 [Actor and impersonation](../04-context/03-actor-and-impersonation.md).
 
-> ⚠️ **Warning.** A policy registered with `Sentinel::filter()` sees the **resolved** actor, not the
-> one you passed to `->actor()`. Policies run in `EnforcePolicies`, the last pipeline stage, and
-> `Capture\Recorder::attribute()` reapplies the declared actor after the pipeline. Filter on the
-> subject or the event name instead.
+> 📌 **Note.** A policy registered with `Sentinel::filter()` and an `Auditing` listener both see the
+> actor you passed to `->actor()`: `ResolveContext` applies it inside the pipeline, before either of
+> them runs. Before `v1.0.0-rc.2` they saw the resolved actor instead.
 
 ### Redaction still applies
 
@@ -389,7 +388,7 @@ reasoning behind the refusal are in
 | Two entries for one fact | `record()` was called twice on the same builder; it is not idempotent and the builder is not consumed | Build a fresh chain per fact |
 | `ConfigurationException` at `Sentinel::event()`, before any modifier | The name is longer than 64 characters; the constructor refuses it | Shorten the name — it is inside the hashed payload and cannot be truncated |
 | `QueryException` from `->subject()` | The model has no key yet (never saved) | Save the model first, or leave the entry subjectless |
-| `Sentinel::filter()` policy decides on the wrong person | Policies see the resolved actor; `->actor()` is reapplied after the pipeline | Filter on the subject or the event name, not on the actor |
+| `Sentinel::filter()` policy decides on the wrong person | You are on a release before `v1.0.0-rc.2`, where `->actor()` was reapplied after the pipeline and a policy saw the resolved actor | Upgrade: from that candidate on a policy sees the actor you named |
 | `impersonator_type` is null on an entry you expected it on | `->actor()` clears the resolved impersonator by design | Omit `->actor()` and let the context engine resolve both |
 | Your translation for `invoice.approved` never renders | A dotted name needs a nested key (`events.invoice.approved`), not a flat `'invoice.approved'` key | Nest it two levels under `events` |
 | `whereEvent('updated')` returns custom entries too | Nothing stops an application naming its event `updated`; only `audit_type` separates the kinds | Add `whereType('model')` or `whereType('custom')` |

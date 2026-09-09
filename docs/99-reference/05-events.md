@@ -248,7 +248,7 @@ Model::save()
        ├─ Pipeline: FilterUnchanged → ResolveContext → ResolveTags → NormalizeData
        │            → MaskSensitiveData → EncryptSensitiveData → EnforcePolicies
        ├─ ① Auditing                (until — the last place a refusal is free)
-       ├─ (a declared actor is reapplied here, after the pipeline)
+       ├─ (what the capture named is applied again here, for a stage list without ResolveContext)
        ├─ ② AuditCreating           (Settlement, immediately before Ledger::write())
        │       Ledger assigns stream, sequence, previous_hash, hash
        ├─ ③ AuditCreated            (Settlement, immediately after)
@@ -435,10 +435,11 @@ Event::listen(Auditing::class, function (Auditing $event): void {
 ```
 
 `metadata`, `tags` and `context` belong to the listener. `subject_type` and `subject_id` are
-snapshotted before the dispatch and restored afterwards, whatever the listener assigned. Note also
-that the actor you see here is the **resolved** one: an actor named through
-`Sentinel::event(...)->actor($user)` is reapplied by `Capture\Recorder::attribute()` *after* the
-pipeline, so a listener filtering on `actor_id` will see whoever was authenticated instead.
+snapshotted before the dispatch and restored afterwards, whatever the listener assigned. The actor
+you see here is the one the entry will carry: an actor named through
+`Sentinel::event(...)->actor($user)` is applied by `ResolveContext`, inside the pipeline, so a
+listener filtering on `actor_id` decides on the named one. A listener cannot rename it either — the
+recorder applies the named actor once more on the way out.
 
 ### Telling "an entry exists" apart from "this process is done"
 

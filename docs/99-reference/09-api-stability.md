@@ -266,6 +266,13 @@ value the entry never carried. All of it inside the canonical payload, so nothin
 after the write: the entry verified, and what it said was wrong. That is the class of defect that
 outranks a published shape.
 
+The second precedent is `v1.0.0-rc.2`. Three behaviours had been declared known limitations of
+`rc.1` — a redaction trail carrying the run's tenant instead of the redacted entry's, a policy
+deciding on the resolved actor rather than the one the capture named, and a cursor walked on a
+clock it was not cut from — and each turned out to have a fix that touched no frozen contract. Each
+also changed what a consumer observes, so the candidate was renumbered rather than patched. That
+is the rule working as written, and `UPGRADE.md` carries the before and after of all three.
+
 Two limits on what a fix may do, both structural rather than promised:
 
 - **It cannot rewrite an existing entry.** History is append-only. A fix changes what the package

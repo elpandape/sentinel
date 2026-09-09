@@ -554,8 +554,8 @@ at the first capture behind a route.
 ```
 
 ✅ **Do** — name the actor on the capture when the fact is stated from a command, a worker or the
-scheduler. `Capture\Recorder` re-applies it after the pipeline and clears both impersonator columns
-at the same time.
+scheduler. `ResolveContext` applies it inside the pipeline and clears both impersonator columns at
+the same time, so every policy and listener sees the actor you named.
 
 ```php
 use App\Models\User;

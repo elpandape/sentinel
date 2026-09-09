@@ -154,8 +154,8 @@ what it needs.
 
 ## What a policy actually sees
 
-`Sentinel::filter()` hands your closure the `AuditData` as it stands at stage 7. Some columns are
-already final; three are not, and deciding on those is the most common way to write a filter that
+`Sentinel::filter()` hands your closure the `AuditData` as it stands at stage 7. Most columns are
+already final; two are not, and deciding on those is the most common way to write a filter that
 does something other than what it reads like.
 
 | Field | State inside a policy | Note |
@@ -163,21 +163,23 @@ does something other than what it reads like.
 | `audit_type`, `event`, `severity`, `source` | final | The safest things to decide on |
 | `subject_type`, `subject_id` | final | Settled at capture; an `Auditing` listener cannot change them either |
 | `before`, `after`, `changes`, `criteria`, `metadata`, `context` | final, and **protected** | Masked, digested and encrypted already |
-| `tenant_id`, `request_id`, `trace_id`, `span_id` | final | Resolved by `ResolveContext` at stage 2 |
+| `tenant_id`, `request_id`, `trace_id`, `span_id` | final | Resolved by `ResolveContext` at stage 2 — and a tenant the capture states outright, as a redaction trail does, is applied there too |
 | `transaction_id`, `capture_id` | final | Stamped by `Capture\Recorder` before the pipeline |
 | `tags` | final | Resolved by `ResolveTags` at stage 3 |
-| `actor_type`, `actor_id` | **the resolved actor** | An actor named with `->actor()` is reapplied by `Recorder::attribute()` *after* the pipeline |
+| `actor_type`, `actor_id`, `impersonator_type`, `impersonator_id` | final | Resolved at stage 2, and an actor named with `->actor()` is applied there too, with the impersonator cleared: a policy decides on the actor the entry will carry |
 | `stream` | **usually `null`** | `Integrity\Stream::resolve()` runs in the ledger, from `integrity.stream` |
 | `sequence`, `hash`, `previous_hash` | **not on the object at all** | `AuditData` has no such properties; the ledger owns them |
 
-The actor one bites hardest. This filter does not do what it says:
+The actor is the one people ask about. A capture that names its actor — a custom event, a
+transition, an authentication event — has it applied inside `ResolveContext`, so this filter
+decides on the actor the entry will be written with:
 
 ```php
-// WRONG: a custom event that named its own actor still shows the authenticated one here.
 Sentinel::filter(static fn (AuditData $audit): bool => $audit->actor_id !== $robotId);
 ```
 
-Filter on the subject, the type or the event instead. And if you need the stream, derive it from
+Before `v1.0.0-rc.2` the named actor was put back *after* the pipeline and a policy saw whoever was
+authenticated instead; `UPGRADE.md` has the before and after. If you need the stream, derive it from
 `tenant_id` or `subject_type` the way `integrity.stream` does — do not read `$audit->stream`.
 
 > 📌 **Note.** Policies are evaluated with `array_all()`, which short-circuits: once one closure

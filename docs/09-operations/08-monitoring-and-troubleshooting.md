@@ -256,7 +256,7 @@ ordinary state of a queue worker, an Artisan command and the scheduler.
 1. Read `source` on the entry: `queue`, `job`, `scheduler`, `cli` or `console` explains it immediately.
 2. Check `resolvers.actor.guard`. `null` means the application default guard; a guard name the auth factory does not know raises `ConfigurationException` rather than resolving to nobody.
 3. If the actor should travel with the job, carry it explicitly — see [Queues, commands and schedulers](../04-context/05-queues-commands-and-schedulers.md).
-4. If you set an actor with `->actor()` on a custom event and a policy still saw somebody else: policies run inside the pipeline and a declared actor is reapplied afterwards, so `Sentinel::filter()` sees the **resolved** actor. Filter on the subject or the event instead.
+4. If you set an actor with `->actor()` on a custom event and a policy still saw somebody else, you are on a release before `v1.0.0-rc.2`, where a named actor was reapplied after the pipeline. From that candidate on `ResolveContext` applies it, and `Sentinel::filter()` sees the actor you named.
 5. `sentinel:import` removes the `ResolveContext` stage for the length of a run on purpose, so an imported history is not attributed to whoever ran the migration.
 
 Impersonation and the `impersonated_by` session key are covered in
