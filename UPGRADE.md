@@ -14,6 +14,75 @@ package is a different journey with a different reader, and it has a guide of it
 
 ---
 
+## v1.0.0-rc.1 → v1.0.0-rc.2
+
+Three behaviours that `rc.1` shipped as known limitations are corrected here, and each of them
+changes what a consumer observes. That is why this is a candidate of its own rather than a patch,
+under the rule `rc.1` wrote down. Nothing migrates and `payload_version` stays at `1`: every entry
+written before this release verifies unchanged, and nothing already written moves.
+
+### A policy, and an `Auditing` listener, see the actor the capture named
+
+Before this tag `Capture\Recorder` put a named actor back *after* the pipeline, so
+`Sentinel::filter()` and `Auditing` listeners saw whoever was authenticated, and the manual told you
+not to filter on the actor. `ResolveContext` now applies the named actor itself, with the
+impersonator cleared, and every stage, policy and listener after it sees it.
+
+**Before:**
+
+```php
+Sentinel::filter(static fn (AuditData $audit): bool => $audit->actor_id !== $robotId);
+
+Sentinel::event('sync.finished')->actor($robot)->record();   // written — the policy saw the session user
+```
+
+**After:** the same policy discards the entry. Review policies and listeners that read `actor_id`
+or `impersonator_id`: they now decide on the entry as it will be written. A published
+`config/sentinel.php` whose `pipeline` list left `ResolveContext` out keeps attributing the entry as
+named — the recorder applies it once more after the pipeline — but its policies go on seeing the
+resolved actor, since no stage applied the name inside the pass.
+
+### The trail of a redaction carries the tenant of the entry it redacted
+
+Before this tag the trail took its tenant from the run, so a console redaction of an `acme` entry
+wrote a trail with `tenant_id = null` on the `global` chain. The trail now carries the redacted
+entry's tenant, null included, and with `integrity.stream = 'tenant'` lands on that entry's chain.
+
+Nothing moves: trails written before this tag keep what they recorded. If a runbook made the tenant
+current before redacting to work around this, the step is harmless and no longer needed.
+
+### `after()` orders by the identifier and refuses `byOccurrence()` and `latest()`
+
+A cursor is cut from the identifier, and the identifier is the only axis it is exact on. Before this
+tag a cursor walk was ordered by `created_at, id` — which two workers writing in the same
+millisecond can order the other way, since `created_at` carries microseconds and a ULID does not —
+and `after()` composed with `byOccurrence()` and `latest()`, walking an order it could not resume.
+
+**Before:**
+
+```php
+Sentinel::timeline()->after($id)->get();           // accepted, and skipped entries at page boundaries
+Sentinel::audits()->latest()->after($id)->get();   // accepted, and returned entries newer than the cursor
+```
+
+**After:** both throw `QueryException::cursorOffItsAxis()`, whichever was asked for first. A walk
+behind a cursor is ordered by `id` alone. To walk in occurrence order, sort each batch on
+`occurred_at` in your own code, or page a window fixed with `between()`. The recommended loop —
+`Sentinel::audits()->take(1000)->after($cursor)` — needs no change, and is exact now.
+
+**Third-party ledger drivers.** `Testing\LedgerContractTestCase` gains
+`it_orders_by_the_identifier_behind_a_cursor_even_where_its_clock_disagrees`, and its resume case
+asserts the order of what comes back. A driver that orders by its clock behind `$query->after` fails
+the suite from this tag: order by the identifier alone when the cursor is set.
+
+### `Sentinel::event('')` throws
+
+A custom event whose name is empty, or made of spaces, is refused at the call with
+`ConfigurationException::eventEmpty()`, beside the sixty-four-character cap. Spaces inside a name
+that says something stay valid.
+
+---
+
 ## v0.22.3 → v1.0.0-rc.1
 
 Nothing breaks, nothing migrates, and `payload_version` stays at `1`: every entry written before
@@ -43,7 +112,7 @@ several did. From here on it is not.
 Between `v1.0.0-rc.1` and `v1.0.0`, only bugfixes and documentation land. If something has to break,
 one question decides it: **does the change correct something incorrect, insecure or unverifiable, or
 only something uncomfortable?** Correctness, security and integrity break the freeze, land, and are
-numbered `rc.2` with the feedback period starting again from zero. Ergonomics and naming wait for a
+numbered `rc.N+1` with the feedback period starting again from zero. Ergonomics and naming wait for a
 `1.x` if they fit additively and for `2.0` if they do not.
 
 A breaking change between the last `rc.N` and `v1.0.0` is the one route that is closed. Every break

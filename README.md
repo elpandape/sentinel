@@ -806,7 +806,7 @@ neither fails the build.
 
 **What it takes to break it.** One question, asked before the change: does it correct something
 incorrect, insecure or unverifiable, or only something uncomfortable? Correctness, security or
-integrity breaks the freeze, and the release is renumbered `rc.2` with the feedback period starting
+integrity breaks the freeze, and the release is renumbered `rc.N+1` with the feedback period starting
 again from zero. Ergonomics waits for a `1.x` or a `2.0`.
 
 > **Stricter than semver.** Anything touching `sequence`, `hash`, `previous_hash` or the canonical

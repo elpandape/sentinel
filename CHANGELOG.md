@@ -2,6 +2,43 @@
 
 All notable changes to `elpandape/sentinel` are documented here.
 
+## v1.0.0-rc.2 — Context and walk (2026-09-09)
+
+Three behaviours `rc.1` shipped as known limitations turned out to have a fix that touches no frozen
+contract, and each of them changes what a consumer observes. Under the rule `rc.1` wrote down, that
+is a candidate of its own with the feedback period starting again: this one. Nothing migrates,
+nothing touches the chain, `payload_version` stays at `1`, and nothing already written moves.
+
+### Fixed
+
+- **A policy, and an `Auditing` listener, see the actor the capture named.** `ResolveContext`
+  applies an actor named with `->actor()` — on a custom event, a transition or an authentication
+  event — over the resolved one, with the impersonator cleared, so every stage, policy and listener
+  after it decides on the entry as it will be written. The recorder applies it once more after the
+  pipeline, for a published stage list that dropped that stage.
+- **The trail of a redaction carries the tenant of the entry it redacted**, null included, and lands
+  on that entry's chain. It used to carry the run's tenant, so a console redaction of an `acme`
+  entry left its trail on `global`. The rest of the trail's context still describes the run.
+- **A cursor walks the axis it is cut from.** Behind `after()` both ledgers order by the identifier
+  alone. Ordered by `created_at, id`, two workers writing in the same millisecond could put the
+  neighbour behind the cursor, and a resumed walk skipped it for good.
+
+### Breaking
+
+- **`after()` refuses `byOccurrence()` and `latest()`**, whichever was asked for first, with
+  `QueryException::cursorOffItsAxis()`. `Sentinel::timeline()->after($id)` therefore throws: the
+  timeline carries the clock of the fact by default.
+- **`Sentinel::event('')` throws** `ConfigurationException::eventEmpty()`, and so does a name made
+  of spaces. Spaces inside a name that says something stay valid.
+- **`Testing\LedgerContractTestCase` holds a driver to the identifier as the whole order behind a
+  cursor.** The resume case asserts the order of what comes back, and a new case crosses the ledger
+  clock against the identifier the way concurrent writers do.
+
+### Upgrade notes
+
+The before and after of all three, and what to review in policies, listeners and drivers:
+[UPGRADE.md](UPGRADE.md#v100-rc1--v100-rc2).
+
 ## v1.0.0-rc.1 — The freeze (2026-09-07)
 
 The API stops moving. From this tag the surface the README documents is the contract of 1.0, and
