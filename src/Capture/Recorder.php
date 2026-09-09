@@ -5,12 +5,13 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Capture;
 
 use Closure;
+use ElPandaPe\Sentinel\Context\Attribution;
+use ElPandaPe\Sentinel\Context\Attributions;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Dispatch\Dispatcher;
 use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Support\AuditCollection;
-use ElPandaPe\Sentinel\Support\Reference;
 use ElPandaPe\Sentinel\Transactions\TransactionScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
@@ -36,6 +37,7 @@ final readonly class Recorder
         private Pipeline $pipeline,
         private Dispatcher $dispatcher,
         private TransactionScope $transactions,
+        private Attributions $attributions,
     ) {}
 
     /**
@@ -47,17 +49,25 @@ final readonly class Recorder
      * transaction is nothing. A caller that opened that transaction itself and can wait for its
      * commit asks with $settled instead, and is handed the entry on whichever path wrote it.
      *
+     * What the capture states outright — the actor it names, the tenant it acts for — is applied
+     * inside the pass by the stage that resolves context, so every stage after it and every
+     * listener decide on the entry as it will be written. It is applied once more on the way out,
+     * for a published stage list that left that stage out: the entry is then attributed as named
+     * all the same, and only what the pipeline got to see is different.
+     *
      * @param  Closure(Audit): void|null  $settled
      */
-    public function record(AuditData $audit, ?Model $subject = null, ?Reference $actor = null, ?Closure $settled = null): ?Audit
+    public function record(AuditData $audit, ?Model $subject = null, ?Attribution $attribution = null, ?Closure $settled = null): ?Audit
     {
-        $transformed = $this->prepared($audit);
+        $attribution ??= Attribution::none();
+
+        $transformed = $this->attributions->within($attribution, fn (): ?AuditData => $this->prepared($audit));
 
         if (! $transformed instanceof AuditData) {
             return null;
         }
 
-        $this->attribute($transformed, $actor);
+        $attribution->apply($transformed);
 
         return $this->dispatcher->dispatch($transformed, $subject, $settled);
     }
@@ -68,12 +78,25 @@ final readonly class Recorder
      * something the operation wrote — and what survives lands in one hand-over.
      *
      * No actor argument and no callback. A mass operation is not something an actor is named for
-     * after the fact, and nothing is waiting for one row of a thousand to come back.
+     * after the fact, and nothing is waiting for one row of a thousand to come back. It runs under
+     * an attribution of its own all the same — an empty one — so a batch recorded from inside
+     * another capture's pass is not credited to whoever that capture named.
      *
      * @param  list<AuditData>  $audits
      * @return AuditCollection<int, Audit>
      */
     public function recordMany(array $audits, ?Model $subject = null): AuditCollection
+    {
+        $transformed = $this->attributions->within(Attribution::none(), fn (): array => $this->passed($audits));
+
+        return $this->dispatcher->dispatchMany($transformed, $subject);
+    }
+
+    /**
+     * @param  list<AuditData>  $audits
+     * @return list<AuditData>
+     */
+    private function passed(array $audits): array
     {
         $transformed = [];
 
@@ -85,7 +108,7 @@ final readonly class Recorder
             }
         }
 
-        return $this->dispatcher->dispatchMany($transformed, $subject);
+        return $transformed;
     }
 
     /**
@@ -117,27 +140,5 @@ final readonly class Recorder
     private function identify(AuditData $audit): void
     {
         $audit->capture_id ??= (string) Str::ulid();
-    }
-
-    /**
-     * An actor the caller named outright is put back after the pipeline, because the context stage
-     * reassigns that column on every pass — deliberately, so a second pass leaves none of the first
-     * one's residue. A severity does not need this: it is decided at capture and no stage touches
-     * it. The chain is unaffected either way, since the hash is sealed in the ledger, after this.
-     *
-     * The impersonator goes with it. Whoever the session resolved was standing in for the actor
-     * that was resolved alongside them, not for the one the caller has just named, and an entry
-     * pairing the two would claim a delegation that never happened.
-     */
-    private function attribute(AuditData $audit, ?Reference $actor): void
-    {
-        if (! $actor instanceof Reference) {
-            return;
-        }
-
-        $audit->actor_type = $actor->type;
-        $audit->actor_id = $actor->id;
-        $audit->impersonator_type = null;
-        $audit->impersonator_id = null;
     }
 }

@@ -5,9 +5,11 @@ declare(strict_types=1);
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Events\AuditDiscarded;
 use ElPandaPe\Sentinel\Facades\Sentinel;
+use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Pipeline\Pipeline;
 use ElPandaPe\Sentinel\Pipeline\Stages\EnforcePolicies;
 use ElPandaPe\Sentinel\Support\Policies;
+use ElPandaPe\Sentinel\Tests\Fixtures\ActingUser;
 use ElPandaPe\Sentinel\Tests\Fixtures\AuditedSubject;
 use Illuminate\Support\Facades\Event;
 
@@ -87,4 +89,28 @@ it('keeps a policy across the scopes a worker goes through', function (): void {
     app()->forgetScopedInstances();
 
     expect(pipeline()->process(auditData()))->toBeNull();
+});
+
+it('lets a policy decide on the actor the capture named, not on the one logged in', function (): void {
+    stagedPipeline([]);
+    $named = ActingUser::query()->create(['name' => 'Ada']);
+    auth()->guard()->setUser(ActingUser::query()->create(['name' => 'Someone Else']));
+
+    Sentinel::filter(static fn (AuditData $audit): bool => $audit->actor_id === (string) $named->getKey());
+
+    Sentinel::event('invoice.approved')->actor($named)->record();
+
+    expect(Audit::query()->count())->toBe(1);
+});
+
+it('refuses on the actor the capture named, even though the one logged in would have passed', function (): void {
+    stagedPipeline([]);
+    $loggedIn = ActingUser::query()->create(['name' => 'Someone Else']);
+    auth()->guard()->setUser($loggedIn);
+
+    Sentinel::filter(static fn (AuditData $audit): bool => $audit->actor_id === (string) $loggedIn->getKey());
+
+    Sentinel::event('invoice.approved')->actor(ActingUser::query()->create(['name' => 'Ada']))->record();
+
+    expect(Audit::query()->count())->toBe(0);
 });

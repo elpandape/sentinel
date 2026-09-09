@@ -2,8 +2,12 @@
 
 declare(strict_types=1);
 
+use ElPandaPe\Sentinel\Context\Attribution;
+use ElPandaPe\Sentinel\Context\Attributions;
+use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Enums\Source;
 use ElPandaPe\Sentinel\Facades\Sentinel;
+use ElPandaPe\Sentinel\Support\Reference;
 use ElPandaPe\Sentinel\Tests\Fixtures\ActingUser;
 use ElPandaPe\Sentinel\Tests\Fixtures\PromotingResolver;
 use ElPandaPe\Sentinel\Tests\Fixtures\SubstituteResolver;
@@ -104,4 +108,19 @@ it('resolves the host once and the tenant on every capture', function (): void {
     expect($after->context['hostname'])->toBe($before)
         ->and($after->context)->not->toHaveKey('substituted')
         ->and($after->tenant_id)->toBe('globex');
+});
+
+it('applies what the capture stated over what it resolved, for the length of the pass', function (): void {
+    $user = ActingUser::query()->create(['name' => 'Ada']);
+    auth()->guard()->setUser($user);
+    $stated = Attribution::by(new Reference('member', '77'))->onBehalfOf('acme');
+
+    $inside = app(Attributions::class)->within($stated, static fn (): AuditData => contextEngine()(auditData()));
+    $after = contextEngine()(auditData());
+
+    expect($inside->actor_type)->toBe('member')
+        ->and($inside->actor_id)->toBe('77')
+        ->and($inside->tenant_id)->toBe('acme')
+        ->and($after->actor_id)->toBe((string) $user->getKey())
+        ->and($after->tenant_id)->toBeNull();
 });

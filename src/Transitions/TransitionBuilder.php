@@ -6,6 +6,7 @@ namespace ElPandaPe\Sentinel\Transitions;
 
 use Carbon\CarbonImmutable;
 use ElPandaPe\Sentinel\Capture\Recorder;
+use ElPandaPe\Sentinel\Context\Attribution;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Diff\Change;
 use ElPandaPe\Sentinel\Diff\Pointer;
@@ -152,7 +153,7 @@ final class TransitionBuilder
                 tags: $this->tags,
             ),
             $this->subject,
-            $this->actor,
+            Attribution::by($this->actor),
         );
     }
 

@@ -7,6 +7,7 @@ namespace ElPandaPe\Sentinel\Redaction;
 use Carbon\CarbonImmutable;
 use ElPandaPe\Sentinel\Archive\Manifest;
 use ElPandaPe\Sentinel\Capture\Recorder;
+use ElPandaPe\Sentinel\Context\Attribution;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Enums\AuditEvent;
 use ElPandaPe\Sentinel\Exceptions\ComplianceException;
@@ -168,6 +169,10 @@ final readonly class Redactor
      * and for the same reason: `withoutAuditing()` says not to audit what the application is about to
      * do, and destroying the contents of an entry is not that. Without this, one wrapped call would
      * destroy content and leave no trace at all.
+     *
+     * The trail is about the tenant of the entry it redacts, not the tenant of the run that redacted
+     * it — a console has none, and a request may be somebody else's — and it says so outright, null
+     * included, so it lands on the chain the entry lives on.
      */
     private function trail(Audit $audit, string $reason, CarbonImmutable $at, ?Reference $actor): ?Audit
     {
@@ -178,7 +183,6 @@ final readonly class Redactor
             occurred_at: $at,
             subject_type: $audit->subject_type,
             subject_id: $audit->subject_id,
-            tenant_id: $audit->tenant_id,
             metadata: ['redaction' => [
                 'audit_id' => $audit->id,
                 'stream' => $audit->stream,
@@ -186,6 +190,6 @@ final readonly class Redactor
                 'reason' => $reason,
             ]],
             source_audit_id: $audit->id,
-        ), null, $actor);
+        ), null, Attribution::by($actor)->onBehalfOf($audit->tenant_id));
     }
 }

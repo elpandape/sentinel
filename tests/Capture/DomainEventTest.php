@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use ElPandaPe\Sentinel\Capture\PendingEvent;
 use ElPandaPe\Sentinel\Enums\Severity;
+use ElPandaPe\Sentinel\Events\Auditing;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
 use ElPandaPe\Sentinel\Exceptions\QueryException;
 use ElPandaPe\Sentinel\Facades\Sentinel;
@@ -11,11 +12,14 @@ use ElPandaPe\Sentinel\Models\Audit;
 use ElPandaPe\Sentinel\Models\AuditTransaction;
 use ElPandaPe\Sentinel\Tests\Fixtures\ActingUser;
 use ElPandaPe\Sentinel\Tests\Fixtures\AuditedSubject;
+use ElPandaPe\Sentinel\Tests\Fixtures\PassThroughStage;
 use ElPandaPe\Sentinel\Tests\Fixtures\ProtectedSubject;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 
 use function ElPandaPe\Sentinel\Tests\httpRequest;
 use function ElPandaPe\Sentinel\Tests\presenter;
+use function ElPandaPe\Sentinel\Tests\stagedPipeline;
 
 it('settles a fact that no model change describes', function (): void {
     Sentinel::event('invoice.approved')->record();
@@ -93,6 +97,46 @@ it('credits the actor it was told about, not the one who happens to be logged in
 
     expect($audit->actor_id)->toBe((string) $onBehalf->getKey())
         ->and($audit->actor_type)->toBe($onBehalf->getMorphClass());
+});
+
+it('offers an Auditing listener the actor it named', function (): void {
+    $named = ActingUser::query()->create(['name' => 'Ada']);
+    auth()->guard()->setUser(ActingUser::query()->create(['name' => 'Someone Else']));
+    $seen = null;
+    Event::listen(Auditing::class, static function (Auditing $auditing) use (&$seen): void {
+        $seen = $auditing->audit->actor_id;
+    });
+
+    Sentinel::event('invoice.approved')->actor($named)->record();
+
+    expect($seen)->toBe((string) $named->getKey())
+        ->and(Audit::query()->firstOrFail()->actor_id)->toBe($seen);
+});
+
+it('credits an entry recorded from inside a listener on its own terms, not on the outer capture', function (): void {
+    $named = ActingUser::query()->create(['name' => 'Ada']);
+    $loggedIn = ActingUser::query()->create(['name' => 'Someone Else']);
+    auth()->guard()->setUser($loggedIn);
+    Event::listen(Auditing::class, static function (Auditing $auditing): void {
+        if ($auditing->audit->event === 'invoice.approved') {
+            AuditedSubject::query()->create(['name' => 'from the listener']);
+        }
+    });
+
+    Sentinel::event('invoice.approved')->actor($named)->record();
+
+    expect(Audit::query()->where('event', 'created')->firstOrFail()->actor_id)->toBe((string) $loggedIn->getKey())
+        ->and(Audit::query()->where('event', 'invoice.approved')->firstOrFail()->actor_id)->toBe((string) $named->getKey());
+});
+
+it('still credits the actor it named when a published stage list left the context stage out', function (): void {
+    stagedPipeline([PassThroughStage::class]);
+    $named = ActingUser::query()->create(['name' => 'Ada']);
+    auth()->guard()->setUser(ActingUser::query()->create(['name' => 'Someone Else']));
+
+    Sentinel::event('invoice.approved')->actor($named)->record();
+
+    expect(Audit::query()->firstOrFail()->actor_id)->toBe((string) $named->getKey());
 });
 
 it('lets the context engine name the actor when nobody was named', function (): void {

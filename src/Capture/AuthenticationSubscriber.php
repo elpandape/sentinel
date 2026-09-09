@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Capture;
 
 use Carbon\CarbonImmutable;
+use ElPandaPe\Sentinel\Context\Attribution;
 use ElPandaPe\Sentinel\Context\Identity;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Sentinel;
@@ -115,7 +116,7 @@ final readonly class AuthenticationSubscriber
                 metadata: is_string($guard) ? ['guard' => $guard] : null,
             ),
             null,
-            $actor,
+            Attribution::by($actor),
         );
     }
 

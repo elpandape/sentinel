@@ -23,6 +23,10 @@ use Illuminate\Contracts\Container\Container;
 /**
  * The single entry point for context. v0.7.0 wraps this as a pipeline stage rather than
  * resolving anything of its own: two orders of resolution would be two answers.
+ *
+ * What the capture stated outright is applied here and not in a stage of its own. A published
+ * stage list names the stages it was published with, and a new one would silently not run there;
+ * every list that resolves context runs this.
  */
 final readonly class ContextEngine
 {
@@ -72,6 +76,7 @@ final readonly class ContextEngine
         private Container $container,
         private Config $config,
         private ExecutionContext $context,
+        private Attributions $attributions,
     ) {}
 
     public function __invoke(AuditData $audit): AuditData
@@ -87,6 +92,8 @@ final readonly class ContextEngine
         $audit->trace_id = $this->column($resolved, 'trace_id');
         $audit->span_id = $this->column($resolved, 'span_id');
         $audit->source = ($resolved['source'] ?? null) instanceof Source ? $resolved['source'] : Source::System;
+
+        $this->attributions->current()?->apply($audit);
 
         $audit->context = [...$this->payload($resolved), ...$this->context->all()];
 

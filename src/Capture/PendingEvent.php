@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ElPandaPe\Sentinel\Capture;
 
 use Carbon\CarbonImmutable;
+use ElPandaPe\Sentinel\Context\Attribution;
 use ElPandaPe\Sentinel\Data\AuditData;
 use ElPandaPe\Sentinel\Enums\Severity;
 use ElPandaPe\Sentinel\Exceptions\ConfigurationException;
@@ -140,7 +141,7 @@ final class PendingEvent
                 tags: $this->tags,
             ),
             $this->subject,
-            $this->actor,
+            Attribution::by($this->actor),
         );
     }
 }

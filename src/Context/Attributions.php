@@ -23,6 +23,12 @@ final class Attributions
      */
     private array $stack = [];
 
+    /**
+     * @template TReturn
+     *
+     * @param  Closure(): TReturn  $callback
+     * @return TReturn
+     */
     public function within(Attribution $attribution, Closure $callback): mixed
     {
         $this->stack[] = $attribution;

@@ -169,19 +169,35 @@ it('leaves a trail naming the actor, the reason and the entry it redacted', func
         ->and($trail?->metadata['redaction']['stream'] ?? null)->toBe($written->stream);
 });
 
-/**
- * A known limitation of 1.0, pinned here so it cannot drift without saying so. The trail is written
- * through the pipeline, and the stage that resolves context assigns every promoted column on every
- * pass — which is what lets it clear a column whose signal is gone. A resolver that answers nothing
- * and one that answers null arrive as the same empty array, so the stage cannot tell a value copied
- * on purpose from one left over. Telling them apart needs the resolver contract to say which of the
- * two it meant, and that contract is frozen.
- */
-it('resolves the tenant of a redaction trail from the run rather than from the entry it redacts', function (): void {
+it('keeps the tenant of the entry it redacted on the trail, from a run that resolves none', function (): void {
+    config()->set('sentinel.integrity.stream', 'tenant');
     $written = ledger()->write(auditData(['before' => ['a' => 1], 'tenant_id' => 'acme']));
 
-    $tombstone = redactor()->redact(Audit::query()->findOrFail($written->id), 'GDPR erasure 4711', new Reference('member', '77'));
+    $trail = redactor()->redact(Audit::query()->findOrFail($written->id), 'GDPR erasure 4711', new Reference('member', '77'))->trail;
 
-    expect($written->tenant_id)->toBe('acme')
-        ->and($tombstone->trail?->tenant_id)->toBeNull();
+    expect($trail?->tenant_id)->toBe('acme')
+        ->and($trail?->stream)->toBe('tenant:acme')
+        ->and($trail?->actor_id)->toBe('77');
+});
+
+it('keeps that tenant while another one is active', function (): void {
+    config()->set('sentinel.integrity.stream', 'tenant');
+    config()->set('sentinel.resolvers.tenant.using', static fn (): string => 'globex');
+    $written = ledger()->write(auditData(['before' => ['a' => 1], 'tenant_id' => 'acme']));
+
+    $trail = redactor()->redact(Audit::query()->findOrFail($written->id), 'GDPR erasure 4711', new Reference('member', '77'))->trail;
+
+    expect($trail?->tenant_id)->toBe('acme')
+        ->and($trail?->stream)->toBe('tenant:acme');
+});
+
+it('leaves the trail of a tenantless entry tenantless, whichever tenant is active', function (): void {
+    config()->set('sentinel.integrity.stream', 'tenant');
+    config()->set('sentinel.resolvers.tenant.using', static fn (): string => 'globex');
+    $written = ledger()->write(auditData(['before' => ['a' => 1]]));
+
+    $trail = redactor()->redact(Audit::query()->findOrFail($written->id), 'GDPR erasure 4711', new Reference('member', '77'))->trail;
+
+    expect($trail?->tenant_id)->toBeNull()
+        ->and($trail?->stream)->toBe('global');
 });
