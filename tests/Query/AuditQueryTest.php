@@ -158,6 +158,20 @@ it('refuses a cursor that resumes from nothing', function (): void {
         ->toThrow(QueryException::class, 'Resuming after nothing');
 });
 
+it('refuses a cursor on a query ordered by the clock of the fact, whichever was asked for first', function (): void {
+    expect(fn (): AuditQuery => auditQuery()->byOccurrence()->after('01JXXXXXXXXXXXXXXXXXXXXXXX'))
+        ->toThrow(QueryException::class, 'cut from the identifier')
+        ->and(fn (): AuditQuery => auditQuery()->after('01JXXXXXXXXXXXXXXXXXXXXXXX')->byOccurrence())
+        ->toThrow(QueryException::class, 'cut from the identifier');
+});
+
+it('refuses a cursor on a query turned newest first, whichever was asked for first', function (): void {
+    expect(fn (): AuditQuery => auditQuery()->latest()->after('01JXXXXXXXXXXXXXXXXXXXXXXX'))
+        ->toThrow(QueryException::class, 'cut from the identifier')
+        ->and(fn (): AuditQuery => auditQuery()->after('01JXXXXXXXXXXXXXXXXXXXXXXX')->latest())
+        ->toThrow(QueryException::class, 'cut from the identifier');
+});
+
 it('names the method that reaches each filter', function (): void {
     expect(array_map(static fn (Filter $filter): string => $filter->method(), Filter::cases()))
         ->toBe([

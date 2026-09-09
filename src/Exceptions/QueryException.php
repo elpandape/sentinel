@@ -62,6 +62,11 @@ final class QueryException extends InvalidArgumentException
         return new self('Resuming after nothing is resuming from the start; pass the identifier the last pass reported, or leave the cursor off.');
     }
 
+    public static function cursorOffItsAxis(): self
+    {
+        return new self('A cursor is cut from the identifier and walks along it; ordered by a clock instead, it skips whatever was minted before it and happened after it. Leave byOccurrence() and latest() off a walk that resumes with after(), or page a window fixed with between().');
+    }
+
     public static function unreachableLimit(int $limit): self
     {
         return new self("A read of {$limit} entries is not a read: ask for at least one.");

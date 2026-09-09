@@ -34,7 +34,7 @@ final readonly class ArrayQuery
             }
         }
 
-        usort($matched, fn (Audit $first, Audit $second): int => $this->chronologically($first, $second, $query->byOccurrence));
+        usort($matched, fn (Audit $first, Audit $second): int => $this->ordered($first, $second, $query));
 
         if ($query->newestFirst) {
             $matched = array_reverse($matched);
@@ -115,6 +115,19 @@ final readonly class ArrayQuery
     private function equals(?string $wanted, ?string $actual): bool
     {
         return $wanted === null || $wanted === $actual;
+    }
+
+    /**
+     * Behind a cursor the identifier is the whole order and not the tie-break: it is the axis the
+     * cursor is cut from, and the only one it is exact on.
+     */
+    private function ordered(Audit $first, Audit $second, AuditQuery $query): int
+    {
+        if ($query->after !== null) {
+            return $first->id <=> $second->id;
+        }
+
+        return $this->chronologically($first, $second, $query->byOccurrence);
     }
 
     /**

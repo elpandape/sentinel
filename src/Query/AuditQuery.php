@@ -345,10 +345,14 @@ final class AuditQuery
     /**
      * Order by the clock of the fact rather than the clock of the ledger. The two agree while
      * writing is synchronous and come apart the moment it is not, and it is the first that says
-     * what order things happened in.
+     * what order things happened in. Not behind a cursor, which walks no clock at all: see after().
      */
     public function byOccurrence(): self
     {
+        if ($this->after !== null) {
+            throw QueryException::cursorOffItsAxis();
+        }
+
         $query = clone $this;
         $query->byOccurrence = true;
 
@@ -356,10 +360,14 @@ final class AuditQuery
     }
 
     /**
-     * Newest first, by whichever clock the query is ordered on.
+     * Newest first, by whichever clock the query is ordered on. Not behind a cursor: see after().
      */
     public function latest(): self
     {
+        if ($this->after !== null) {
+            throw QueryException::cursorOffItsAxis();
+        }
+
         $query = clone $this;
         $query->newestFirst = true;
 
@@ -395,18 +403,26 @@ final class AuditQuery
     }
 
     /**
-     * Everything written after this entry, by identifier and not by clock. It is what makes a walk
-     * resumable: an operator hands back the last identifier a pass reported and the next one starts
-     * behind it, instead of reading the same prefix again.
+     * Everything written after this entry, by identifier and not by clock, and in that order. It is
+     * what makes a walk resumable: an operator hands back the last identifier a pass reported and
+     * the next one starts behind it, instead of reading the same prefix again.
      *
      * The identifier is the axis on purpose. It is total, it is the tail of every composite index
      * the table carries, and a ULID sorts by the instant it was minted — where two entries sharing
-     * a clock reading do not order against each other at all.
+     * a clock reading do not order against each other at all. It is also the only axis a cursor
+     * cut from it is exact on: ordered by a clock, a walk skips whatever was minted before the
+     * cursor and happened after it, and with the ledger's own clock that takes no more than two
+     * workers writing in the same millisecond. So a walk that resumes is ordered by the identifier
+     * alone, and the two orders that are not are refused rather than quietly walked.
      */
     public function after(string $id): self
     {
         if ($id === '') {
             throw QueryException::noCursor();
+        }
+
+        if ($this->byOccurrence || $this->newestFirst) {
+            throw QueryException::cursorOffItsAxis();
         }
 
         $query = $this->accepting(Filter::After);

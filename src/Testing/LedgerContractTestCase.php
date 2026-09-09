@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ElPandaPe\Sentinel\Testing;
 
+use Carbon\CarbonImmutable;
 use Closure;
 use DateTimeImmutable;
 use ElPandaPe\Sentinel\Contracts\Ledger;
@@ -207,13 +208,15 @@ abstract class LedgerContractTestCase extends TestCase
      * The cursor is a place in the walk rather than a property of an entry, so it cannot travel in
      * the table of filters above: what it narrows by is the identifier of an entry the test has to
      * write first. A driver that orders by anything but the identifier answers this wrong rather
-     * than not at all, which is why it is worth a case of its own.
+     * than not at all, which is why it is worth a case of its own — and why the order of what comes
+     * back is asserted too: behind a cursor the identifier is the whole order, not the tie-break.
      */
     public function test_it_resumes_a_walk_after_the_entry_it_was_given(): void
     {
         $ledger = $this->ledger();
         $first = $ledger->write($this->auditData());
         $second = $ledger->write($this->auditData());
+        $third = $ledger->write($this->auditData());
         $this->settle($ledger);
 
         if (! $this->translates($ledger, Filter::After)) {
@@ -222,7 +225,7 @@ abstract class LedgerContractTestCase extends TestCase
 
         $found = $ledger->query($this->asking()->after($first->id));
 
-        $this->assertSame($this->retains() ? [$second->id] : [], $found->pluck('id')->all());
+        $this->assertSame($this->retains() ? [$second->id, $third->id] : [], $found->pluck('id')->all());
     }
 
     public function test_it_answers_nothing_after_the_last_entry_it_holds(): void
@@ -237,6 +240,35 @@ abstract class LedgerContractTestCase extends TestCase
         }
 
         $this->assertSame([], $ledger->query($this->asking()->after($last->id))->pluck('id')->all());
+    }
+
+    /**
+     * The one case a walk has to survive is the one where the two orders come apart: an entry
+     * minted before its neighbour and sealed after it, which is what two workers writing in the
+     * same millisecond produce. Behind a cursor the identifier is the whole order, so the walk
+     * reaches both. Ordered by the ledger's clock it would hand the second one over first and
+     * then, resuming behind it, skip the first for good.
+     */
+    public function test_it_orders_by_the_identifier_behind_a_cursor_even_where_its_clock_disagrees(): void
+    {
+        $ledger = $this->ledger();
+        $anchor = $this->sealedElsewhere();
+        $mintedFirst = app(EntryBuilder::class)->build($this->auditData(), 'imported', 2, $anchor->hash, null);
+        $mintedSecond = app(EntryBuilder::class)->build($this->auditData(), 'imported', 3, $mintedFirst->hash, null);
+        $mintedFirst->created_at = new CarbonImmutable('2026-08-26 10:00:01');
+        $mintedSecond->created_at = new CarbonImmutable('2026-08-26 10:00:00');
+        $ledger->append($anchor);
+        $ledger->append($mintedFirst);
+        $ledger->append($mintedSecond);
+        $this->settle($ledger);
+
+        if (! $this->translates($ledger, Filter::After)) {
+            $this->expectException(LedgerException::class);
+        }
+
+        $found = $ledger->query($this->asking()->after($anchor->id));
+
+        $this->assertSame($this->retains() ? [$mintedFirst->id, $mintedSecond->id] : [], $found->pluck('id')->all());
     }
 
     /**

@@ -171,7 +171,8 @@ final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, En
      * Every criterion arrives as a binding against a column this class names itself: nothing
      * the caller passes is ever a column, an operator or a direction. The order is the ledger's
      * own clock with the identifier behind it, which is the tail two of the composite indexes
-     * carry and the only order that is total.
+     * carry and the only order that is total — except behind a cursor, where the identifier is the
+     * whole order: a cursor is cut from it, and is exact on no other axis.
      */
     public function query(AuditQuery $query): AuditCollection
     {
@@ -202,9 +203,8 @@ final readonly class DatabaseLedger implements DeclaresFilters, Deduplicates, En
             ->when($query->ip, fn (Builder $entries, string $ip): Builder => $this->narrowByContext($entries, Filter::Ip, $ip))
             ->when($query->route, fn (Builder $entries, string $route): Builder => $this->narrowByContext($entries, Filter::Route, $route))
             ->when($query->versions, static fn (Builder $entries, array $versions): Builder => $entries->whereIn('version', $versions))
-            ->when($query->after, static fn (Builder $entries, string $after): Builder => $entries->where('id', '>', $after))
-            ->orderBy($clock, $direction)
-            ->orderBy('id', $direction)
+            ->when($query->after, static fn (Builder $entries, string $after): Builder => $entries->where('id', '>', $after)->orderBy('id'))
+            ->unless($query->after, static fn (Builder $entries): Builder => $entries->orderBy($clock, $direction)->orderBy('id', $direction))
             ->when($query->offset, static fn (Builder $entries, int $offset): Builder => $entries->offset($offset))
             ->when($query->limit, static fn (Builder $entries, int $limit): Builder => $entries->limit($limit))
             ->get();
