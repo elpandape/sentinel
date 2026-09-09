@@ -58,11 +58,13 @@ Four consequences follow from that position, and each one is a question people a
   by key name at any depth, so `ip`, `user_agent`, `session_id` or a console argument can be
   protected by name even though no model declares them. See
   [Protecting sensitive data](../05-pipeline-and-security/02-protecting-sensitive-data.md).
-- **A policy sees the resolved actor**, because `EnforcePolicies` runs after `ResolveContext`.
-- **An actor you name by hand is re-applied after the pipeline.** `Capture\Recorder::attribute()`
-  writes `actor_type`/`actor_id` back once every stage has run, and clears
-  `impersonator_type`/`impersonator_id` at the same time. Without that, the context stage would
-  overwrite the name you gave. See [Actor and impersonation](03-actor-and-impersonation.md).
+- **A policy sees the actor the entry will carry**, because `EnforcePolicies` runs after
+  `ResolveContext`, and what you named by hand is applied there.
+- **An actor you name by hand is applied by the context stage itself.** `ResolveContext` resolves
+  `actor_type`/`actor_id` and then applies the name you gave over them, clearing
+  `impersonator_type`/`impersonator_id` at the same time; `Capture\Recorder` applies it once more
+  after the pipeline, for a published stage list that dropped that stage. See
+  [Actor and impersonation](03-actor-and-impersonation.md).
 - **Nothing re-resolves later.** A worker, a buffer flush and a `sentinel:flush` run never ask the
   engine again; they write an entry whose context was already sealed.
 

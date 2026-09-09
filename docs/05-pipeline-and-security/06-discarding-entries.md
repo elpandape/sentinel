@@ -411,7 +411,7 @@ its rows to a filter is the failure this counter exists to make visible. See
 | Symptom | Cause | Fix |
 |---|---|---|
 | An update you know happened wrote no entry | `FilterUnchanged` dropped it: the only column that moved is in `$auditExclude`, or outside a declared `$auditInclude`, so `changes` came back `[]` | Add the column to the declaration, or listen on `AuditDiscarded` and read `$event->stage` to confirm |
-| A filter written against `->actor()` never matches | `Recorder::attribute()` reapplies a declared actor *after* the pipeline; the policy saw the resolved one | Decide on `subject_type`, `audit_type` or `event` instead |
+| A filter written against `->actor()` never matches | You are on a release before `v1.0.0-rc.2`, where a declared actor was reapplied after the pipeline and the policy saw the resolved one | Upgrade: `ResolveContext` applies the declared actor, and the policy decides on it |
 | `$audit->stream` is `null` inside a filter | The ledger resolves the stream from `integrity.stream` at write time; `AuditData` carries it only if a caller set it | Derive from `tenant_id` / `subject_type`, mirroring your stream strategy |
 | `DiscardException: Sentinel was asked to discard an entry outside the pipeline` | `Discard::because()` was called from an `AuditCreating`/`AuditCreated` listener, a model observer, or ordinary application code | Move the decision into a stage, a `Sentinel::filter()` policy, or an `Auditing` listener |
 | A redaction destroyed content but no `security` / `redacted` entry exists | A filter discarded the trail entry; `Tombstone::$trail` came back `null` | Never allowlist by `audit_type`; exclude by subject and let every other kind through |

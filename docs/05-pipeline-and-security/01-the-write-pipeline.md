@@ -141,9 +141,11 @@ consequences follow.
 > context annotations in a stage placed **after** `ResolveContext`, or push them through
 > `Sentinel::withContext()`, which the engine merges last.
 
-The second consequence is that an actor named explicitly at the call site would be overwritten here.
-`Capture\Recorder::attribute()` therefore re-applies it *after* the pipeline, clearing the
-impersonator columns with it. Policies in stage 7 see the **resolved** actor, not the named one.
+The second consequence is that an actor named explicitly at the call site would be overwritten here
+too — which is why the stage applies it itself, over the resolved columns, clearing the impersonator
+columns with it, and why a redaction trail keeps the tenant of the entry it redacts. Policies in
+stage 7 see the **named** actor. `Capture\Recorder` applies the name once more after the pipeline,
+for a published stage list that left this stage out.
 
 **Returns `null`** never.
 
